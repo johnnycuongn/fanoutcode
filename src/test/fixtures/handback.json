@@ -1,0 +1,268 @@
+[
+  {
+    "reason": {
+      "type": "StageDone"
+    },
+    "stage": "Spec",
+    "text": "Spec ready"
+  },
+  {
+    "reason": {
+      "type": "StageDone"
+    },
+    "stage": "Plan",
+    "text": "Plan written, go?"
+  },
+  {
+    "reason": {
+      "type": "StageDone"
+    },
+    "stage": "Build",
+    "text": "Build done"
+  },
+  {
+    "reason": {
+      "type": "StageDone"
+    },
+    "stage": "Review",
+    "text": "Review written"
+  },
+  {
+    "reason": {
+      "type": "StageDone"
+    },
+    "stage": "Test",
+    "text": "Tests passed"
+  },
+  {
+    "reason": {
+      "type": "StageDone"
+    },
+    "stage": "Commit",
+    "text": "Message drafted"
+  },
+  {
+    "reason": {
+      "type": "StageDone"
+    },
+    "stage": "Done",
+    "text": "Done"
+  },
+  {
+    "reason": {
+      "first_line": "Which DB?",
+      "type": "Replied"
+    },
+    "stage": "Spec",
+    "text": "Which DB?"
+  },
+  {
+    "reason": {
+      "first_line": "Which DB?",
+      "type": "Replied"
+    },
+    "stage": "Plan",
+    "text": "Which DB?"
+  },
+  {
+    "reason": {
+      "first_line": "Which DB?",
+      "type": "Replied"
+    },
+    "stage": "Build",
+    "text": "Which DB?"
+  },
+  {
+    "reason": {
+      "first_line": "Which DB?",
+      "type": "Replied"
+    },
+    "stage": "Review",
+    "text": "Which DB?"
+  },
+  {
+    "reason": {
+      "first_line": "Which DB?",
+      "type": "Replied"
+    },
+    "stage": "Test",
+    "text": "Which DB?"
+  },
+  {
+    "reason": {
+      "first_line": "Which DB?",
+      "type": "Replied"
+    },
+    "stage": "Commit",
+    "text": "Which DB?"
+  },
+  {
+    "reason": {
+      "first_line": "Which DB?",
+      "type": "Replied"
+    },
+    "stage": "Done",
+    "text": "Which DB?"
+  },
+  {
+    "reason": {
+      "type": "PermissionNeeded"
+    },
+    "stage": "Spec",
+    "text": "Permission needed"
+  },
+  {
+    "reason": {
+      "type": "PermissionNeeded"
+    },
+    "stage": "Plan",
+    "text": "Permission needed"
+  },
+  {
+    "reason": {
+      "type": "PermissionNeeded"
+    },
+    "stage": "Build",
+    "text": "Permission needed"
+  },
+  {
+    "reason": {
+      "type": "PermissionNeeded"
+    },
+    "stage": "Review",
+    "text": "Permission needed"
+  },
+  {
+    "reason": {
+      "type": "PermissionNeeded"
+    },
+    "stage": "Test",
+    "text": "Permission needed"
+  },
+  {
+    "reason": {
+      "type": "PermissionNeeded"
+    },
+    "stage": "Commit",
+    "text": "Permission needed"
+  },
+  {
+    "reason": {
+      "type": "PermissionNeeded"
+    },
+    "stage": "Done",
+    "text": "Permission needed"
+  },
+  {
+    "reason": {
+      "exit_code": 1,
+      "type": "TestFailed"
+    },
+    "stage": "Spec",
+    "text": "Tests failed"
+  },
+  {
+    "reason": {
+      "exit_code": 1,
+      "type": "TestFailed"
+    },
+    "stage": "Plan",
+    "text": "Tests failed"
+  },
+  {
+    "reason": {
+      "exit_code": 1,
+      "type": "TestFailed"
+    },
+    "stage": "Build",
+    "text": "Tests failed"
+  },
+  {
+    "reason": {
+      "exit_code": 1,
+      "type": "TestFailed"
+    },
+    "stage": "Review",
+    "text": "Tests failed"
+  },
+  {
+    "reason": {
+      "exit_code": 1,
+      "type": "TestFailed"
+    },
+    "stage": "Test",
+    "text": "Tests failed"
+  },
+  {
+    "reason": {
+      "exit_code": 1,
+      "type": "TestFailed"
+    },
+    "stage": "Commit",
+    "text": "Tests failed"
+  },
+  {
+    "reason": {
+      "exit_code": 1,
+      "type": "TestFailed"
+    },
+    "stage": "Done",
+    "text": "Tests failed"
+  },
+  {
+    "reason": {
+      "message": "boom",
+      "type": "Error"
+    },
+    "stage": "Spec",
+    "text": "Error"
+  },
+  {
+    "reason": {
+      "message": "boom",
+      "type": "Error"
+    },
+    "stage": "Plan",
+    "text": "Error"
+  },
+  {
+    "reason": {
+      "message": "boom",
+      "type": "Error"
+    },
+    "stage": "Build",
+    "text": "Error"
+  },
+  {
+    "reason": {
+      "message": "boom",
+      "type": "Error"
+    },
+    "stage": "Review",
+    "text": "Error"
+  },
+  {
+    "reason": {
+      "message": "boom",
+      "type": "Error"
+    },
+    "stage": "Test",
+    "text": "Error"
+  },
+  {
+    "reason": {
+      "message": "boom",
+      "type": "Error"
+    },
+    "stage": "Commit",
+    "text": "Error"
+  },
+  {
+    "reason": {
+      "message": "boom",
+      "type": "Error"
+    },
+    "stage": "Done",
+    "text": "Error"
+  }
+]
