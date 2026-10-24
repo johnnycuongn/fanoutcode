@@ -1,7 +1,9 @@
 //! Tauri shell: wires `teamcode-core` to the webview. Kept thin on purpose; logic that doesn't need Tauri lives in
 //! the core crate.
 
+pub mod events;
 pub mod secrets;
+pub mod specta;
 pub mod state;
 pub mod windows;
 
@@ -12,7 +14,9 @@ use teamcode_core::windows::SavedWindow;
 use state::AppState;
 
 pub fn run() {
+    let specta = specta::builder();
     tauri::Builder::default()
+        .invoke_handler(specta.invoke_handler())
         .plugin(tauri_plugin_dialog::init())
         // Restores each window's position and size by label (= window id).
         .plugin(
@@ -25,7 +29,8 @@ pub fn run() {
                 .build(),
         )
         .on_window_event(windows::on_window_event)
-        .setup(|app| {
+        .setup(move |app| {
+            specta.mount_events(app);
             let data_dir = app.path().app_data_dir()?;
             let config_dir = app.path().app_config_dir()?;
             app.manage(AppState::new(&data_dir, &config_dir)?);

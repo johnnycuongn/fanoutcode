@@ -27,4 +27,7 @@ file.
 |---|---|
 | specta | =2.0.0-rc.22 (features derive, chrono) |
 | specta-typescript | =0.0.9 |
-| tauri-specta | (recorded in Plan 01 Task 12) |
+| tauri-specta | =2.0.0-rc.21 (features derive, typescript) |
+
+The generated file starts with `// @ts-nocheck`: tauri-specta's globals import `Channel` before any command takes
+one, which `noUnusedLocals` rejects. Every consumer is still type-checked against the exported types.
