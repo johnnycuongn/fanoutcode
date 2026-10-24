@@ -8,7 +8,16 @@ export * from "./Button";
 
 export * from "./IconButton";
 
+export * from "./KeyHint";
+
+export * from "./Badge";
+
+export * from "./StatusDot";
+
 export const PRIMITIVES = {
+  StatusDot: ["StatusDot"],
+  Badge: ["Badge"],
+  KeyHint: ["KeyHint", "formatChord", "chordLabel"],
   IconButton: ["IconButton"],
   Button: ["Button", "buttonVariants"],
 } as const satisfies Record<string, readonly string[]>;

@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { STAGES, statusLabel, statusTone, stageClasses, swatchClasses, toneClasses } from "./tokens";
+import { STAGES, pickFill, statusLabel, statusTone, stageClasses, swatchClasses, toneClasses } from "./tokens";
 import { SWATCHES } from "@/lib/theme";
 
 test("STAGES lists the seven stages in pipeline order", () => {
@@ -32,4 +32,11 @@ test("every tone, stage and swatch has soft, solid and text classes with no hex 
 
 test("swatchClasses covers exactly the shared swatch palette", () => {
   expect(Object.keys(swatchClasses)).toEqual([...SWATCHES]);
+});
+
+test("pickFill: swatch beats stage beats tone, default neutral", () => {
+  expect(pickFill({ swatch: "rose", stage: "plan", tone: "bad" })).toBe(swatchClasses.rose);
+  expect(pickFill({ stage: "plan", tone: "bad" })).toBe(stageClasses.plan);
+  expect(pickFill({ tone: "bad" })).toBe(toneClasses.bad);
+  expect(pickFill({})).toBe(toneClasses.neutral);
 });

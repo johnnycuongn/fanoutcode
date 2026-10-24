@@ -103,3 +103,10 @@ export function statusTone(status: AgentStatus): Tone {
 export function statusLabel(status: AgentStatus): string {
   return status === "working" ? "Working" : status === "needs-you" ? "Needs you" : "Idle";
 }
+
+/** Picks the fill for a colour-by-prop component; precedence swatch > stage > tone, default neutral. */
+export function pickFill(opts: { swatch?: Swatch; stage?: StageToken; tone?: Tone }): FillClasses {
+  if (opts.swatch) return swatchClasses[opts.swatch];
+  if (opts.stage) return stageClasses[opts.stage];
+  return toneClasses[opts.tone ?? "neutral"];
+}
