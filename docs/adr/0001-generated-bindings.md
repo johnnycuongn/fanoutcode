@@ -25,6 +25,6 @@ file.
 
 | Crate | Version |
 |---|---|
-| specta | (recorded in Plan 01 Task 3) |
-| specta-typescript | (recorded in Plan 01 Task 3) |
+| specta | =2.0.0-rc.22 (features derive, chrono) |
+| specta-typescript | =0.0.9 |
 | tauri-specta | (recorded in Plan 01 Task 12) |
