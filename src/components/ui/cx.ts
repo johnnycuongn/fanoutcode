@@ -13,3 +13,7 @@ export const focusRing =
 
 export const controlHeight: Record<Size, string> = { sm: "h-6", md: "h-7", lg: "h-8" };
 export const controlText: Record<Size, string> = { sm: "text-xs", md: "text-sm", lg: "text-sm" };
+
+/** Surface shared by text-entry controls and select triggers. */
+export const controlSurface =
+  "rounded-card border border-line bg-card px-2 text-ink placeholder:text-mute aria-invalid:border-bad disabled:opacity-50";

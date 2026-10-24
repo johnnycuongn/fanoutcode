@@ -14,4 +14,7 @@ export const pages: ExamplePage[] = [
   page("KeyHint", "Keyboard chords as glyphs", () => import("./pages/KeyHintPage")),
   page("Badge", "Small status and label badges", () => import("./pages/BadgePage")),
   page("StatusDot", "Pulsing agent-state dot", () => import("./pages/StatusDotPage")),
+  page("Field", "Label, control, hint and error wiring", () => import("./pages/FieldPage")),
+  page("Input", "Single-line text input with adornments", () => import("./pages/InputPage")),
+  page("Textarea", "Multi-line input that can grow", () => import("./pages/TextareaPage")),
 ];

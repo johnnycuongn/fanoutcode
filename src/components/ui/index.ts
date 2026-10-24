@@ -14,7 +14,16 @@ export * from "./Badge";
 
 export * from "./StatusDot";
 
+export * from "./Field";
+
+export * from "./Input";
+
+export * from "./Textarea";
+
 export const PRIMITIVES = {
+  Textarea: ["Textarea"],
+  Input: ["Input"],
+  Field: ["Field", "useFieldControl"],
   StatusDot: ["StatusDot"],
   Badge: ["Badge"],
   KeyHint: ["KeyHint", "formatChord", "chordLabel"],
