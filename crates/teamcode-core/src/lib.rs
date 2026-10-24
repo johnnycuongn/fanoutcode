@@ -3,6 +3,7 @@
 pub mod db;
 pub mod domain;
 pub mod error;
+pub mod git;
 pub mod helpers;
 pub mod hooks;
 pub mod ids;
