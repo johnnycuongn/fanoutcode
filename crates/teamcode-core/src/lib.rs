@@ -4,6 +4,7 @@ pub mod db;
 pub mod domain;
 pub mod error;
 pub mod ids;
+pub mod memory;
 pub mod recent;
 pub mod windows;
 
