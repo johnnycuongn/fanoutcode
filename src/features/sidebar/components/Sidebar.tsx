@@ -1,0 +1,38 @@
+// The collapsible sidebar (⌘\): the icon strip on top, then the chosen section.
+import type { ReactElement } from "react";
+import { EmptyState, Panel } from "@/components/ui";
+import { shellStore, type SidebarSection } from "@/features/shell";
+import type { ContextDocItem } from "../types";
+import { IconStrip } from "./IconStrip";
+import { TasksSection } from "./TasksSection";
+
+export type SidebarProps = { docs?: ContextDocItem[]; onAddPath?: (path: string) => void };
+
+function SectionBody({ section }: { section: SidebarSection } & SidebarProps): ReactElement {
+  switch (section) {
+    case "tasks":
+      return <TasksSection />;
+    default:
+      return <EmptyState size="sm" title="Nothing here yet" />;
+  }
+}
+
+export function Sidebar(props: SidebarProps): ReactElement | null {
+  const open = shellStore.useSelector((s) => s.sidebarOpen);
+  const section = shellStore.useSelector((s) => s.sidebarSection);
+  if (!open) return null;
+  return (
+    <Panel
+      as="aside"
+      variant="plain"
+      padding="none"
+      aria-label="Sidebar"
+      className="flex h-full w-64 shrink-0 flex-col border-r border-line bg-bar"
+    >
+      <IconStrip />
+      <div className="min-h-0 flex-1 overflow-auto py-1">
+        <SectionBody section={section} {...props} />
+      </div>
+    </Panel>
+  );
+}
