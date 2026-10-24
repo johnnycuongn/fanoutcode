@@ -1,4 +1,5 @@
 //! Fixtures shared by the crate's tests.
+#![allow(dead_code)] // a fixture added for a later test is unused until that test lands
 
 use std::path::PathBuf;
 
@@ -77,5 +78,49 @@ pub fn ctx() -> TransitionCtx {
             review: "REVIEW".into(),
             fix_tests: Some("FIX".into()),
         },
+    }
+}
+
+/// A migrated in-memory database.
+pub fn test_conn() -> rusqlite::Connection {
+    crate::db::open_in_memory().unwrap()
+}
+
+/// `project_fixture(id, AppStorage)`, inserted.
+pub fn insert_project(conn: &rusqlite::Connection, id: &str) -> Project {
+    let p = project_fixture(id, MemoryLocation::AppStorage);
+    crate::db::projects::insert(conn, &p).unwrap();
+    p
+}
+
+/// As `insert_project`, rooted at `root` and named after its folder.
+pub fn insert_project_at(conn: &rusqlite::Connection, id: &str, root: &str) -> Project {
+    let mut p = project_fixture(id, MemoryLocation::AppStorage);
+    p.root = PathBuf::from(root);
+    p.name = p.root.file_name().unwrap().to_string_lossy().into_owned();
+    crate::db::projects::insert(conn, &p).unwrap();
+    p
+}
+
+/// `task_fixture(id, project_id)`, inserted.
+pub fn insert_task(conn: &rusqlite::Connection, id: &str, project_id: &str) -> Task {
+    let t = task_fixture(id, project_id);
+    crate::db::tasks::insert(conn, &t).unwrap();
+    t
+}
+
+/// A workspace row and one `workspace_projects` row per project, in order.
+pub fn insert_workspace_with(conn: &rusqlite::Connection, ws_id: &str, project_ids: &[&str]) {
+    conn.execute(
+        "INSERT INTO workspaces (id, name, file_path, updated_at) VALUES (?1, ?1, NULL, '2026-10-24T00:00:00Z')",
+        [ws_id],
+    )
+    .unwrap();
+    for (i, p) in project_ids.iter().enumerate() {
+        conn.execute(
+            "INSERT INTO workspace_projects (workspace_id, project_id, \"order\", protected) VALUES (?1, ?2, ?3, 0)",
+            rusqlite::params![ws_id, p, i as u32],
+        )
+        .unwrap();
     }
 }

@@ -8,14 +8,21 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 
 use crate::domain::{
-    swatch_for, Container, LinkPolicy, MemoryLocation, Project, ProjectColor, ProjectId, ThemePreference, Workspace,
-    WorkspaceId, WorkspaceProject, WorktreeConvention,
+    Container, LinkPolicy, MemoryLocation, Project, ProjectId, ThemePreference, Workspace, WorkspaceId,
+    WorkspaceProject, WorktreeConvention,
 };
 use crate::{Error, Result};
 
+pub mod projects;
+pub mod tasks;
+pub mod timeline;
+
 /// `(version, name, sql)`, ascending. Versions have gaps by design (the owning plan's number); each plan adds its
 /// file and one line here. An applied file is never edited.
-pub const MIGRATIONS: &[(u32, &str, &str)] = &[(1, "initial", include_str!("../migrations/0001_initial.sql"))];
+pub const MIGRATIONS: &[(u32, &str, &str)] = &[
+    (1, "initial", include_str!("../../migrations/0001_initial.sql")),
+    (3, "core", include_str!("../../migrations/0003_core.sql")),
+];
 
 /// Opens (creating parent folders on first launch), enables WAL and foreign keys, then migrates.
 pub fn open(path: &Path) -> Result<Connection> {
@@ -142,70 +149,54 @@ pub fn container_exists(conn: &Connection, container: &Container) -> Result<bool
     )?)
 }
 
-fn parse_time(s: &str) -> Result<chrono::DateTime<chrono::Utc>> {
+/// Timestamps in columns: RFC 3339 with nanoseconds and `Z`, fixed width so text order is time order.
+pub(crate) fn ts(t: &chrono::DateTime<chrono::Utc>) -> String {
+    t.to_rfc3339_opts(chrono::SecondsFormat::Nanos, true)
+}
+
+/// A unit enum's serde string, the Rust variant name (`"Spec"`), for a text column (A16).
+pub(crate) fn enum_str<T: Serialize>(v: &T) -> Result<String> {
+    match serde_json::to_value(v)? {
+        serde_json::Value::String(s) => Ok(s),
+        other => Err(Error::Db(format!("Not a unit enum: {other}"))),
+    }
+}
+
+/// The inverse of `enum_str`.
+pub(crate) fn enum_from<T: DeserializeOwned>(s: &str) -> Result<T> {
+    serde_json::from_value(serde_json::Value::String(s.to_owned()))
+        .map_err(|e| Error::Db(format!("Bad stored value {s:?}: {e}")))
+}
+
+pub(crate) fn parse_time(s: &str) -> Result<chrono::DateTime<chrono::Utc>> {
     chrono::DateTime::parse_from_rfc3339(s)
         .map(|t| t.with_timezone(&chrono::Utc))
         .map_err(|e| Error::Db(format!("Bad timestamp {s:?}: {e}")))
 }
 
-/// The project rooted at `root`, created on first open: named after the folder, given the next swatch colour,
-/// memory in app storage. The caller canonicalises `root`.
+/// The project rooted at `root`, created on first open: named after the folder, given the least-used project colour
+/// (`projects::next_color`), memory in app storage. The caller canonicalises `root`.
 pub fn find_or_create_project(conn: &Connection, root: &Path) -> Result<Project> {
     if !root.is_dir() {
         return Err(Error::Precondition(
             "That folder no longer exists. Relocate or remove it.".into(),
         ));
     }
-    let root_str = root.to_string_lossy();
-    let existing = conn
-        .query_row(
-            "SELECT id, name, root, color, memory_location, created_at FROM projects WHERE root = ?1",
-            [root_str.as_ref()],
-            |r| {
-                Ok([
-                    r.get::<_, String>(0)?,
-                    r.get(1)?,
-                    r.get(2)?,
-                    r.get(3)?,
-                    r.get(4)?,
-                    r.get(5)?,
-                ])
-            },
-        )
-        .optional()?;
-    if let Some([id, name, root, color, memory_location, created_at]) = existing {
-        return Ok(Project {
-            id: ProjectId::parse(&id)?,
-            name,
-            root: root.into(),
-            color: ProjectColor(color),
-            memory_location: serde_json::from_str(&memory_location)?,
-            created_at: parse_time(&created_at)?,
-        });
+    if let Some(existing) = projects::find_by_root(conn, root)? {
+        return Ok(existing);
     }
-    let count: i64 = conn.query_row("SELECT count(*) FROM projects", [], |r| r.get(0))?;
     let project = Project {
         id: ProjectId::new(),
         name: root
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_else(|| root_str.to_string()),
+            .unwrap_or_else(|| root.to_string_lossy().into_owned()),
         root: root.to_owned(),
-        color: ProjectColor(swatch_for(count as usize).to_owned()),
+        color: projects::next_color(conn)?,
         memory_location: MemoryLocation::AppStorage,
         created_at: chrono::Utc::now(),
     };
-    conn.execute(
-        "INSERT INTO projects (id, name, root, color, memory_location, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        params![
-            project.id.as_str(),
-            project.name,
-            root_str,
-            project.color.0,
-            serde_json::to_string(&project.memory_location)?,
-            project.created_at.to_rfc3339()
-        ],
-    )?;
+    projects::insert(conn, &project)?;
     Ok(project)
 }
 
@@ -276,6 +267,31 @@ mod tests {
     ];
 
     #[test]
+    fn migrations_apply_twice_without_error() {
+        let mut c = rusqlite::Connection::open_in_memory().unwrap();
+        migrate(&mut c).unwrap();
+        migrate(&mut c).unwrap();
+        let cols: Vec<String> = c
+            .prepare("PRAGMA table_info(tasks)")
+            .unwrap()
+            .query_map([], |r| r.get::<_, String>(1))
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect();
+        for want in [
+            "stage",
+            "state",
+            "memory_dir",
+            "json",
+            "stage_entered_at",
+            "state_entered_at",
+            "links_bound_at",
+        ] {
+            assert!(cols.iter().any(|c| c == want), "{want}");
+        }
+    }
+
+    #[test]
     fn open_creates_parent_folders_and_every_table() {
         let dir = tempfile::tempdir().unwrap();
         let conn = open(&dir.path().join("deep/er/teamcode.db")).unwrap();
@@ -283,7 +299,7 @@ mod tests {
             conn.query_row(&format!("SELECT count(*) FROM {t}"), [], |r| r.get::<_, i64>(0))
                 .unwrap_or_else(|e| panic!("{t}: {e}"));
         }
-        assert_eq!(user_version(&conn).unwrap(), 1);
+        assert_eq!(user_version(&conn).unwrap(), MIGRATIONS.last().unwrap().0);
     }
 
     #[test]
@@ -338,7 +354,7 @@ mod tests {
                 .is_err(),
             "nothing from the failed file stays"
         );
-        assert_eq!(user_version(&conn).unwrap(), 1);
+        assert_eq!(user_version(&conn).unwrap(), MIGRATIONS.last().unwrap().0);
     }
 
     #[test]
@@ -384,7 +400,7 @@ mod tests {
     }
 
     #[test]
-    fn find_or_create_project_is_idempotent_by_root_and_rotates_colours() {
+    fn find_or_create_project_is_idempotent_by_root_and_picks_the_least_used_colour() {
         let conn = open_in_memory().unwrap();
         let a = tempfile::tempdir().unwrap();
         let b = tempfile::tempdir().unwrap();
@@ -392,8 +408,8 @@ mod tests {
         let again = find_or_create_project(&conn, a.path()).unwrap();
         assert_eq!(p1, again);
         assert_eq!(p1.name, a.path().file_name().unwrap().to_string_lossy());
-        assert_eq!(p1.color.0, "rose");
-        assert_eq!(find_or_create_project(&conn, b.path()).unwrap().color.0, "orange");
+        assert_eq!(p1.color.0, "indigo");
+        assert_eq!(find_or_create_project(&conn, b.path()).unwrap().color.0, "cyan");
         assert!(matches!(
             find_or_create_project(&conn, Path::new("/nonexistent/repo")),
             Err(Error::Precondition(_))
