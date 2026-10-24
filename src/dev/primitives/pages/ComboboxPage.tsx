@@ -1,5 +1,5 @@
 import { useState, type ReactElement } from "react";
-import { Badge, Combobox, Field, type ComboboxOption } from "../../../components/ui";
+import { Badge, Combobox, ComboboxList, Field, type ComboboxOption } from "../../../components/ui";
 
 const roles: ComboboxOption[] = [
   { value: "frontend", label: "frontend", hint: "UI and styling" },
@@ -53,6 +53,14 @@ export default function ComboboxPage(): ReactElement {
           </>
         )}
       />
+      <h2 className="text-sm font-medium">ComboboxList (always open: task picker, palette)</h2>
+      <div className="rounded-well border border-line bg-card">
+        <ComboboxList
+          label="Pick a role"
+          items={roles.map((r) => ({ value: r.value, label: r.label, hint: r.hint, group: r.hint }))}
+          onSelect={setRole}
+        />
+      </div>
     </div>
   );
 }

@@ -3,6 +3,7 @@
 // a Plan 03 Rust test writes.
 import type { AgentStatus, StageToken } from "@/components/ui";
 import type { AgentState, HandbackReason, Stage, Task } from "@/lib/bindings";
+import { SWATCHES, type Swatch } from "@/lib/theme";
 
 const STAGE_DONE: Record<Stage, string> = {
   Spec: "Spec ready",
@@ -48,4 +49,9 @@ export function stageToken(stage: Stage): StageToken {
 /** `$1.25`, or `~$1.25` when any part of the figure is estimated. */
 export function formatUsd(amount: number, estimated = false): string {
   return `${estimated ? "~" : ""}$${amount.toFixed(2)}`;
+}
+
+/** A project or task colour as a primitives swatch; unknown names fall back to slate. */
+export function asSwatch(color: string | null | undefined): Swatch {
+  return (SWATCHES as readonly string[]).includes(color ?? "") ? (color as Swatch) : "slate";
 }

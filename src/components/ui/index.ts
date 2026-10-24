@@ -9,6 +9,7 @@ export * from "./Input";
 export * from "./Textarea";
 export * from "./Select";
 export * from "./Combobox";
+export * from "./ComboboxList";
 export * from "./Checkbox";
 export * from "./Switch";
 export * from "./Segmented";
@@ -46,7 +47,7 @@ export const PRIMITIVES = {
     "SelectLabel",
     "SelectSeparator",
   ],
-  Combobox: ["Combobox"],
+  Combobox: ["Combobox", "ComboboxList"],
   Checkbox: ["Checkbox"],
   Switch: ["Switch"],
   Segmented: ["Segmented"],
