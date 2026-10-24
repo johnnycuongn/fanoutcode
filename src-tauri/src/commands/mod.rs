@@ -6,6 +6,7 @@ use teamcode_core::settings::Scope;
 use teamcode_core::Result;
 
 pub mod git;
+pub mod hooks;
 pub mod memory;
 pub mod projects;
 pub mod settings;

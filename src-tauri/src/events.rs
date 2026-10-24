@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
 use teamcode_core::db;
 use teamcode_core::domain::{Container, PaneId, SessionId, Task, TaskId, WindowId, Workspace};
+use teamcode_core::hooks::TaskEvent;
 use teamcode_core::{Error, Result};
 
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type, tauri_specta::Event)]
@@ -55,6 +56,13 @@ pub struct CostUpdated {
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type, tauri_specta::Event)]
 pub struct GitChanges {
     pub task_id: TaskId,
+}
+
+/// Every parsed hook event except `StatusLine` (Plan 05's tailer).
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type, tauri_specta::Event)]
+pub struct TeamEvent {
+    pub task_id: TaskId,
+    pub event: TaskEvent,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type, tauri_specta::Event)]

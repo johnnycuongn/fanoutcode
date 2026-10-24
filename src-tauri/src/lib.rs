@@ -5,6 +5,8 @@ pub mod commands;
 pub mod effects;
 pub mod events;
 pub mod git_watcher;
+pub mod hook_feed;
+pub mod hooks_tailer;
 pub mod observation;
 pub mod observe;
 pub mod secrets;
@@ -44,6 +46,8 @@ pub fn run() {
             if let Err(e) = teamcode_core::roster::install_shipped(&config_dir) {
                 eprintln!("Team Code: couldn't install the shipped agents: {e}");
             }
+            // Plan 04 subscribes its note_hook_event here, before the replay (A18)
+            hooks_tailer::HooksTailer::start(app.handle());
             git_watcher::GitWatcher::start(app.handle());
             let state = app.state::<AppState>();
             let open = {

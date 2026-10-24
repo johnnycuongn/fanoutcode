@@ -2,10 +2,14 @@
 //! commands that write it. Each hook in a task's generated settings file appends one line,
 //! `EventName<TAB>rfc3339<TAB>{claude payload json}`, to `<app_data>/events/<task-id>.jsonl`.
 
+pub mod artifact;
 pub mod attribution;
+pub mod cursor;
+pub mod feed;
 pub mod parse;
 pub mod plan_steps;
 pub mod specs;
+pub mod subscribers;
 
 use std::path::{Path, PathBuf};
 

@@ -7,10 +7,10 @@ use specta_typescript::{BigIntExportBehavior, Typescript};
 use tauri_specta::{collect_commands, collect_events, Builder};
 use teamcode_core::{Error, Result};
 
-use crate::commands::{git, memory, projects, settings, tasks, views, windows};
+use crate::commands::{git, hooks, memory, projects, settings, tasks, views, windows};
 use crate::events::{
-    CostUpdated, GitChanges, NeedsYou, SessionAttached, SessionExited, TaskChanged, TasksReloaded, TestFinished,
-    ViewsChanged, WorkspaceChanged,
+    CostUpdated, GitChanges, NeedsYou, SessionAttached, SessionExited, TaskChanged, TasksReloaded, TeamEvent,
+    TestFinished, ViewsChanged, WorkspaceChanged,
 };
 
 /// `@ts-nocheck`: the generated globals import `Channel` before any command takes one, which `noUnusedLocals` would
@@ -66,6 +66,8 @@ pub fn builder() -> Builder<tauri::Wry> {
             git::git_file_read,
             git::git_file_write,
             git::git_include_other,
+            hooks::hooks_list,
+            hooks::hooks_plan_steps,
         ])
         .events(collect_events![
             TaskChanged,
@@ -78,6 +80,7 @@ pub fn builder() -> Builder<tauri::Wry> {
             CostUpdated,
             GitChanges,
             TestFinished,
+            TeamEvent,
         ])
 }
 
@@ -112,6 +115,7 @@ mod tests {
             "cost-updated",
             "git-changes",
             "test-finished",
+            "team-event",
         ] {
             assert!(ts.contains(&format!("\"{name}\"")), "{name}");
         }

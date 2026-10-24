@@ -428,6 +428,28 @@ async gitIncludeOther(taskId: TaskId, repo: string, path: string) : Promise<Resu
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+/**
+ * Every event of the task's log, in order, with subagent descriptions filled in as the live feed fills them.
+ */
+async hooksList(taskId: TaskId) : Promise<Result<TaskEvent[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("hooks_list", { taskId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * The task's `plan.md` as steps, dependencies and team; empty when there is no plan yet.
+ */
+async hooksPlanSteps(taskId: TaskId) : Promise<Result<PlanDoc, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("hooks_plan_steps", { taskId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
@@ -442,6 +464,7 @@ sessionAttached: SessionAttached,
 sessionExited: SessionExited,
 taskChanged: TaskChanged,
 tasksReloaded: TasksReloaded,
+teamEvent: TeamEvent,
 testFinished: TestFinished,
 viewsChanged: ViewsChanged,
 workspaceChanged: WorkspaceChanged
@@ -453,6 +476,7 @@ sessionAttached: "session-attached",
 sessionExited: "session-exited",
 taskChanged: "task-changed",
 tasksReloaded: "tasks-reloaded",
+teamEvent: "team-event",
 testFinished: "test-finished",
 viewsChanged: "views-changed",
 workspaceChanged: "workspace-changed"
@@ -508,6 +532,11 @@ export type HandbackReason =
  * Stop without a sentinel.
  */
 { type: "Replied"; first_line: string } | { type: "PermissionNeeded" } | { type: "TestFailed"; exit_code: number } | { type: "Error"; message: string }
+/**
+ * What a hook reported. Internally tagged (A1): `{ "type": "Stop", "last_assistant_message": "…", … }`. The tag is
+ * the IPC shape only; the parser picks the variant from the log line's first field, never from the payload.
+ */
+export type HookEvent = { type: "SessionStart"; session_id: string; transcript_path: string } | { type: "UserPromptSubmit" } | { type: "PreToolUse"; tool: string; input: JsonValue } | { type: "PostToolUse"; tool: string; input: JsonValue; response: JsonValue } | { type: "SubagentStart"; agent_id: string; agent_type: string; description: string | null } | { type: "SubagentStop"; agent_id: string } | { type: "PermissionRequest"; tool: string } | { type: "Notification"; message: string } | { type: "Stop"; last_assistant_message: string; background_tasks: number } | { type: "StopFailure"; message: string } | { type: "StatusLine"; cost_usd: number; input_tokens: number; output_tokens: number; context_used_pct: number } | { type: "Unknown"; name: string }
 export type JsonValue = null | boolean | number | string | JsonValue[] | Partial<{ [key in string]: JsonValue }>
 export type LayoutNode = { type: "Leaf"; pane: PaneId; content: PaneContent } | { type: "Split"; direction: SplitDirection; ratio: number; first: LayoutNode; second: LayoutNode }
 export type LinkPolicy = "ReadAndModifyOnRequest" | "ReadOnly"
@@ -524,6 +553,26 @@ export type PaneContent = { type: "Empty" } | { type: "Task"; task_id: TaskId } 
  */
 { type: "TeamCanvas"; task_id: TaskId } | { type: "Terminal"; project_id: ProjectId; session_id: SessionId }
 export type PaneId = string
+/**
+ * `plan.md` as the Team canvas reads it.
+ */
+export type PlanDoc = { steps: PlanStep[]; team: TeamRole[] }
+/**
+ * One numbered checkbox step of `plan.md`.
+ */
+export type PlanStep = { number: number; title: string; done: boolean; 
+/**
+ * The `(after …)` list, else the previous step, else nothing.
+ */
+deps: number[]; 
+/**
+ * `deps` came from an `(after …)` list.
+ */
+explicit_deps: boolean; 
+/**
+ * The linked project heading the step sits under; `None` for the home project.
+ */
+repo: string | null }
 export type Priority = "None" | "Low" | "Medium" | "High"
 export type Project = { id: ProjectId; name: string; root: string; color: ProjectColor; memory_location: MemoryLocation; created_at: string }
 /**
@@ -602,6 +651,11 @@ export type TaskChanged = { task: Task }
  * A swatch token name from `SWATCHES`, e.g. `"violet"`; separate from the stage colours.
  */
 export type TaskColor = string
+/**
+ * One parsed line of a task's event log. `seq` is the 1-based line number; `agent_id` is the payload's subagent id,
+ * normalised (no `agent-` prefix), `None` for the main agent.
+ */
+export type TaskEvent = { seq: number; at: string; task_id: TaskId; agent_id: string | null; event: HookEvent }
 export type TaskId = string
 /**
  * What `tasks_update` may change; `None` (or a missing field) leaves a field as it is, and `clear_*` empties one.
@@ -617,7 +671,15 @@ worktree: WorktreeChoice | null;
 agent_kind: AgentKind | null }
 export type TasksReloaded = { container: Container }
 export type TeamArrangement = "HubGraph" | "Flow"
+/**
+ * Every parsed hook event except `StatusLine` (Plan 05's tailer).
+ */
+export type TeamEvent = { task_id: TaskId; event: TaskEvent }
 export type TeamPlacement = "DockGrows" | "Swap" | "OwnPane"
+/**
+ * One bullet of the `## Team` section: a role and the steps it owns.
+ */
+export type TeamRole = { role: string; steps: number[] }
 export type TestFinished = { task_id: TaskId; code: number }
 /**
  * The `theme` setting. `System` follows macOS; the webview resolves it (`src/lib/theme.ts`).
