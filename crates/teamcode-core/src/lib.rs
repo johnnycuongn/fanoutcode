@@ -7,6 +7,7 @@ pub mod helpers;
 pub mod ids;
 pub mod memory;
 pub mod pipeline;
+pub mod prompts;
 pub mod recent;
 #[cfg(test)]
 pub(crate) mod test_support;
