@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use rusqlite::Connection;
 use teamcode_core::changes::attributor::Attributor;
@@ -10,11 +10,15 @@ use teamcode_core::changes::ChangeSet;
 use teamcode_core::domain::TaskId;
 use teamcode_core::hooks::attribution::Correlator;
 use teamcode_core::pipeline::TestRun;
+use teamcode_core::testrun::{LiveOutput, TestResult};
 use teamcode_core::windows::WindowRegistry;
 use teamcode_core::{db, Result};
 
 use crate::git_watcher::GitWatcher;
 use crate::hooks_tailer::HooksTailer;
+
+/// A test run in flight: its task (aborting it kills the child) and its shared output.
+pub type TestRunSlot = (tauri::async_runtime::JoinHandle<()>, Arc<LiveOutput>);
 
 pub struct AppState {
     /// `<app_data>/teamcode.db`, migrated at open.
@@ -33,6 +37,10 @@ pub struct AppState {
     /// Each task's main transcript, from its `SessionStart`.
     pub transcripts: Mutex<HashMap<TaskId, PathBuf>>,
     pub tailer: HooksTailer,
+    /// The test run in flight per task, owned here so a closed window never kills it.
+    pub test_runs: Mutex<HashMap<TaskId, TestRunSlot>>,
+    /// Each task's last finished run.
+    pub last_tests: Mutex<HashMap<TaskId, TestResult>>,
 }
 
 impl AppState {
@@ -49,6 +57,8 @@ impl AppState {
             correlators: Mutex::default(),
             transcripts: Mutex::default(),
             tailer: HooksTailer::default(),
+            test_runs: Mutex::default(),
+            last_tests: Mutex::default(),
         })
     }
 
@@ -77,8 +87,12 @@ impl AppState {
         all.get(task).cloned()
     }
 
-    /// The task's last test run, for Fix failing tests. Plan 05 keeps these; until then there is none.
-    pub fn last_test(&self, _task: &TaskId) -> Option<TestRun> {
-        None // STUB(plan 05)
+    /// The task's last test run, for Fix failing tests and the Test prompt.
+    pub fn last_test(&self, task: &TaskId) -> Option<TestRun> {
+        self.last_tests
+            .lock()
+            .expect("last test lock")
+            .get(task)
+            .map(TestResult::as_test_run)
     }
 }

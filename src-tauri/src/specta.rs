@@ -7,6 +7,7 @@ use specta_typescript::{BigIntExportBehavior, Typescript};
 use tauri_specta::{collect_commands, collect_events, Builder};
 use teamcode_core::{Error, Result};
 
+use crate::commands::tests as test_runs;
 use crate::commands::{git, hooks, memory, projects, settings, tasks, views, windows};
 use crate::events::{
     CostUpdated, GitChanges, NeedsYou, SessionAttached, SessionExited, TaskChanged, TasksReloaded, TeamEvent,
@@ -68,6 +69,9 @@ pub fn builder() -> Builder<tauri::Wry> {
             git::git_include_other,
             hooks::hooks_list,
             hooks::hooks_plan_steps,
+            test_runs::tests_run,
+            test_runs::tests_stop,
+            test_runs::tests_add_linked,
         ])
         .events(collect_events![
             TaskChanged,

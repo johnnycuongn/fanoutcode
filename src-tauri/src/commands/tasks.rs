@@ -37,7 +37,7 @@ fn finish(app: &AppHandle, state: &AppState, task: Task, external: Vec<Effect>) 
 
 /// The `tasks_action` sequence Plans 04, 05, 07 and 08 rely on: lock, require the task and its project, build the
 /// transition context, compute the effects, apply them, release the lock, dispatch, emit.
-fn run(
+pub(crate) fn run(
     app: &AppHandle,
     state: &AppState,
     id: &TaskId,

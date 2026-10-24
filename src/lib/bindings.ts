@@ -450,6 +450,39 @@ async hooksPlanSteps(taskId: TaskId) : Promise<Result<PlanDoc, string>> {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+/**
+ * Starts the task's tests, or attaches to the run in flight; streams its output and returns its exit code.
+ */
+async testsRun(taskId: TaskId, onOutput: TAURI_CHANNEL<number[]>) : Promise<Result<number, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("tests_run", { taskId, onOutput }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Stops the run in flight (the child dies with it); attached callers return -1 and the card needs you.
+ */
+async testsStop(taskId: TaskId) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("tests_stop", { taskId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Adds a linked project's test command (its own project-scope `test_command`, run in its root) to the task.
+ */
+async testsAddLinked(taskId: TaskId, projectId: ProjectId) : Promise<Result<TestCommand, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("tests_add_linked", { taskId, projectId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
@@ -680,6 +713,10 @@ export type TeamPlacement = "DockGrows" | "Swap" | "OwnPane"
  * One bullet of the `## Team` section: a role and the steps it owns.
  */
 export type TeamRole = { role: string; steps: number[] }
+/**
+ * One command and the folder it runs in.
+ */
+export type TestCommand = { cwd: string; command: string }
 export type TestFinished = { task_id: TaskId; code: number }
 /**
  * The `theme` setting. `System` follows macOS; the webview resolves it (`src/lib/theme.ts`).

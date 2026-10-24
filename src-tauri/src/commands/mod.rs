@@ -11,6 +11,7 @@ pub mod memory;
 pub mod projects;
 pub mod settings;
 pub mod tasks;
+pub mod tests;
 pub mod views;
 pub mod windows;
 
