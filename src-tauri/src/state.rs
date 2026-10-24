@@ -9,6 +9,7 @@ use livespec_core::project::BriefStore;
 use livespec_core::project::ProjectIndex;
 use livespec_core::usage::UsageLedger;
 use rusqlite::Connection;
+use teamcode_core::activity::ActivityTracker;
 use teamcode_core::changes::attributor::Attributor;
 use teamcode_core::changes::ChangeSet;
 use teamcode_core::cost::LiveCost;
@@ -65,6 +66,8 @@ pub struct AppState {
     pub livespec_last: Mutex<HashMap<TaskId, String>>,
     /// Scanned project indexes, by home root, scanned on first use.
     pub livespec_indexes: Mutex<HashMap<PathBuf, Arc<ProjectIndex>>>,
+    /// Each task's board-card activity, fed every hook event.
+    pub activity: Mutex<HashMap<TaskId, ActivityTracker>>,
 }
 
 impl AppState {
@@ -92,6 +95,7 @@ impl AppState {
             livespec_runs: RunSlots::default(),
             livespec_last: Mutex::default(),
             livespec_indexes: Mutex::default(),
+            activity: Mutex::default(),
         })
     }
 

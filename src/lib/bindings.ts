@@ -535,6 +535,14 @@ async livespecCancel(taskId: TaskId) : Promise<Result<null, string>> {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+async tasksActivity(container: Container) : Promise<Result<TaskActivity[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("tasks_activity", { container }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
@@ -763,6 +771,10 @@ state_entered_at: string;
  * When `linked_roots` were fixed (A11).
  */
 links_bound_at: string | null }
+/**
+ * What a board card shows beyond the task (A6).
+ */
+export type TaskActivity = { task_id: TaskId; current_file: string | null; plus: number; minus: number; team: TeamRow[]; cost_usd: number | null }
 export type TaskChanged = { task: Task }
 /**
  * A swatch token name from `SWATCHES`, e.g. `"violet"`; separate from the stage colours.
@@ -797,6 +809,10 @@ export type TeamPlacement = "DockGrows" | "Swap" | "OwnPane"
  * One bullet of the `## Team` section: a role and the steps it owns.
  */
 export type TeamRole = { role: string; steps: number[] }
+/**
+ * One member of the task's team: the main session, or a subagent named by its type.
+ */
+export type TeamRow = { name: string; state: AgentState }
 /**
  * One command and the folder it runs in.
  */
