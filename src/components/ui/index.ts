@@ -54,7 +54,13 @@ export * from "./Avatar";
 
 export * from "./EmptyState";
 
+export * from "./Panel";
+
+export * from "./Resizable";
+
 export const PRIMITIVES = {
+  Resizable: ["Resizable"],
+  Panel: ["Panel", "PanelHeader", "PanelBody", "PanelFooter"],
   EmptyState: ["EmptyState"],
   Avatar: ["Avatar", "AvatarGroup", "initials"],
   Chip: ["Chip"],

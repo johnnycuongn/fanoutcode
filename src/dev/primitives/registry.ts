@@ -37,4 +37,6 @@ export const pages: ExamplePage[] = [
     "Empty column / board / first-run states with lazy dotLottie",
     () => import("./pages/EmptyStatePage"),
   ),
+  page("Panel", "Surface with header, body and footer", () => import("./pages/PanelPage")),
+  page("Resizable", "Draggable, keyboard-operable split", () => import("./pages/ResizablePage")),
 ];
