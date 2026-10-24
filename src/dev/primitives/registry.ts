@@ -23,4 +23,6 @@ export const pages: ExamplePage[] = [
   page("Tooltip", "Hint on hover and focus, with shortcut", () => import("./pages/TooltipPage")),
   page("Select", "Single choice from a short list", () => import("./pages/SelectPage")),
   page("Combobox", "Searchable single choice", () => import("./pages/ComboboxPage")),
+  page("Segmented", "Exactly-one-of-N control", () => import("./pages/SegmentedPage")),
+  page("Tabs", "Underline, pill and bar tab sets", () => import("./pages/TabsPage")),
 ];

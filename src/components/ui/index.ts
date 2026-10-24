@@ -34,7 +34,13 @@ export * from "./Select";
 
 export * from "./Combobox";
 
+export * from "./Segmented";
+
+export * from "./Tabs";
+
 export const PRIMITIVES = {
+  Tabs: ["Tabs", "TabsList", "TabsTrigger", "TabsContent"],
+  Segmented: ["Segmented"],
   Combobox: ["Combobox"],
   Select: [
     "Select",
