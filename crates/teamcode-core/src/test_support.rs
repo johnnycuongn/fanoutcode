@@ -124,3 +124,18 @@ pub fn insert_workspace_with(conn: &rusqlite::Connection, ws_id: &str, project_i
         .unwrap();
     }
 }
+
+/// A migrated database with project `p-1a-1`, a real task folder under a tempdir (intent `x`), and task `t-1a-1` in
+/// `stage` whose `memory_dir` is that folder.
+pub fn setup(stage: Stage) -> (rusqlite::Connection, tempfile::TempDir, crate::memory::TaskFolder, Task) {
+    let conn = test_conn();
+    insert_project(&conn, "p-1a-1");
+    let dir = tempfile::tempdir().unwrap();
+    let date = chrono::NaiveDate::from_ymd_opt(2026, 10, 24).unwrap();
+    let folder = crate::memory::TaskFolder::create(dir.path(), date, "Task", "x").unwrap();
+    let mut t = task_fixture("t-1a-1", "p-1a-1");
+    t.stage = stage;
+    t.memory_dir = folder.dir().to_owned();
+    crate::db::tasks::insert(&conn, &t).unwrap();
+    (conn, dir, folder, t)
+}

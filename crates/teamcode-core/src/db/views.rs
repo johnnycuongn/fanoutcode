@@ -179,6 +179,9 @@ mod tests {
         assert_eq!((got.name.as_str(), leaves(&got.layout).len()), ("Gamma", 2));
         delete(&c, &a.id).unwrap();
         assert!(get(&c, &a.id).unwrap().is_none());
-        assert!(matches!(reorder(&c, &pc, std::slice::from_ref(&a.id)), Err(Error::Invalid(_))));
+        assert!(matches!(
+            reorder(&c, &pc, std::slice::from_ref(&a.id)),
+            Err(Error::Invalid(_))
+        ));
     }
 }

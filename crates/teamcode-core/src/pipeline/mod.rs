@@ -2,6 +2,7 @@
 //!
 //! `transition` is pure: it returns `Effect`s and never touches a PTY, git or the database.
 
+pub mod apply;
 mod enter;
 pub mod handback;
 pub mod move_to;
@@ -15,6 +16,7 @@ use crate::helpers::HelperKind;
 use crate::memory::{IndexEntry, TimelineKind};
 use crate::{Error, Result};
 
+pub use apply::{apply, index_doc_for, Applied};
 pub use handback::{detect_handback, SENTINEL_PREFIX};
 pub use move_to::move_to;
 pub use stage::StageArtifact;
