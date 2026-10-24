@@ -4,6 +4,7 @@
 
 mod enter;
 pub mod handback;
+pub mod move_to;
 pub mod stage;
 
 use chrono::{DateTime, Utc};
@@ -15,6 +16,7 @@ use crate::memory::{IndexEntry, TimelineKind};
 use crate::{Error, Result};
 
 pub use handback::{detect_handback, SENTINEL_PREFIX};
+pub use move_to::move_to;
 pub use stage::StageArtifact;
 
 /// What the developer (or Plan 05, for Done detection) asks of a task. Internally tagged with struct variants only
@@ -195,6 +197,9 @@ pub fn transition(task: &Task, action: StageAction, ctx: &TransitionCtx) -> Resu
             ]);
             Ok(fx)
         }
+        (StageAction::Back { stage: target }, _) => move_to::back(task, *target, ctx),
+        (StageAction::Archive, _) => move_to::archive(task, ctx),
+        (StageAction::Restore, _) => move_to::restore(task, ctx),
         _ => Err(unavailable(&action, stage)),
     }
 }
