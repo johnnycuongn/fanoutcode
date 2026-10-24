@@ -14,8 +14,10 @@ use crate::domain::{
 use crate::{Error, Result};
 
 pub mod projects;
+pub mod settings;
 pub mod tasks;
 pub mod timeline;
+pub mod views;
 
 /// `(version, name, sql)`, ascending. Versions have gaps by design (the owning plan's number); each plan adds its
 /// file and one line here. An applied file is never edited.

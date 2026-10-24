@@ -13,6 +13,7 @@ pub mod roster;
 pub mod settings;
 #[cfg(test)]
 pub(crate) mod test_support;
+pub mod views;
 pub mod windows;
 
 pub use error::{Error, Result};
