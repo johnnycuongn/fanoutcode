@@ -1,6 +1,16 @@
 // Board-local types. Everything that crosses IPC comes from `@/lib/bindings` (or, until Plan 05 lands, the
 // `stubs/plan05.ts` wrapper); these are view-model shapes only.
-import type { DetailLevel, Priority, ProjectLayer, Stage, Task, WorkspaceBoard, WorktreeChoice } from "@/lib/bindings";
+import type {
+  Container,
+  DetailLevel,
+  Priority,
+  Project,
+  ProjectLayer,
+  Stage,
+  Task,
+  WorkspaceBoard,
+  WorktreeChoice,
+} from "@/lib/bindings";
 
 export type ChipTone = "working" | "needs_you" | "ok" | "idle";
 export type CardChipModel = { tone: ChipTone; text: string; detail?: string };
@@ -69,3 +79,15 @@ export type TaskPatchInput = {
 
 /** Swimlane order and which lanes are collapsed, persisted per container (lanes.ts). */
 export type LaneState = { order: string[]; collapsed: string[] };
+
+/** What the host (Plan 06, Board tab zero) passes in; the board renders nothing else of its window. */
+export type BoardProps = {
+  container: Container;
+  projects: Project[];
+  settings: BoardSettings;
+  /** The project the host has focused (⌘1–⌘9, rail), or null for all. */
+  focusedProject: string | null;
+  currentWindowId: string;
+  onOpenTask(taskId: string, target: OpenTarget): void;
+  onNewTask(): void;
+};

@@ -158,6 +158,12 @@ export const selectProjectCounts: Selector<{ projectId: string; count: number; n
   },
 );
 
+/** Every Jira key on the board, sorted, for the filter's key list. */
+export const selectJiraKeys: Selector<string[]> = memoBy(
+  (s, tasks) => [selectScoped(s, tasks)] as const,
+  (scoped) => [...new Set(scoped.flatMap((t) => (t.jira_key ? [t.jira_key] : [])))].sort(),
+);
+
 /** Non-archived tasks that need the developer, whatever the filters say. */
 export const selectNeedsYouCount: Selector<number> = (s, tasks) =>
   selectScoped(s, tasks).filter((t) => !t.archived && isNeedsYou(t)).length;
@@ -191,6 +197,14 @@ export const removeTask = (id: string): void => dropTask(id);
 function indexProjects(projects: Project[]): Pick<BoardState, "projects" | "projectOrder"> {
   return { projects: Object.fromEntries(projects.map((p) => [p.id, p])), projectOrder: projects.map((p) => p.id) };
 }
+
+const sameSettings = (a: BoardSettings, b: BoardSettings): boolean => JSON.stringify(a) === JSON.stringify(b);
+
+const sameProjects = (s: BoardState, projects: Project[]): boolean =>
+  projects.length === s.projectOrder.length &&
+  projects.every(
+    (p, i) => s.projectOrder[i] === p.id && s.projects[p.id]?.name === p.name && s.projects[p.id]?.color === p.color,
+  );
 
 function laneStateFor(prev: LaneState, projectOrder: string[]): LaneState {
   const known = prev.order.filter((id) => projectOrder.includes(id));
@@ -232,6 +246,9 @@ export function configureBoard(input: {
   const focus = input.focusedProject === "all" ? null : input.focusedProject;
   const index = indexProjects(input.projects);
   boardStore.set((s) => {
+    if (focus === s.focusedProject && sameSettings(s.settings, input.settings) && sameProjects(s, input.projects)) {
+      return s; // the host re-rendered with equal props: nothing to do
+    }
     const before = modeOf(s.container, s.settings);
     const after = modeOf(s.container, input.settings);
     const refocused = focus !== s.focusedProject || before !== "one_project";
