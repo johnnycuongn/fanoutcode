@@ -185,6 +185,31 @@ pub async fn show_at(repo: &Path, rev: &str, path: &str) -> Result<Option<String
     Ok(Some(run(repo, &["show", &spec]).await?))
 }
 
+/// HEAD of every repo, in order: the task's base, recorded when it enters Build (§9).
+pub async fn record_base(repos: &[std::path::PathBuf]) -> Result<Vec<crate::domain::RepoBase>> {
+    let mut bases = Vec::with_capacity(repos.len());
+    for repo in repos {
+        bases.push(crate::domain::RepoBase {
+            repo_root: repo.clone(),
+            commit: head(repo).await?,
+        });
+    }
+    Ok(bases)
+}
+
+/// The base a repo's diff is taken against (§9): the recorded base when `repo_root` is the task's own worktree,
+/// else `head` ("or HEAD when no worktree is used and the developer has committed in between").
+pub fn effective_base(task: &crate::domain::Task, repo_root: &Path, head: &str) -> Option<String> {
+    let own_worktree =
+        task.worktree == crate::domain::WorktreeChoice::On && task.worktree_path.as_deref() == Some(repo_root);
+    if own_worktree {
+        if let Some(b) = task.base.iter().find(|b| b.repo_root == repo_root) {
+            return Some(b.commit.clone());
+        }
+    }
+    Some(head.to_owned())
+}
+
 #[cfg(test)]
 pub mod test_support;
 
@@ -264,6 +289,39 @@ mod tests {
         let r = temp_repo();
         assert!(
             matches!(run(r.path(), &["checkout", "no-such-branch"]).await, Err(Error::Git(m)) if m.contains("no-such-branch"))
+        );
+    }
+
+    #[tokio::test]
+    async fn record_base_stores_head_per_repo() {
+        let (a, b) = (temp_repo(), temp_repo());
+        let bases = record_base(&[a.path().to_path_buf(), b.path().to_path_buf()])
+            .await
+            .unwrap();
+        assert_eq!(bases.len(), 2);
+        assert_eq!(bases[0].commit, head(a.path()).await.unwrap());
+    }
+
+    fn task_with(wt: crate::domain::WorktreeChoice, worktree_path: Option<&str>, base: &str) -> crate::domain::Task {
+        let mut t = crate::test_support::task_fixture("t-1a-1", "p-1a-1");
+        t.worktree = wt;
+        t.worktree_path = worktree_path.map(Into::into);
+        t.base = vec![crate::domain::RepoBase {
+            repo_root: worktree_path.unwrap_or("/repo").into(),
+            commit: base.into(),
+        }];
+        t
+    }
+
+    #[test]
+    fn effective_base_moves_to_head_without_a_worktree() {
+        use crate::domain::WorktreeChoice;
+        let t = task_with(WorktreeChoice::Off, None, "aaa");
+        assert_eq!(effective_base(&t, Path::new("/repo"), "bbb").as_deref(), Some("bbb"));
+        let t = task_with(WorktreeChoice::On, Some("/repo/.worktrees/x"), "aaa");
+        assert_eq!(
+            effective_base(&t, Path::new("/repo/.worktrees/x"), "bbb").as_deref(),
+            Some("aaa")
         );
     }
 }

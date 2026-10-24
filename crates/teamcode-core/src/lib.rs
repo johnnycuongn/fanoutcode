@@ -17,5 +17,6 @@ pub mod settings;
 pub(crate) mod test_support;
 pub mod views;
 pub mod windows;
+pub mod worktree;
 
 pub use error::{Error, Result};
