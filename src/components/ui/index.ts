@@ -4,6 +4,13 @@
 export * from "./cx";
 export * from "./tokens";
 
-export const PRIMITIVES = {} as const satisfies Record<string, readonly string[]>;
+export * from "./Button";
+
+export * from "./IconButton";
+
+export const PRIMITIVES = {
+  IconButton: ["IconButton"],
+  Button: ["Button", "buttonVariants"],
+} as const satisfies Record<string, readonly string[]>;
 
 export type PrimitiveName = keyof typeof PRIMITIVES;

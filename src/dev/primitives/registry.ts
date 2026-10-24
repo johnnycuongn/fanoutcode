@@ -8,7 +8,7 @@ function page(name: PrimitiveName, blurb: string, load: () => Promise<{ default:
   return { name, blurb, Page: lazy(load) };
 }
 
-export const pages: ExamplePage[] = [];
-
-// Keeps `page` referenced until the first example page is registered.
-void page;
+export const pages: ExamplePage[] = [
+  page("Button", "Primary, secondary, ghost, danger and link buttons", () => import("./pages/ButtonPage")),
+  page("IconButton", "Square icon buttons with a required label", () => import("./pages/IconButtonPage")),
+];
