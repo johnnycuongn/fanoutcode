@@ -6,11 +6,14 @@ use livespec_core::llm::Usage;
 use livespec_core::settings::Tier;
 use tauri::{AppHandle, Manager};
 use teamcode_core::domain::TaskId;
-use teamcode_core::helpers::HelperKind;
+use teamcode_core::helpers::{briefs, naming, tag_for, HelperKind};
+use teamcode_core::memory::slug::title_from_intent;
+use teamcode_core::memory::{MemoryFile, TaskFolder};
 use teamcode_core::Result;
 
-use crate::observe::log_err;
+use crate::observe::{self, log_err};
 use crate::state::AppState;
+use crate::{observation, provider};
 
 /// The tier a helper runs on.
 pub fn tier_for(kind: HelperKind) -> Tier {
@@ -38,8 +41,49 @@ pub fn run(app: &AppHandle, task_id: &TaskId, kind: HelperKind) {
 }
 
 async fn job(app: &AppHandle, id: &TaskId, kind: HelperKind) -> Result<()> {
-    // each kind's runner lands with its own task of this plan
-    let _ = (app, id, kind);
+    match kind {
+        HelperKind::Naming => naming(app, id).await,
+        HelperKind::ProjectBrief => project_briefs(app, id).await,
+        // the spec watcher, commit messages and commit runners land with their own tasks of this plan
+        HelperKind::SpecWatcher | HelperKind::CommitMessages | HelperKind::GitCommit => Ok(()),
+    }
+}
+
+/// Names the task from `intent.md`, renaming it only while its title is still the derived one (the developer's
+/// own title always wins).
+async fn naming(app: &AppHandle, id: &TaskId) -> Result<()> {
+    let state = app.state::<AppState>();
+    let (task, home) = observe::task_and_home(&state, id)?;
+    let intent = TaskFolder::open(task.memory_dir.clone())
+        .read(MemoryFile::Intent)?
+        .unwrap_or_default();
+    if intent.trim().is_empty() {
+        return Ok(());
+    }
+    let provider = provider::resolve(app, tier_for(HelperKind::Naming)).await?;
+    let (title, usage) = naming::run_with_usage(&provider, state.usage.clone(), tag_for(&home), &intent).await;
+    note_usage(app, id, &usage);
+    let Some(title) = title else { return Ok(()) };
+    observation::update_task(app, &state, id, |t| {
+        if t.title == title_from_intent(&intent) || t.title == naming::fallback(&intent) {
+            t.title = title;
+        }
+    })?;
+    Ok(())
+}
+
+/// Builds the brief of every project linked to the task that has none yet.
+async fn project_briefs(app: &AppHandle, id: &TaskId) -> Result<()> {
+    let state = app.state::<AppState>();
+    let (task, _) = observe::task_and_home(&state, id)?;
+    for root in &task.linked_roots {
+        if briefs::cached(&state.briefs, root).is_some() {
+            continue;
+        }
+        let provider = provider::resolve(app, Tier::Deep).await?;
+        briefs::ensure(&state.briefs, root, &provider, state.usage.clone()).await?;
+        note_usage(app, id, &[]);
+    }
     Ok(())
 }
 

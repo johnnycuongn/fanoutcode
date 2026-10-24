@@ -37,9 +37,11 @@ pub fn build_prompt_ctx(
     task: &Task,
     project: &Project,
     _app_config: &Path,
-    _app_data: &Path,
+    app_data: &Path,
 ) -> Result<PromptCtx> {
     let (scope, values) = values(conn, task)?;
+    // the lazily built LiveSpec briefs (Plan 05); a project without one yet gets none
+    let briefs = livespec_core::project::BriefStore::new(app_data.join("briefs"));
     let mut linked = Vec::new();
     for root in &task.linked_roots {
         let name = match db::projects::find_by_root(conn, root)? {
@@ -51,7 +53,7 @@ pub fn build_prompt_ctx(
         linked.push(LinkedProject {
             name,
             root: root.clone(),
-            brief: None,
+            brief: crate::helpers::briefs::cached(&briefs, root),
             protected: false,
         });
     }

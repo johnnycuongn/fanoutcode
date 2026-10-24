@@ -1,6 +1,8 @@
 //! Headless helpers (§7.4): short single-turn calls through livespec-core's providers, metered by its usage
 //! ledger. `HelperKind` is the payload of `Effect::RunHelper` (Plan 03); the shell's `helpers::run` dispatches it.
 
+pub mod briefs;
+pub mod naming;
 #[cfg(test)]
 pub(crate) mod test_server;
 
