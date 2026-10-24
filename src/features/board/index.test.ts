@@ -14,6 +14,7 @@ describe("board public surface", () => {
         "formatCost",
         "formatElapsed",
         "formatTokens",
+        "openNewTask",
         "selectNeedsYouCount",
         "useBoard",
       ].sort(),

@@ -19,6 +19,7 @@ import { BoardHeader } from "./BoardHeader";
 import { CardOverlay } from "./BoardCard";
 import { useConfirm } from "./ConfirmDialog";
 import { JiraKeyDialog } from "./JiraKeyDialog";
+import { NewTaskDialog } from "./NewTaskDialog";
 import { ProjectPicker } from "./ProjectPicker";
 
 const containerKey = (c: BoardProps["container"]): string => `${c.type}:${c.id}`;
@@ -109,6 +110,7 @@ export function Board({
         </DragOverlay>
       </DndContext>
       {confirmElement}
+      <NewTaskDialog />
       {jiraTask && <JiraKeyDialog key={jiraTask.id} task={jiraTask} open onClose={() => setJiraTaskId(null)} />}
     </BoardContext.Provider>
   );

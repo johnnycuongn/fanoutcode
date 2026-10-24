@@ -7,5 +7,6 @@ export { ElapsedTime } from "./components/ElapsedTime";
 export { chipFor } from "./chipText";
 export { formatCost, formatTokens } from "./cost";
 export { formatElapsed } from "./elapsed";
+export { openNewTask } from "./newTask";
 export { selectNeedsYouCount, useBoard } from "./store";
 export type { BoardProps, BoardSettings, CardChipModel, OpenTarget } from "./types";

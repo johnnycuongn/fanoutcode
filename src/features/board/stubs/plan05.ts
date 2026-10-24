@@ -1,13 +1,13 @@
 // STUB(plan 05): `tasks_activity`, `cost_summary`, `git_changes` and the `team-event` event are not in
 // `src/lib/bindings.ts` yet (Plan 05 adds them). This file is the board's thin typed wrapper over them, with the
 // type names and fields of Plan 05's plan (overview A6, A19). When Plan 05 merges: re-export these types from
-// `@/lib/bindings`, call `commands.tasksActivity` / `commands.costSummary` / `commands.gitChanges` and
+// `@/lib/bindings`, call `commands.tasksActivity` and
 // `events.teamEvent.listen`, and delete the eslint-disable lines and the two Tauri imports.
 // eslint-disable-next-line teamcode/no-manual-ipc -- STUB(plan 05): not in the generated bindings yet
 import { invoke } from "@tauri-apps/api/core";
 // eslint-disable-next-line teamcode/no-manual-ipc -- STUB(plan 05): not in the generated bindings yet
 import { listen } from "@tauri-apps/api/event";
-import type { AgentState, Container, JsonValue, Scope } from "@/lib/bindings";
+import type { AgentState, Container, JsonValue } from "@/lib/bindings";
 
 export type TeamRow = { name: string; state: AgentState };
 export type TaskActivity = {
@@ -19,30 +19,9 @@ export type TaskActivity = {
   cost_usd: number | null;
 };
 
-export type ChangedFile = { path: string; added: number; removed: number };
-export type RepoChanges = { repo_root: string; files: ChangedFile[] };
-
-export type CostLine = {
-  key: string;
-  cost_usd: number;
-  input_tokens: number;
-  output_tokens: number;
-  estimated: boolean;
-};
-export type LiveCost = { cost_usd: number; context_used_pct: number; at: string };
-export type CostSummary = {
-  cost_usd: number;
-  input_tokens: number;
-  output_tokens: number;
-  estimated: boolean;
-  live: LiveCost | null;
-  by_project: CostLine[];
-  by_task: CostLine[];
-  by_stage: CostLine[];
-  by_day: CostLine[];
-  by_model: CostLine[];
-  by_agent: CostLine[];
-};
+// `CostSummary`, `CostLine`, `LiveCost`, `RepoChanges` and `ChangedFile` (and the `cost_summary` / `git_changes` wrappers) are
+// Plan 06's STUBs in `src/lib/pendingCommands.ts`; the board uses those rather than a second copy.
+export type { ChangedFile, CostLine, CostSummary, LiveCost, RepoChanges } from "@/lib/pendingCommands";
 
 export type HookEvent =
   | { type: "SessionStart"; session_id: string; transcript_path: string }
@@ -70,8 +49,6 @@ async function call<T>(command: string, args: Record<string, unknown>): Promise<
 }
 
 export const tasksActivity = (container: Container): Promise<TaskActivity[]> => call("tasks_activity", { container });
-export const costSummary = (scope: Scope): Promise<CostSummary> => call("cost_summary", { scope });
-export const gitChanges = (taskId: string): Promise<RepoChanges[]> => call("git_changes", { taskId });
 
 export async function listenTeamEvent(cb: (payload: TeamEventPayload) => void): Promise<() => void> {
   return listen<TeamEventPayload>("team-event", (e) => cb(e.payload));

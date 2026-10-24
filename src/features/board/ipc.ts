@@ -18,9 +18,8 @@ import {
   type WindowInfo,
 } from "@/lib/bindings";
 import { sessionsStop } from "./stubs/plan04";
+import { costSummary, gitChanges } from "@/lib/pendingCommands";
 import {
-  costSummary,
-  gitChanges,
   listenTeamEvent,
   tasksActivity,
   type CostSummary,
@@ -85,6 +84,14 @@ export const ipc = {
   async tasksList(container: Container): Promise<Task[]> {
     return unwrap(await commands.tasksList(container));
   },
+  async tasksCreate(
+    projectId: string,
+    intent: string,
+    jiraKey: string | null,
+    workspaceId: string | null,
+  ): Promise<Task> {
+    return unwrap(await commands.tasksCreate(projectId, intent, jiraKey, workspaceId));
+  },
   async tasksMove(id: string, stage: Stage): Promise<ActionOutcome> {
     return unwrap(await commands.tasksMove(id, stage));
   },
@@ -104,8 +111,12 @@ export const ipc = {
   async windowsList(): Promise<WindowInfo[]> {
     return unwrap(await commands.windowsList());
   },
-  gitChanges: (taskId: string): Promise<RepoChanges[]> => gitChanges(taskId),
-  costSummary: (scope: Scope): Promise<CostSummary> => costSummary(scope),
+  async gitChanges(taskId: string): Promise<RepoChanges[]> {
+    return unwrap(await gitChanges(taskId));
+  },
+  async costSummary(scope: Scope): Promise<CostSummary> {
+    return unwrap(await costSummary(scope));
+  },
   tasksActivity: (container: Container): Promise<TaskActivity[]> => tasksActivity(container),
   on: listen,
 };
