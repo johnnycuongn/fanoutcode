@@ -66,3 +66,6 @@ export type TaskPatchInput = {
   jira_key?: string | null;
   worktree?: WorktreeChoice;
 };
+
+/** Swimlane order and which lanes are collapsed, persisted per container (lanes.ts). */
+export type LaneState = { order: string[]; collapsed: string[] };
