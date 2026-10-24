@@ -44,7 +44,22 @@ export * from "./ContextMenu";
 
 export * from "./Dialog";
 
+export * from "./Drawer";
+
+export * from "./Toast";
+
 export const PRIMITIVES = {
+  Toast: ["Toaster", "toast"],
+  Drawer: [
+    "Drawer",
+    "DrawerTrigger",
+    "DrawerContent",
+    "DrawerHeader",
+    "DrawerTitle",
+    "DrawerDescription",
+    "DrawerFooter",
+    "DrawerClose",
+  ],
   Dialog: [
     "Dialog",
     "DialogTrigger",

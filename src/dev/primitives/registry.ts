@@ -28,4 +28,6 @@ export const pages: ExamplePage[] = [
   page("Menu", "Dropdown menu with shortcuts and submenus", () => import("./pages/MenuPage")),
   page("ContextMenu", "Right-click menu", () => import("./pages/ContextMenuPage")),
   page("Dialog", "Modal dialog", () => import("./pages/DialogPage")),
+  page("Drawer", "Edge-docked sheet (Vaul)", () => import("./pages/DrawerPage")),
+  page("Toast", "Transient messages (Sonner)", () => import("./pages/ToastPage")),
 ];
