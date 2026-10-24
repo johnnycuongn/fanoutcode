@@ -20,7 +20,13 @@ export * from "./Input";
 
 export * from "./Textarea";
 
+export * from "./Checkbox";
+
+export * from "./Switch";
+
 export const PRIMITIVES = {
+  Switch: ["Switch"],
+  Checkbox: ["Checkbox"],
   Textarea: ["Textarea"],
   Input: ["Input"],
   Field: ["Field", "useFieldControl"],

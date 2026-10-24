@@ -17,4 +17,6 @@ export const pages: ExamplePage[] = [
   page("Field", "Label, control, hint and error wiring", () => import("./pages/FieldPage")),
   page("Input", "Single-line text input with adornments", () => import("./pages/InputPage")),
   page("Textarea", "Multi-line input that can grow", () => import("./pages/TextareaPage")),
+  page("Checkbox", "Checkbox with indeterminate state", () => import("./pages/CheckboxPage")),
+  page("Switch", "On/off switch", () => import("./pages/SwitchPage")),
 ];
