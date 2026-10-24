@@ -50,9 +50,8 @@ export default function BadgePage(): ReactElement {
         <span className="w-16 text-sm text-mute">long</span>
         <div className="w-72">
           <Badge tone="warn">
-            {"Replied: I could not find the test command; which script should I run for the integration suite in this repository? ".repeat(
-              1,
-            )}
+            Replied: I could not find the test command; which script should I run for the integration suite in this
+            repository?
           </Badge>
         </div>
       </section>
