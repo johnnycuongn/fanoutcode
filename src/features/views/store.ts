@@ -76,7 +76,7 @@ export function persistLayout(viewId: ViewId): Promise<void> {
   const view = viewById(viewId);
   if (!view) return Promise.resolve();
   unsaved.add(viewId);
-  return commands.viewsUpdateLayout(viewId, view.layout).then(
+  return Promise.resolve(commands.viewsUpdateLayout(viewId, view.layout)).then(
     () => {
       if (viewById(viewId)?.layout === view.layout) unsaved.delete(viewId);
     },
@@ -140,17 +140,22 @@ export function splitFocused(direction: SplitDirection): void {
   void splitFocusedPane(direction, EMPTY_PANE);
 }
 
-/** ⌘W: closes the focused pane; the view's last pane empties to the picker instead. */
+/** Closes `pane`; focus moves to a neighbour. The view's last pane empties to the picker instead (a view keeps one). */
+export function closePane(viewId: ViewId, pane: PaneId): void {
+  const view = viewById(viewId);
+  if (!view) return;
+  const next = (["left", "up", "right", "down"] as Dir[]).map((d) => neighbour(view.layout, pane, d)).find(Boolean);
+  const updated = setLayout(viewId, (v) => removePane(v.layout, pane));
+  if (!updated) return;
+  if (focusedPaneOf(view) === pane) focusPane(viewId, next ?? leaves(updated.layout)[0].pane);
+  if (viewsStore.get().pickerFor?.pane === pane && next) closePicker();
+  void persistLayout(viewId);
+}
+
+/** ⌘W in the active view. */
 export function closeFocused(): void {
   const view = activeView();
-  if (!view) return;
-  const pane = focusedPaneOf(view);
-  const next = (["left", "up", "right", "down"] as Dir[]).map((d) => neighbour(view.layout, pane, d)).find(Boolean);
-  const updated = setLayout(view.id, (v) => removePane(v.layout, pane));
-  if (!updated) return;
-  focusPane(view.id, next ?? leaves(updated.layout)[0].pane);
-  if (viewsStore.get().pickerFor?.pane === pane && next) closePicker();
-  void persistLayout(view.id);
+  if (view) closePane(view.id, focusedPaneOf(view));
 }
 
 /** ⌘⌥ arrows; returns the pane now focused, or null when there is none that way. */

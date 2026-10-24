@@ -10,6 +10,7 @@ export {
   splitFocusedPane,
   splitFocused,
   closeFocused,
+  closePane,
   focusDirection,
   movePaneTo,
   setPaneRatio,
@@ -23,3 +24,9 @@ export {
 export type { ViewsState } from "./store";
 export { loadViews, startViewsEvents, createView, renameView, reorderViews, deleteView } from "./viewsCrud";
 export type * from "./types";
+export { setPaneHandle, taskHandle, focusPaneContent } from "./paneHandles";
+export type { PaneHandle } from "./paneHandles";
+export { ViewCanvas } from "./components/ViewCanvas";
+// Plan 04's TerminalPane lives in this feature (A5).
+export { TerminalPane } from "./components/TerminalPane";
+export type { TerminalPaneProps, TerminalPaneHandle } from "./components/TerminalPane";
