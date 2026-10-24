@@ -3,6 +3,7 @@ import { restrictToWindowEdges } from "@dnd-kit/modifiers";
 import { LayoutGroup } from "motion/react";
 import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import type { WindowInfo } from "@/lib/bindings";
+import { loadBoardCost, startCostEvents } from "../cost";
 import { loadActivity, startActivityEvents } from "../activity";
 import { ipc } from "../ipc";
 import { all } from "../listen";
@@ -13,6 +14,7 @@ import { useBoardDnd } from "../useBoardDnd";
 import { useBoardShortcuts } from "../useBoardShortcuts";
 import { BoardContext, type BoardCtx } from "./boardContext";
 import { BoardBody } from "./BoardBody";
+import { BoardCost } from "./BoardCost";
 import { BoardHeader } from "./BoardHeader";
 import { CardOverlay } from "./BoardCard";
 import { useConfirm } from "./ConfirmDialog";
@@ -49,6 +51,13 @@ export function Board({
     void loadActivity(current);
     return all(startBoardEvents(), startActivityEvents());
   }, [key]);
+
+  // Cost is only fetched while the overview is on; the setting off costs no IPC.
+  useEffect(() => {
+    if (!settings.costOverview) return;
+    void loadBoardCost(latest.current.container);
+    return startCostEvents();
+  }, [settings.costOverview, key]);
 
   useEffect(() => configureBoard({ settings, focusedProject, projects }), [settings, focusedProject, projects]);
 
@@ -87,7 +96,10 @@ export function Board({
           data-mode={mode}
           className="flex h-full min-h-0 flex-col bg-page text-ink"
         >
-          <BoardHeader modeControl={mode === "one_project" ? <ProjectPicker /> : null} />
+          <BoardHeader
+            modeControl={mode === "one_project" ? <ProjectPicker /> : null}
+            trailing={settings.costOverview ? <BoardCost /> : null}
+          />
           <LayoutGroup id="board">
             <BoardBody onNewTask={onNewTask} />
           </LayoutGroup>

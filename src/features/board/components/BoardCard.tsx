@@ -1,6 +1,7 @@
-import { memo, useCallback, useMemo, type ReactElement } from "react";
+import { memo, useCallback, useEffect, useMemo, useState, type ReactElement } from "react";
 import type { Project, Task } from "@/lib/bindings";
 import { useActivity } from "../activity";
+import { trackTaskCost, untrackTaskCost, useTaskCost } from "../cost";
 import { cardMenuItems } from "../menu";
 import { selectDetailLevel, setFocusedTask, setRenaming, useBoard } from "../store";
 import { useBoardCtx } from "./boardContext";
@@ -19,6 +20,16 @@ export const BoardCard = memo(function BoardCard({ task, lane, readOnly, showPro
   const focused = useBoard((s) => s.focusedTaskId === task.id);
   const renaming = useBoard((s) => s.renamingTaskId === task.id);
   const activity = useActivity(task.id);
+  // A card's own cost is shown on Detailed cards and in every card's tooltip (fetched on first hover, not for 200 cards).
+  const [hovered, setHovered] = useState(false);
+  const wantsCost = costOverview && (level === "Detailed" || hovered);
+  useEffect(() => {
+    if (!wantsCost) return;
+    trackTaskCost(task.id);
+    return () => untrackTaskCost(task.id);
+  }, [wantsCost, task.id]);
+  const cost = useTaskCost(task.id);
+  const onHover = useCallback(() => setHovered(true), []);
 
   const onOpen = useCallback(
     (target: Parameters<typeof board.onOpenTask>[1]) => board.onOpenTask(task.id, target),
@@ -52,9 +63,10 @@ export const BoardCard = memo(function BoardCard({ task, lane, readOnly, showPro
             project={project}
             showProject={showProject}
             costOverview={costOverview}
-            cost={null}
+            cost={costOverview ? cost : null}
             focused={focused}
             disabled={readOnly}
+            onHover={onHover}
             onOpen={onOpen}
             onFocus={onFocus}
             menu={menu}

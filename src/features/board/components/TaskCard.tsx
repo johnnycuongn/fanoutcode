@@ -26,6 +26,8 @@ export type TaskCardProps = {
   disabled?: boolean;
   onOpen(target: OpenTarget): void;
   onFocus(): void;
+  /** The pointer entered the card (cost is fetched lazily for the tooltip). */
+  onHover?(): void;
   /** The `…` button; clicks inside it never open the task. */
   menu: ReactNode;
   /** Replaces the title while renaming. */
@@ -66,7 +68,7 @@ function CardTooltip({ activity, cost }: { activity: CardActivity; cost: CostSum
 
 function TaskCardImpl(props: TaskCardProps): ReactElement {
   const { task, level, activity, project, showProject, costOverview, cost, focused, dragging, disabled } = props;
-  const { onOpen, onFocus, menu, titleSlot, ref, handleProps } = props;
+  const { onOpen, onFocus, onHover, menu, titleSlot, ref, handleProps } = props;
   const { onKeyDown: dndKeyDown, ...handle } = (handleProps ?? {}) as { onKeyDown?: (e: KeyboardEvent) => void };
   const agent = AGENTS[task.agent_kind];
   const colour = task.color;
@@ -98,6 +100,7 @@ function TaskCardImpl(props: TaskCardProps): ReactElement {
         onClick={open}
         onKeyDown={keyDown}
         onFocus={onFocus}
+        onPointerEnter={onHover}
         className={cx(
           "group flex cursor-pointer flex-col gap-1.5 rounded-card border border-line bg-card p-2 text-sm text-ink outline-none",
           "focus-visible:ring-2 focus-visible:ring-accent/60 data-[focused=true]:ring-1 data-[focused=true]:ring-accent",
