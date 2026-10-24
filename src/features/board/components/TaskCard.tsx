@@ -76,7 +76,10 @@ function TaskCardImpl(props: TaskCardProps): ReactElement {
   };
   const keyDown = (e: KeyboardEvent<HTMLElement>) => {
     dndKeyDown?.(e);
-    if (e.key === "Enter" && !e.defaultPrevented && e.target === e.currentTarget) onOpen({ kind: "current" });
+    // While a keyboard drag is on, Enter drops the card; it must not also open it.
+    if (e.key === "Enter" && !dragging && !e.defaultPrevented && e.target === e.currentTarget) {
+      onOpen({ kind: "current" });
+    }
   };
 
   return (

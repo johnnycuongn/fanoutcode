@@ -270,3 +270,14 @@ export function startBoardEvents(): () => void {
     ),
   );
 }
+
+/** Moves a swimlane. Task 15 adds persistence. */
+export function reorderLanes(from: number, to: number): void {
+  boardStore.set((s) => {
+    const order = [...s.lanes.order];
+    const [moved] = order.splice(from, 1);
+    if (moved === undefined || to < 0 || to > order.length) return s;
+    order.splice(to, 0, moved);
+    return { ...s, lanes: { ...s.lanes, order } };
+  });
+}
