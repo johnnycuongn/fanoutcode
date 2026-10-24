@@ -5,5 +5,6 @@ pub mod domain;
 pub mod error;
 pub mod ids;
 pub mod recent;
+pub mod windows;
 
 pub use error::{Error, Result};
