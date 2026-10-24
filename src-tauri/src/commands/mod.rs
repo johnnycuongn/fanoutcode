@@ -8,6 +8,8 @@ use teamcode_core::Result;
 pub mod memory;
 pub mod projects;
 pub mod settings;
+pub mod tasks;
+pub mod views;
 pub mod windows;
 
 /// Re-parses a container's id from the webview (serde's transparent `Deserialize` does not validate).

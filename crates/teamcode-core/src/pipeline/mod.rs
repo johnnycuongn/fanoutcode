@@ -8,6 +8,7 @@ pub mod ctx;
 mod enter;
 pub mod handback;
 pub mod move_to;
+pub mod patch;
 pub mod stage;
 
 use chrono::{DateTime, Utc};
@@ -22,6 +23,7 @@ pub use apply::{apply, index_doc_for, Applied};
 pub use create::{create_task, Created, NewTask};
 pub use handback::{detect_handback, SENTINEL_PREFIX};
 pub use move_to::move_to;
+pub use patch::{apply_patch, TaskPatch};
 pub use stage::StageArtifact;
 
 /// What the developer (or Plan 05, for Done detection) asks of a task. Internally tagged with struct variants only

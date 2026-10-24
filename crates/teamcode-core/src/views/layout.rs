@@ -4,7 +4,7 @@ use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
 
-use crate::domain::{LayoutNode, PaneContent, PaneId, SplitDirection, TaskId};
+use crate::domain::{LayoutNode, PaneContent, PaneId, ProjectId, SessionId, SplitDirection, TaskId};
 use crate::{Error, Result};
 
 /// One step of a path from the root to a `Split`.
@@ -204,12 +204,29 @@ pub fn close_task_panes(root: &LayoutNode, tasks: &[TaskId]) -> LayoutNode {
     }
 }
 
-/// Every pane id is valid and unique and every ratio is in 0.1..=0.9; else `Invalid`.
+/// The ids inside a pane's content are valid (serde's transparent `Deserialize` does not check them).
+pub fn check_content(content: &PaneContent) -> Result<()> {
+    match content {
+        PaneContent::Empty => {}
+        PaneContent::Task { task_id } | PaneContent::TeamCanvas { task_id } => {
+            TaskId::parse(task_id.as_str())?;
+        }
+        PaneContent::Terminal { project_id, session_id } => {
+            ProjectId::parse(project_id.as_str())?;
+            SessionId::parse(session_id.as_str())?;
+        }
+    }
+    Ok(())
+}
+
+/// Every pane id is valid and unique, every id inside a pane's content is valid, and every ratio is in 0.1..=0.9;
+/// else `Invalid`.
 pub fn validate(root: &LayoutNode) -> Result<()> {
     fn walk<'a>(node: &'a LayoutNode, seen: &mut HashSet<&'a str>) -> Result<()> {
         match node {
-            LayoutNode::Leaf { pane, .. } => {
+            LayoutNode::Leaf { pane, content } => {
                 PaneId::parse(pane.as_str())?;
+                check_content(content)?;
                 if !seen.insert(pane.as_str()) {
                     return Err(Error::Invalid(format!("Pane {pane} appears twice in the layout")));
                 }
@@ -364,5 +381,11 @@ mod tests {
         )
         .unwrap();
         assert!(matches!(validate(&dup), Err(crate::Error::Invalid(_))));
+        let forged: TaskId = serde_json::from_str("\"t-../x\"").unwrap();
+        let bad = set_content(&t, &pid("pane-1"), PaneContent::Task { task_id: forged }).unwrap();
+        assert!(
+            matches!(validate(&bad), Err(crate::Error::Invalid(_))),
+            "ids inside contents are checked too"
+        );
     }
 }

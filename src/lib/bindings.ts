@@ -128,6 +128,175 @@ async memoryMissing(container: Container) : Promise<Result<TaskId[], string>> {
     else return { status: "error", error: e  as any };
 }
 },
+async tasksCreate(projectId: ProjectId, intent: string, jiraKey: string | null, workspaceId: WorkspaceId | null) : Promise<Result<Task, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("tasks_create", { projectId, intent, jiraKey, workspaceId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * The container's tasks, archived included.
+ */
+async tasksList(container: Container) : Promise<Result<Task[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("tasks_list", { container }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async tasksGet(id: TaskId) : Promise<Result<Task, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("tasks_get", { id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async tasksUpdate(id: TaskId, patch: TaskPatch) : Promise<Result<Task, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("tasks_update", { id, patch }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async tasksRename(id: TaskId, title: string) : Promise<Result<Task, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("tasks_rename", { id, title }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * A board drag of any distance (`pipeline::move_to`).
+ */
+async tasksMove(id: TaskId, stage: Stage) : Promise<Result<ActionOutcome, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("tasks_move", { id, stage }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async tasksAction(id: TaskId, action: StageAction) : Promise<Result<ActionOutcome, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("tasks_action", { id, action }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async tasksArchive(id: TaskId) : Promise<Result<ActionOutcome, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("tasks_archive", { id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async tasksRestore(id: TaskId) : Promise<Result<ActionOutcome, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("tasks_restore", { id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async viewsList(container: Container) : Promise<Result<View[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("views_list", { container }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async viewsCreate(container: Container, name: string) : Promise<Result<View, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("views_create", { container, name }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async viewsUpdateLayout(id: ViewId, layout: LayoutNode) : Promise<Result<View, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("views_update_layout", { id, layout }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async viewsRename(id: ViewId, name: string) : Promise<Result<View, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("views_rename", { id, name }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async viewsReorder(container: Container, ids: ViewId[]) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("views_reorder", { container, ids }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async viewsDelete(id: ViewId) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("views_delete", { id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Splits `pane`, putting a new empty pane second (`Horizontal` side by side, `Vertical` stacked).
+ */
+async viewsSplit(id: ViewId, pane: PaneId, direction: SplitDirection) : Promise<Result<View, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("views_split", { id, pane, direction }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async viewsClosePane(id: ViewId, pane: PaneId) : Promise<Result<View, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("views_close_pane", { id, pane }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async viewsMovePane(id: ViewId, from: PaneId, to: PaneId) : Promise<Result<View, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("views_move_pane", { id, from, to }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async viewsSetRatio(id: ViewId, path: Branch[], ratio: number) : Promise<Result<View, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("views_set_ratio", { id, path, ratio }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async viewsSetPane(id: ViewId, pane: PaneId, content: PaneContent) : Promise<Result<View, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("views_set_pane", { id, pane, content }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async windowsList() : Promise<WindowInfo[]> {
     return await TAURI_INVOKE("windows_list");
 },
@@ -241,8 +410,16 @@ workspaceChanged: "workspace-changed"
 /** user-defined types **/
 
 export type Accent = "Blue" | "Violet" | "Teal" | "Orange"
+/**
+ * The task after a stage action, and the toasts for the webview to show.
+ */
+export type ActionOutcome = { task: Task; toasts: string[] }
 export type AgentKind = "ClaudeCode" | "Codex" | "Shell"
 export type AgentState = { type: "Working" } | { type: "NeedsYou"; reason: HandbackReason } | { type: "Idle" }
+/**
+ * One step of a path from the root to a `Split`.
+ */
+export type Branch = "First" | "Second"
 export type CanvasLayout = "AutoReflow" | "Pinned"
 /**
  * What a window, a view or a board shows.
@@ -263,6 +440,7 @@ export type HandbackReason =
  */
 { type: "Replied"; first_line: string } | { type: "PermissionNeeded" } | { type: "TestFailed"; exit_code: number } | { type: "Error"; message: string }
 export type JsonValue = null | boolean | number | string | JsonValue[] | Partial<{ [key in string]: JsonValue }>
+export type LayoutNode = { type: "Leaf"; pane: PaneId; content: PaneContent } | { type: "Split"; direction: SplitDirection; ratio: number; first: LayoutNode; second: LayoutNode }
 export type LinkPolicy = "ReadAndModifyOnRequest" | "ReadOnly"
 export type LiveSpecLevel = "Off" | "Simple" | "Heavy"
 export type MemoryLocation = { type: "AppStorage" } | { type: "Folder"; path: string }
@@ -271,6 +449,11 @@ export type MemoryLocation = { type: "AppStorage" } | { type: "Folder"; path: st
  */
 export type ModelProvider = "ClaudeCli" | "Api" | "Local"
 export type NeedsYou = { container: Container; count: number }
+export type PaneContent = { type: "Empty" } | { type: "Task"; task_id: TaskId } | 
+/**
+ * Rendered by Plan 06 through Plan 09's `CanvasPane` (A5).
+ */
+{ type: "TeamCanvas"; task_id: TaskId } | { type: "Terminal"; project_id: ProjectId; session_id: SessionId }
 export type PaneId = string
 export type Priority = "None" | "Low" | "Medium" | "High"
 export type Project = { id: ProjectId; name: string; root: string; color: ProjectColor; memory_location: MemoryLocation; created_at: string }
@@ -314,7 +497,16 @@ export type Scope = { workspace: WorkspaceId | null; project: ProjectId | null; 
 export type SessionAttached = { session_id: SessionId; window_id: WindowId; pane_id: PaneId }
 export type SessionExited = { session_id: SessionId; code: number | null }
 export type SessionId = string
+/**
+ * `Horizontal` is side by side (⌘D), `Vertical` is stacked (⌘⇧D) (A5).
+ */
+export type SplitDirection = "Horizontal" | "Vertical"
 export type Stage = "Spec" | "Plan" | "Build" | "Review" | "Test" | "Commit" | "Done"
+/**
+ * What the developer (or Plan 05, for Done detection) asks of a task. Internally tagged with struct variants only
+ * (A1, A17): `{"type":"Approve"}`, `{"type":"Back","stage":"Plan"}`, `{"type":"Reply","prompt":"…"}`.
+ */
+export type StageAction = { type: "Approve" } | { type: "Advance" } | { type: "Back"; stage: Stage } | { type: "Reply"; prompt: string } | { type: "StartFresh" } | { type: "RequestReview" } | { type: "ApproveChanges" } | { type: "RunTests" } | { type: "FixTests" } | { type: "CopyCommit" } | { type: "Commit" } | { type: "Archive" } | { type: "Restore" }
 export type Task = { id: TaskId; project_id: ProjectId; workspace_id: WorkspaceId | null; title: string; stage: Stage; state: AgentState; priority: Priority; color: TaskColor | null; flagged: boolean; hidden: boolean; archived: boolean; jira_key: string | null; agent_kind: AgentKind; worktree: WorktreeChoice; worktree_path: string | null; branch: string | null; memory_dir: string; primary_session: SessionId | null; claude_session_id: string | null; 
 /**
  * Fixed at first session start (§4.1).
@@ -338,6 +530,18 @@ export type TaskChanged = { task: Task }
  */
 export type TaskColor = string
 export type TaskId = string
+/**
+ * What `tasks_update` may change; `None` (or a missing field) leaves a field as it is, and `clear_*` empties one.
+ */
+export type TaskPatch = { priority: Priority | null; color: TaskColor | null; clear_color: boolean; flagged: boolean | null; hidden: boolean | null; jira_key: string | null; clear_jira_key: boolean; 
+/**
+ * Only before the first session starts.
+ */
+worktree: WorktreeChoice | null; 
+/**
+ * Only before the first session starts.
+ */
+agent_kind: AgentKind | null }
 export type TasksReloaded = { container: Container }
 export type TeamArrangement = "HubGraph" | "Flow"
 export type TeamPlacement = "DockGrows" | "Swap" | "OwnPane"
@@ -346,6 +550,8 @@ export type TestFinished = { task_id: TaskId; code: number }
  * The `theme` setting. `System` follows macOS; the webview resolves it (`src/lib/theme.ts`).
  */
 export type ThemePreference = "System" | "Light" | "Dark"
+export type View = { id: ViewId; container: Container; name: string; order: number; layout: LayoutNode }
+export type ViewId = string
 export type ViewsChanged = { container: Container }
 /**
  * `w-<n>`, as in LiveSpec; the Tauri window label.

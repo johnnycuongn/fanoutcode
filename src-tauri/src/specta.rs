@@ -7,7 +7,7 @@ use specta_typescript::{BigIntExportBehavior, Typescript};
 use tauri_specta::{collect_commands, collect_events, Builder};
 use teamcode_core::{Error, Result};
 
-use crate::commands::{memory, projects, settings, windows};
+use crate::commands::{memory, projects, settings, tasks, views, windows};
 use crate::events::{
     CostUpdated, GitChanges, NeedsYou, SessionAttached, SessionExited, TaskChanged, TasksReloaded, TestFinished,
     ViewsChanged, WorkspaceChanged,
@@ -33,6 +33,26 @@ pub fn builder() -> Builder<tauri::Wry> {
             memory::memory_write,
             memory::memory_pick_location,
             memory::memory_missing,
+            tasks::tasks_create,
+            tasks::tasks_list,
+            tasks::tasks_get,
+            tasks::tasks_update,
+            tasks::tasks_rename,
+            tasks::tasks_move,
+            tasks::tasks_action,
+            tasks::tasks_archive,
+            tasks::tasks_restore,
+            views::views_list,
+            views::views_create,
+            views::views_update_layout,
+            views::views_rename,
+            views::views_reorder,
+            views::views_delete,
+            views::views_split,
+            views::views_close_pane,
+            views::views_move_pane,
+            views::views_set_ratio,
+            views::views_set_pane,
             windows::windows_list,
             windows::windows_current,
             windows::windows_focus,
@@ -100,6 +120,10 @@ mod tests {
             "the A1 AgentState shape reaches TypeScript"
         );
         for command in [
+            "tasksAction",
+            "tasksMove",
+            "viewsSplit",
+            "viewsSetRatio",
             "projectsOpen",
             "settingsGet",
             "settingsSet",
@@ -107,6 +131,9 @@ mod tests {
             "memoryMissing",
         ] {
             assert!(ts.contains(&format!("async {command}(")), "{command}");
+        }
+        for ty in ["TaskPatch", "ActionOutcome", "Branch", "StageAction"] {
+            assert!(ts.contains(&format!("export type {ty} = ")), "{ty}");
         }
         assert!(
             ts.contains("export type ResolvedSettings = "),

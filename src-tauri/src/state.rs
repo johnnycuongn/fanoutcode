@@ -4,6 +4,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use rusqlite::Connection;
+use teamcode_core::domain::TaskId;
+use teamcode_core::pipeline::TestRun;
 use teamcode_core::windows::WindowRegistry;
 use teamcode_core::{db, Result};
 
@@ -31,5 +33,10 @@ impl AppState {
     pub fn save_windows(&self) -> Result<()> {
         let saved = self.windows.lock().expect("windows lock").to_saved(); // released before the db lock
         db::set_app_setting(&self.db.lock().expect("db lock"), "open_windows", &saved)
+    }
+
+    /// The task's last test run, for Fix failing tests. Plan 05 keeps these; until then there is none.
+    pub fn last_test(&self, _task: &TaskId) -> Option<TestRun> {
+        None // STUB(plan 05)
     }
 }
