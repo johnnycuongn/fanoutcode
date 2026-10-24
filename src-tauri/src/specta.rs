@@ -67,6 +67,8 @@ pub fn builder() -> Builder<tauri::Wry> {
             git::git_file_read,
             git::git_file_write,
             git::git_include_other,
+            git::git_drafts,
+            git::git_commit,
             hooks::hooks_list,
             hooks::hooks_plan_steps,
             test_runs::tests_run,

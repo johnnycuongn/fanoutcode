@@ -430,6 +430,28 @@ async gitIncludeOther(taskId: TaskId, repo: string, path: string) : Promise<Resu
 }
 },
 /**
+ * The drafts in the task's `commits.md`, by repo (Plan 08's Commit tab).
+ */
+async gitDrafts(taskId: TaskId) : Promise<Result<RepoCommits[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("git_drafts", { taskId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * The Commit tab's Commit button for one draft; refused unless "Team Code may commit" is on.
+ */
+async gitCommit(taskId: TaskId, repo: string, index: number) : Promise<Result<string, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("git_commit", { taskId, repo, index }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Every event of the task's log, in order, with subagent descriptions filled in as the live feed fills them.
  */
 async hooksList(taskId: TaskId) : Promise<Result<TaskEvent[], string>> {
@@ -551,6 +573,10 @@ export type Container = { type: "Project"; id: ProjectId } | { type: "Workspace"
 export type CostUpdated = { task_id: TaskId }
 export type DetailLevel = "Simple" | "Medium" | "Detailed"
 export type DockPosition = "Bottom" | "Right"
+/**
+ * One drafted commit and the files it covers (paths relative to its repo).
+ */
+export type DraftCommit = { message: string; files: string[] }
 export type DrillInLens = "ByFile" | "EventStream"
 /**
  * Both sides of one file for the diff editor; `before` is the base version (empty when absent there).
@@ -643,6 +669,10 @@ export type RepoBase = { repo_root: string; commit: string }
  * One repo's part: the task's `files` and the unattributed `other` changes.
  */
 export type RepoChanges = { repo_root: string; base: string | null; files: ChangedFile[]; other: ChangedFile[] }
+/**
+ * One repo's section of `commits.md`.
+ */
+export type RepoCommits = { repo_root: string; commits: DraftCommit[] }
 /**
  * Every key resolved for one scope; fields are the key names as written (A16).
  */

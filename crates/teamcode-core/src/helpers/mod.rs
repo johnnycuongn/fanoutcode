@@ -2,6 +2,7 @@
 //! ledger. `HelperKind` is the payload of `Effect::RunHelper` (Plan 03); the shell's `helpers::run` dispatches it.
 
 pub mod briefs;
+pub mod commit_messages;
 pub mod naming;
 pub mod spec_watcher;
 #[cfg(test)]

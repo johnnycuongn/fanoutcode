@@ -11,8 +11,10 @@ use tauri::{AppHandle, Manager};
 use teamcode_core::db;
 use teamcode_core::domain::Stage;
 use teamcode_core::domain::TaskId;
+use teamcode_core::domain::{AgentState, HandbackReason};
+use teamcode_core::helpers::commit_messages::{self, RepoCommits};
 use teamcode_core::helpers::spec_watcher::{self, SpecWatchOutcome};
-use teamcode_core::helpers::{briefs, naming, tag_for, HelperKind};
+use teamcode_core::helpers::{briefs, call, naming, tag_for, HelperKind};
 use teamcode_core::memory::slug::title_from_intent;
 use teamcode_core::memory::{IndexEntry, TimelineKind};
 use teamcode_core::memory::{MemoryFile, TaskFolder};
@@ -22,7 +24,7 @@ use teamcode_core::Result;
 use crate::events::{self, SpecWatcher};
 use crate::observe::{self, log_err};
 use crate::state::AppState;
-use crate::{git_watcher, observation, provider};
+use crate::{git_watcher, hook_feed, observation, provider};
 
 /// The tier a helper runs on.
 pub fn tier_for(kind: HelperKind) -> Tier {
@@ -60,8 +62,8 @@ async fn job(app: &AppHandle, id: &TaskId, kind: HelperKind) -> Result<()> {
         HelperKind::Naming => naming(app, id).await,
         HelperKind::ProjectBrief => project_briefs(app, id).await,
         HelperKind::SpecWatcher => spec_watcher(app, id).await,
-        // the commit messages and commit runners land with their own task of this plan
-        HelperKind::CommitMessages | HelperKind::GitCommit => Ok(()),
+        HelperKind::CommitMessages => commit_messages(app, id).await,
+        HelperKind::GitCommit => commit_all(app, id).await,
     }
 }
 
@@ -133,6 +135,61 @@ async fn spec_watcher(app: &AppHandle, id: &TaskId) -> Result<()> {
             reason: ev.reason,
         },
     )
+}
+
+/// On entering Commit: one draft per repo with task files, written to `commits.md`, then *Message drafted*.
+async fn commit_messages(app: &AppHandle, id: &TaskId) -> Result<()> {
+    let state = app.state::<AppState>();
+    let (task, set, _) = git_watcher::refresh(app, id).await?;
+    if task.stage != Stage::Commit {
+        return Ok(());
+    }
+    let provider = provider::resolve(app, tier_for(HelperKind::CommitMessages)).await?;
+    let mut all = Vec::new();
+    for (repo, diff) in spec_watcher::diffs(&set).await {
+        let files: Vec<String> = set
+            .repos
+            .iter()
+            .filter(|r| r.repo_root.display().to_string() == repo)
+            .flat_map(|r| r.files.iter().map(|f| f.path.clone()))
+            .collect();
+        let root = std::path::PathBuf::from(&repo);
+        let req = commit_messages::request(&root, &diff, &files, &provider);
+        let out = call(&provider, &req, state.usage.clone(), tag_for(&root)).await?;
+        note_usage(app, id, &out.usage);
+        all.push(RepoCommits {
+            commits: commit_messages::parse(&out.text, &root),
+            repo_root: root,
+        });
+    }
+    TaskFolder::open(task.memory_dir.clone()).write(MemoryFile::Commits, &commit_messages::render(&all))?;
+    let current = observe::task_and_home(&state, id)?.0;
+    if current.stage == Stage::Commit {
+        hook_feed::set_state(
+            app,
+            &state,
+            id,
+            AgentState::NeedsYou {
+                reason: HandbackReason::StageDone,
+            },
+        )?;
+    }
+    Ok(())
+}
+
+/// The Commit action (only with "Team Code may commit"): every draft in `commits.md`, in order.
+async fn commit_all(app: &AppHandle, id: &TaskId) -> Result<()> {
+    let state = app.state::<AppState>();
+    let (task, _) = observe::task_and_home(&state, id)?;
+    let md = TaskFolder::open(task.memory_dir.clone())
+        .read(MemoryFile::Commits)?
+        .unwrap_or_default();
+    for repo in commit_messages::parse_commits_md(&md) {
+        for i in 0..repo.commits.len() {
+            crate::commands::git::commit_one(app, id, &repo.repo_root, i).await?;
+        }
+    }
+    Ok(())
 }
 
 /// Builds the brief of every project linked to the task that has none yet.

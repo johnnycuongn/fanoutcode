@@ -7,8 +7,13 @@ use tauri::{AppHandle, State};
 use teamcode_core::changes::{self, FileDiff, RepoChanges};
 use teamcode_core::domain::TaskId;
 use teamcode_core::git::{self, FileStatus};
+use teamcode_core::helpers::commit_messages::{self, RepoCommits};
 use teamcode_core::memory::store::write_atomic;
+use teamcode_core::memory::{IndexEntry, MemoryFile, TaskFolder, TimelineKind};
+use teamcode_core::pipeline::{self, Effect};
+use teamcode_core::settings::{keys, resolve};
 use teamcode_core::Result;
+use teamcode_core::{db, Error};
 
 use crate::events::{self, GitChanges};
 use crate::git_watcher;
@@ -112,4 +117,66 @@ pub fn git_include_other(
     })?;
     observe::save_attributions(&state, &task.id, &files)?;
     events::emit(&app, GitChanges { task_id: task.id })
+}
+
+/// The drafts in the task's `commits.md`, by repo (Plan 08's Commit tab).
+#[tauri::command]
+#[specta::specta]
+pub fn git_drafts(state: State<'_, AppState>, task_id: TaskId) -> Result<Vec<RepoCommits>> {
+    let id = TaskId::parse(task_id.as_str())?;
+    let task = db::tasks::require(&state.db.lock().expect("db lock"), &id)?;
+    let md = TaskFolder::open(task.memory_dir)
+        .read(MemoryFile::Commits)?
+        .unwrap_or_default();
+    Ok(commit_messages::parse_commits_md(&md))
+}
+
+/// Commits draft `index` of `repo` (only with "Team Code may commit"), logs it on the timeline, emits
+/// `git-changes`; the new sha.
+pub(crate) async fn commit_one(app: &AppHandle, id: &TaskId, repo: &std::path::Path, index: usize) -> Result<String> {
+    let state = tauri::Manager::state::<AppState>(app);
+    let (task, home) = observe::task_and_home(&state, id)?;
+    let may_commit = {
+        let conn = state.db.lock().expect("db lock");
+        let scope = pipeline::ctx::task_scope(&task);
+        resolve::<keys::MayCommit>(&db::settings::load(&conn, &scope)?, &scope)
+    };
+    commit_messages::commit_guard(may_commit)?;
+    let repo = observe::checked_repo(&observe::repos(&task, &home), repo)?;
+    let folder = TaskFolder::open(task.memory_dir.clone());
+    let md = folder.read(MemoryFile::Commits)?.unwrap_or_default();
+    let draft = commit_messages::parse_commits_md(&md)
+        .into_iter()
+        .find(|r| r.repo_root == repo)
+        .and_then(|r| r.commits.into_iter().nth(index))
+        .ok_or_else(|| Error::Invalid("There is no such drafted commit.".into()))?;
+    for f in &draft.files {
+        changes::checked_path(&repo, f)?;
+    }
+    let sha = commit_messages::commit_files(&repo, &draft).await?;
+    let applied = {
+        let mut conn = state.db.lock().expect("db lock");
+        let task = db::tasks::require(&conn, id)?;
+        let now = chrono::Utc::now();
+        let entry = IndexEntry {
+            at: now,
+            stage: task.stage,
+            kind: TimelineKind::Commit {
+                repo: repo.display().to_string(),
+                sha: sha.clone(),
+            },
+        };
+        pipeline::apply(&mut conn, &folder, &task, vec![Effect::WriteIndex(entry)], now)?
+    };
+    events::emit_task_changed(app, &state.db.lock().expect("db lock"), &applied.task)?;
+    events::emit(app, GitChanges { task_id: id.clone() })?;
+    Ok(sha)
+}
+
+/// The Commit tab's Commit button for one draft; refused unless "Team Code may commit" is on.
+#[tauri::command]
+#[specta::specta]
+pub async fn git_commit(app: AppHandle, task_id: TaskId, repo: PathBuf, index: u32) -> Result<String> {
+    let id = TaskId::parse(task_id.as_str())?;
+    commit_one(&app, &id, &repo, index as usize).await
 }
