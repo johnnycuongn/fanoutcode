@@ -505,6 +505,14 @@ async testsAddLinked(taskId: TaskId, projectId: ProjectId) : Promise<Result<Test
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+async costSummary(scope: Scope) : Promise<Result<CostSummary, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("cost_summary", { scope }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
@@ -570,6 +578,11 @@ owners: string[]; shared: boolean; source: ChangeSource }
  * What a window, a view or a board shows.
  */
 export type Container = { type: "Project"; id: ProjectId } | { type: "Workspace"; id: WorkspaceId }
+/**
+ * One breakdown row (A19); `by_agent` keys are agent ids, `"main"` and `"helpers"`.
+ */
+export type CostLine = { key: string; cost_usd: number; input_tokens: number; output_tokens: number; estimated: boolean }
+export type CostSummary = { cost_usd: number; input_tokens: number; output_tokens: number; estimated: boolean; live: LiveCost | null; by_project: CostLine[]; by_task: CostLine[]; by_stage: CostLine[]; by_day: CostLine[]; by_model: CostLine[]; by_agent: CostLine[] }
 export type CostUpdated = { task_id: TaskId }
 export type DetailLevel = "Simple" | "Medium" | "Detailed"
 export type DockPosition = "Bottom" | "Right"
@@ -601,6 +614,10 @@ export type HookEvent = { type: "SessionStart"; session_id: string; transcript_p
 export type JsonValue = null | boolean | number | string | JsonValue[] | Partial<{ [key in string]: JsonValue }>
 export type LayoutNode = { type: "Leaf"; pane: PaneId; content: PaneContent } | { type: "Split"; direction: SplitDirection; ratio: number; first: LayoutNode; second: LayoutNode }
 export type LinkPolicy = "ReadAndModifyOnRequest" | "ReadOnly"
+/**
+ * The status line's running numbers for a task's session, reported beside the ledger (which lags until a Stop).
+ */
+export type LiveCost = { cost_usd: number; context_used_pct: number; at: string }
 export type LiveSpecLevel = "Off" | "Simple" | "Heavy"
 export type MemoryLocation = { type: "AppStorage" } | { type: "Folder"; path: string }
 /**

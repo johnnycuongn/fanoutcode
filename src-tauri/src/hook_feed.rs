@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 use tauri::{AppHandle, Manager};
 use teamcode_core::changes::attributor::Probe;
+use teamcode_core::cost::{ledger, LiveCost};
 use teamcode_core::domain::{AgentState, Task, TaskId};
 use teamcode_core::hooks::attribution::read_agent_meta;
 use teamcode_core::hooks::plan_steps::{dispatch_from_tool_input, Dispatch};
@@ -13,7 +14,7 @@ use teamcode_core::hooks::{artifact, feed, HookEvent, TaskEvent};
 use teamcode_core::memory::TaskFolder;
 use teamcode_core::{db, git, pipeline, Result};
 
-use crate::events::{self, TeamEvent};
+use crate::events::{self, CostUpdated, TeamEvent};
 use crate::observation;
 use crate::observe;
 use crate::state::AppState;
@@ -97,6 +98,7 @@ pub async fn handle(app: &AppHandle, mut ev: TaskEvent, line: &str, live: bool) 
             transcript_path,
         } => {
             state.tailer_transcripts(&id, Some(transcript_path.clone()));
+            ledger::register_transcript(&state.db.lock().expect("db lock"), transcript_path, &id, "")?;
             let sid = session_id.clone();
             if !sid.is_empty() && task.claude_session_id.as_deref() != Some(sid.as_str()) {
                 observation::update_task(app, &state, &id, |t| t.claude_session_id = Some(sid))?;
@@ -111,13 +113,33 @@ pub async fn handle(app: &AppHandle, mut ev: TaskEvent, line: &str, live: bool) 
         HookEvent::SubagentStart {
             agent_id, description, ..
         } => {
-            let meta = state
-                .tailer_transcripts(&id, None)
-                .and_then(|t| read_agent_meta(&t, agent_id));
+            let meta = main_transcript(&state, &id).and_then(|t| read_agent_meta(&t, agent_id));
             let d = state.with_correlator(&id, |c| c.on_subagent_start(agent_id, meta.as_ref()));
             *description = meta.and_then(|m| m.description).or_else(|| d.as_ref().map(describe));
         }
+        HookEvent::SubagentStop { agent_id } => {
+            if let Some(path) = raw.get("agent_transcript_path").and_then(Value::as_str) {
+                ledger::register_transcript(&state.db.lock().expect("db lock"), Path::new(path), &id, agent_id)?;
+            }
+        }
+        HookEvent::StatusLine {
+            cost_usd,
+            context_used_pct,
+            ..
+        } => {
+            let live = LiveCost {
+                cost_usd: *cost_usd,
+                context_used_pct: *context_used_pct,
+                at: ev.at,
+            };
+            state.live_cost.lock().expect("live cost lock").insert(id.clone(), live);
+            events::emit(app, CostUpdated { task_id: id.clone() })?;
+        }
         _ => {}
+    }
+    // the ledger: each turn's (and each subagent's) transcript lines, under the task's current stage
+    if matches!(ev.event, HookEvent::Stop { .. } | HookEvent::SubagentStop { .. }) && ingest_all(&state, &task)? {
+        events::emit(app, CostUpdated { task_id: id.clone() })?;
     }
     // the chip: a Stop checks the stage's artifact first
     let artifact_changed = match &ev.event {
@@ -152,6 +174,27 @@ pub async fn handle(app: &AppHandle, mut ev: TaskEvent, line: &str, live: bool) 
     }
     crate::hooks_tailer::publish(&id, &ev.event);
     Ok(())
+}
+
+/// The task's main transcript: from this launch's `SessionStart`, else the ledger's registered one.
+fn main_transcript(state: &AppState, id: &TaskId) -> Option<PathBuf> {
+    state.tailer_transcripts(id, None).or_else(|| {
+        let conn = state.db.lock().expect("db lock");
+        ledger::transcripts_for(&conn, id)
+            .into_iter()
+            .find(|(_, agent)| agent.is_empty())
+            .map(|(p, _)| p)
+    })
+}
+
+/// Reads every transcript of the task from its cursor into the ledger; whether anything was added.
+fn ingest_all(state: &AppState, task: &Task) -> Result<bool> {
+    let conn = state.db.lock().expect("db lock");
+    let mut added = 0;
+    for (path, agent) in ledger::transcripts_for(&conn, &task.id) {
+        added += ledger::ingest(&conn, &task.id, task.stage, &path, &agent)?;
+    }
+    Ok(added > 0)
 }
 
 /// The memory folder's plan, for `hooks_plan_steps`.

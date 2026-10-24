@@ -10,6 +10,7 @@ use livespec_core::usage::UsageLedger;
 use rusqlite::Connection;
 use teamcode_core::changes::attributor::Attributor;
 use teamcode_core::changes::ChangeSet;
+use teamcode_core::cost::LiveCost;
 use teamcode_core::domain::TaskId;
 use teamcode_core::helpers::HelperKind;
 use teamcode_core::hooks::attribution::Correlator;
@@ -54,6 +55,8 @@ pub struct AppState {
     /// The managed local model server, when the Local provider is used.
     pub local_server: tokio::sync::Mutex<Option<LocalServer>>,
     pub http: reqwest::Client,
+    /// Each task's latest status-line numbers.
+    pub live_cost: Mutex<HashMap<TaskId, LiveCost>>,
 }
 
 impl AppState {
@@ -77,6 +80,7 @@ impl AppState {
             helper_runs: Mutex::default(),
             local_server: tokio::sync::Mutex::default(),
             http: reqwest::Client::new(),
+            live_cost: Mutex::default(),
         })
     }
 

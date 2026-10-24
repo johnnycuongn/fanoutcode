@@ -21,7 +21,7 @@ use teamcode_core::memory::{MemoryFile, TaskFolder};
 use teamcode_core::pipeline::{self, Effect};
 use teamcode_core::Result;
 
-use crate::events::{self, SpecWatcher};
+use crate::events::{self, CostUpdated, SpecWatcher};
 use crate::observe::{self, log_err};
 use crate::state::AppState;
 use crate::{git_watcher, hook_feed, observation, provider};
@@ -207,10 +207,35 @@ async fn project_briefs(app: &AppHandle, id: &TaskId) -> Result<()> {
     Ok(())
 }
 
-/// After a helper call: LiveSpec's ledger is flushed.
-pub fn note_usage(app: &AppHandle, _task_id: &TaskId, _usage: &[Usage]) {
+/// After a helper call: LiveSpec's ledger is flushed, and the usage lands in the task's cost under `helpers`, in
+/// the stage the task is in now.
+pub fn note_usage(app: &AppHandle, task_id: &TaskId, usage: &[Usage]) {
     let state = app.state::<AppState>();
     if let Err(e) = state.usage.flush_if_dirty() {
         eprintln!("Team Code: couldn't save the usage ledger: {e}");
+    }
+    if usage.is_empty() {
+        return;
+    }
+    let recorded = {
+        let conn = state.db.lock().expect("db lock");
+        db::tasks::get(&conn, task_id).ok().flatten().map(|t| {
+            usage
+                .iter()
+                .try_for_each(|u| teamcode_core::cost::ledger::record_helper(&conn, task_id, t.stage, u))
+        })
+    };
+    if let Some(r) = recorded {
+        if log_err("recording a helper's cost", r).is_some() {
+            log_err(
+                "reporting a cost change",
+                events::emit(
+                    app,
+                    CostUpdated {
+                        task_id: task_id.clone(),
+                    },
+                ),
+            );
+        }
     }
 }

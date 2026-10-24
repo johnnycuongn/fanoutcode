@@ -5,6 +5,7 @@ use teamcode_core::domain::{Container, ProjectId, WorkspaceId};
 use teamcode_core::settings::Scope;
 use teamcode_core::Result;
 
+pub mod cost;
 pub mod git;
 pub mod hooks;
 pub mod memory;
