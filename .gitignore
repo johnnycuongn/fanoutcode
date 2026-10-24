@@ -1,0 +1,11 @@
+node_modules
+dist
+target
+src-tauri/gen
+*.log
+.superpowers/
+.env*.local
+.claude/worktrees/
+.worktrees/
+coverage
+.DS_Store
