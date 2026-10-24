@@ -1,0 +1,6 @@
+{"parentUuid":null,"type":"assistant","timestamp":"2026-10-24T02:23:10.850Z","sessionId":"s","message":{"id":"msg_1","type":"message","role":"assistant","model":"claude-sonnet-5-5","content":[{"type":"text","text":"Hi"}],"usage":{"input_tokens":2,"cache_creation_input_tokens":47212,"cache_read_input_tokens":28449,"output_tokens":1230}}}
+{"parentUuid":null,"type":"assistant","timestamp":"2026-10-24T02:23:10.850Z","sessionId":"s","message":{"id":"msg_1","type":"message","role":"assistant","model":"claude-sonnet-5-5","content":[{"type":"tool_use","id":"toolu_1","name":"Read","input":{}}],"usage":{"input_tokens":2,"cache_creation_input_tokens":47212,"cache_read_input_tokens":28449,"output_tokens":1230}}}
+{"type":"user","timestamp":"2026-10-24T02:23:11.000Z","message":{"role":"user","content":"ok"}}
+{"type":"assistant","timestamp":"2026-10-24T02:23:12.000Z","message":{"id":"msg_2","model":"<synthetic>","content":[{"type":"text","text":"No response requested."}],"usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0}}}
+{"agentId":"a1","type":"assistant","timestamp":"2026-10-24T02:24:00.000Z","message":{"id":"msg_3","model":"claude-haiku-5-5","content":[{"type":"text","text":"Done"}],"usage":{"input_tokens":100,"output_tokens":50}}}
+{"type":"assistant","message":{"id":"msg_4"
