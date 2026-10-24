@@ -25,4 +25,6 @@ export const pages: ExamplePage[] = [
   page("Combobox", "Searchable single choice", () => import("./pages/ComboboxPage")),
   page("Segmented", "Exactly-one-of-N control", () => import("./pages/SegmentedPage")),
   page("Tabs", "Underline, pill and bar tab sets", () => import("./pages/TabsPage")),
+  page("Menu", "Dropdown menu with shortcuts and submenus", () => import("./pages/MenuPage")),
+  page("ContextMenu", "Right-click menu", () => import("./pages/ContextMenuPage")),
 ];

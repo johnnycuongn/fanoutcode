@@ -38,7 +38,41 @@ export * from "./Segmented";
 
 export * from "./Tabs";
 
+export * from "./Menu";
+
+export * from "./ContextMenu";
+
 export const PRIMITIVES = {
+  ContextMenu: [
+    "ContextMenu",
+    "ContextMenuTrigger",
+    "ContextMenuContent",
+    "ContextMenuItem",
+    "ContextMenuCheckboxItem",
+    "ContextMenuRadioGroup",
+    "ContextMenuRadioItem",
+    "ContextMenuLabel",
+    "ContextMenuSeparator",
+    "ContextMenuGroup",
+    "ContextMenuSub",
+    "ContextMenuSubTrigger",
+    "ContextMenuSubContent",
+  ],
+  Menu: [
+    "Menu",
+    "MenuTrigger",
+    "MenuContent",
+    "MenuItem",
+    "MenuCheckboxItem",
+    "MenuRadioGroup",
+    "MenuRadioItem",
+    "MenuLabel",
+    "MenuSeparator",
+    "MenuGroup",
+    "MenuSub",
+    "MenuSubTrigger",
+    "MenuSubContent",
+  ],
   Tabs: ["Tabs", "TabsList", "TabsTrigger", "TabsContent"],
   Segmented: ["Segmented"],
   Combobox: ["Combobox"],
