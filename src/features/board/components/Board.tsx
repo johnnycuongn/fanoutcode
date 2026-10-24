@@ -17,6 +17,7 @@ import { BoardHeader } from "./BoardHeader";
 import { CardOverlay } from "./BoardCard";
 import { useConfirm } from "./ConfirmDialog";
 import { JiraKeyDialog } from "./JiraKeyDialog";
+import { ProjectPicker } from "./ProjectPicker";
 
 const containerKey = (c: BoardProps["container"]): string => `${c.type}:${c.id}`;
 
@@ -86,7 +87,7 @@ export function Board({
           data-mode={mode}
           className="flex h-full min-h-0 flex-col bg-page text-ink"
         >
-          <BoardHeader />
+          <BoardHeader modeControl={mode === "one_project" ? <ProjectPicker /> : null} />
           <LayoutGroup id="board">
             <BoardBody onNewTask={onNewTask} />
           </LayoutGroup>

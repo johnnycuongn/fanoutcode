@@ -11,6 +11,7 @@ import {
 import type { TaskMap } from "../taskCache";
 import { BoardEmpty } from "./BoardEmpty";
 import { ColumnGrid } from "./ColumnGrid";
+import { ProjectChipRow } from "./ProjectChipRow";
 import { Swimlanes } from "./Swimlanes";
 
 /** Nothing to show: no tasks at all, or the filters hide every one. Not before the first load finishes. */
@@ -27,11 +28,22 @@ export function BoardBody({ onNewTask }: { onNewTask(): void }): ReactElement {
   const columns = useBoard(selectColumns);
   const empty = useBoard(selectEmptyVariant);
 
+  if (empty === "no_tasks") return <BoardEmpty variant={empty} onNewTask={onNewTask} />;
+  if (mode === "mixed") {
+    return (
+      <>
+        <ProjectChipRow />
+        {empty ? (
+          <BoardEmpty variant={empty} onNewTask={onNewTask} />
+        ) : (
+          <ColumnGrid lane="*" columns={columns} readOnly={readOnly} showProject compactEmpty={false} />
+        )}
+      </>
+    );
+  }
   if (empty) return <BoardEmpty variant={empty} onNewTask={onNewTask} />;
   if (mode === "swimlanes") return <Swimlanes readOnly={false} />;
   if (mode === "one_project" && picked === null) return <Swimlanes readOnly />;
   const lane = mode === "one_project" && picked !== null ? picked : "*";
-  return (
-    <ColumnGrid lane={lane} columns={columns} readOnly={readOnly} showProject={mode === "mixed"} compactEmpty={false} />
-  );
+  return <ColumnGrid lane={lane} columns={columns} readOnly={readOnly} showProject={false} compactEmpty={false} />;
 }
