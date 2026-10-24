@@ -1,0 +1,9 @@
+[workspace]
+resolver = "2"
+members = ["crates/teamcode-core", "crates/livespec-core"]
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "io-util", "fs", "time", "sync"] }
+thiserror = "1"
