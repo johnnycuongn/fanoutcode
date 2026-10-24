@@ -1,89 +1,70 @@
 // The primitives' public surface. Everything the app composes comes from here; nothing under src/features/ is
-// imported by a primitive. PRIMITIVES maps each primitive family to the names it exports (a test pins that every
-// listed name exists and every family has a dev example page).
+// imported by a primitive. PRIMITIVES maps each primitive family to the names it exports, in the order of spec
+// §15.3 (a test pins the order, that every listed name exists, and that every family has a dev example page).
 export * from "./cx";
 export * from "./tokens";
-
 export * from "./Button";
-
 export * from "./IconButton";
-
-export * from "./KeyHint";
-
-export * from "./Badge";
-
-export * from "./StatusDot";
-
-export * from "./Field";
-
 export * from "./Input";
-
 export * from "./Textarea";
-
-export * from "./Checkbox";
-
-export * from "./Switch";
-
-export * from "./Popover";
-
-export * from "./Tooltip";
-
-export * from "./UiProvider";
-
 export * from "./Select";
-
 export * from "./Combobox";
-
+export * from "./Checkbox";
+export * from "./Switch";
 export * from "./Segmented";
-
 export * from "./Tabs";
-
 export * from "./Menu";
-
 export * from "./ContextMenu";
-
+export * from "./Popover";
+export * from "./Tooltip";
+export * from "./UiProvider";
 export * from "./Dialog";
-
 export * from "./Drawer";
-
 export * from "./Toast";
-
+export * from "./Field";
 export * from "./Chip";
-
+export * from "./Badge";
 export * from "./Avatar";
-
+export * from "./KeyHint";
+export * from "./StatusDot";
 export * from "./EmptyState";
-
 export * from "./Panel";
-
 export * from "./Resizable";
 
 export const PRIMITIVES = {
-  Resizable: ["Resizable"],
-  Panel: ["Panel", "PanelHeader", "PanelBody", "PanelFooter"],
-  EmptyState: ["EmptyState"],
-  Avatar: ["Avatar", "AvatarGroup", "initials"],
-  Chip: ["Chip"],
-  Toast: ["Toaster", "toast"],
-  Drawer: [
-    "Drawer",
-    "DrawerTrigger",
-    "DrawerContent",
-    "DrawerHeader",
-    "DrawerTitle",
-    "DrawerDescription",
-    "DrawerFooter",
-    "DrawerClose",
+  Button: ["Button", "buttonVariants"],
+  IconButton: ["IconButton"],
+  Input: ["Input"],
+  Textarea: ["Textarea"],
+  Select: [
+    "Select",
+    "SelectTrigger",
+    "SelectValue",
+    "SelectContent",
+    "SelectItem",
+    "SelectGroup",
+    "SelectLabel",
+    "SelectSeparator",
   ],
-  Dialog: [
-    "Dialog",
-    "DialogTrigger",
-    "DialogContent",
-    "DialogHeader",
-    "DialogTitle",
-    "DialogDescription",
-    "DialogFooter",
-    "DialogClose",
+  Combobox: ["Combobox"],
+  Checkbox: ["Checkbox"],
+  Switch: ["Switch"],
+  Segmented: ["Segmented"],
+  Tabs: ["Tabs", "TabsList", "TabsTrigger", "TabsContent"],
+  Menu: [
+    "Menu",
+    "MenuTrigger",
+    "MenuContent",
+    "MenuItem",
+    "MenuCheckboxItem",
+    "MenuRadioGroup",
+    "MenuRadioItem",
+    "MenuLabel",
+    "MenuSeparator",
+    "MenuGroup",
+    "MenuSub",
+    "MenuSubTrigger",
+    "MenuSubContent",
   ],
   ContextMenu: [
     "ContextMenu",
@@ -100,46 +81,38 @@ export const PRIMITIVES = {
     "ContextMenuSubTrigger",
     "ContextMenuSubContent",
   ],
-  Menu: [
-    "Menu",
-    "MenuTrigger",
-    "MenuContent",
-    "MenuItem",
-    "MenuCheckboxItem",
-    "MenuRadioGroup",
-    "MenuRadioItem",
-    "MenuLabel",
-    "MenuSeparator",
-    "MenuGroup",
-    "MenuSub",
-    "MenuSubTrigger",
-    "MenuSubContent",
-  ],
-  Tabs: ["Tabs", "TabsList", "TabsTrigger", "TabsContent"],
-  Segmented: ["Segmented"],
-  Combobox: ["Combobox"],
-  Select: [
-    "Select",
-    "SelectTrigger",
-    "SelectValue",
-    "SelectContent",
-    "SelectItem",
-    "SelectGroup",
-    "SelectLabel",
-    "SelectSeparator",
-  ],
-  Tooltip: ["Tooltip", "TooltipProvider"],
   Popover: ["Popover", "PopoverTrigger", "PopoverContent", "PopoverAnchor", "PopoverClose"],
-  Switch: ["Switch"],
-  Checkbox: ["Checkbox"],
-  Textarea: ["Textarea"],
-  Input: ["Input"],
+  Tooltip: ["Tooltip", "TooltipProvider"],
+  Dialog: [
+    "Dialog",
+    "DialogTrigger",
+    "DialogContent",
+    "DialogHeader",
+    "DialogTitle",
+    "DialogDescription",
+    "DialogFooter",
+    "DialogClose",
+  ],
+  Drawer: [
+    "Drawer",
+    "DrawerTrigger",
+    "DrawerContent",
+    "DrawerHeader",
+    "DrawerTitle",
+    "DrawerDescription",
+    "DrawerFooter",
+    "DrawerClose",
+  ],
+  Toast: ["Toaster", "toast"],
   Field: ["Field", "useFieldControl"],
-  StatusDot: ["StatusDot"],
+  Chip: ["Chip"],
   Badge: ["Badge"],
+  Avatar: ["Avatar", "AvatarGroup", "initials"],
   KeyHint: ["KeyHint", "formatChord", "chordLabel"],
-  IconButton: ["IconButton"],
-  Button: ["Button", "buttonVariants"],
+  StatusDot: ["StatusDot"],
+  EmptyState: ["EmptyState"],
+  Panel: ["Panel", "PanelHeader", "PanelBody", "PanelFooter"],
+  Resizable: ["Resizable"],
 } as const satisfies Record<string, readonly string[]>;
 
 export type PrimitiveName = keyof typeof PRIMITIVES;

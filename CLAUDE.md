@@ -67,7 +67,8 @@ data-carrying enums are `#[serde(tag = "type")]` with unit or struct variants on
   with a kebab-case name, register it in `specta::builder()`, run `npm run bindings`.
 - **A feature**: `src/features/<name>/` with `components/`, `store.ts` (built with `createStore`), `types.ts` and
   `index.ts`, the feature's only public surface.
-- **A primitive**: `src/components/ui/<Name>.tsx` plus an example page `src/dev/primitives/<Name>.tsx`.
+- **A primitive**: `src/components/ui/<Name>.tsx`, its test, a barrel and `PRIMITIVES` entry, and an example page
+  `src/dev/primitives/pages/<Name>Page.tsx` registered in `registry.ts`.
 - **A migration**: `crates/teamcode-core/migrations/00NN_<name>.sql` (NN = owning plan) and one line in
   `db::MIGRATIONS`. Never edit an applied migration.
 

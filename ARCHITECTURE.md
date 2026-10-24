@@ -16,6 +16,7 @@ in `docs/superpowers/specs/2026-10-24-team-code-design.md`. Each implementation 
 - [Persistence](#persistence)
 - [Security model](#security-model)
 - [Errors](#errors)
+- [UI primitives](#ui-primitives)
 - [Where to change things](#where-to-change-things)
 
 ## At a glance
@@ -96,6 +97,26 @@ Model and agent output renders only through `MiniMarkdown` or xterm.
 network), `Io`, `Git`, `Db` and `Invalid` (bad id or malformed input). It serialises as its message, so a command's
 error reaches TypeScript as `{ status: "error", error: string }`.
 
+## UI primitives
+
+`src/components/ui/` is the only place raw `<input>`, `<select>`, `<textarea>`, `<button>` and `<dialog>` appear
+(ESLint enforces it). It holds the twenty-six primitives of spec §15.3 as thin, token-styled wrappers over Radix (via
+the unified `radix-ui` package), cmdk, Vaul, Sonner and dotLottie; every feature composes them and never styles a raw
+control. Import from the barrel `@/components/ui`, which also exports `UiProvider` (tooltip provider and toaster,
+mounted once at each window's root), `cx`, `focusRing` and the shared unions in `tokens.ts`. `PRIMITIVES` in the
+barrel lists each family and the names it exports; `src/dev/primitives/registry.test.tsx` fails until every family has
+an example page.
+
+- Colour by prop (`tone`, `stage`, `swatch`, `status`) goes through the literal class maps in `tokens.ts`, never
+  through template strings, so Tailwind sees every class. Colours themselves live only in `src/styles.css`.
+- Animation reads `useReducedMotion()` from `src/lib/motion.ts`: springs become 150 ms eases and loops stop.
+- A primitive has no business logic: it never imports `src/lib/bindings.ts`, a store or a feature, and it takes plain
+  unions (`AgentStatus`, `StageToken`), not the generated `AgentState` or `Stage`.
+- Dev only: `npm run dev`, then `#/dev/primitives` shows one page per primitive with a light/dark toggle. The gallery
+  is not in the production bundle.
+- Tests: `src/test/setup.ts` (jsdom gaps, jest-dom, cleanup) and `src/test/ui.ts` (`mockMatchMedia`, `setupUser`,
+  `renderUi`).
+
 ## Where to change things
 
 | To change             | Edit                                                                          |
@@ -107,3 +128,4 @@ error reaches TypeScript as `{ status: "error", error: string }`.
 | Colours, fonts, radii | `src/styles.css`                                                              |
 | Theme switching       | `src/lib/theme.ts`                                                            |
 | A lint rule           | `eslint/rules/` and `eslint.config.js`                                        |
+| A primitive           | `src/components/ui/<Name>.tsx`, `index.ts`, and its example page              |

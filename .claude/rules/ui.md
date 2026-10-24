@@ -22,3 +22,6 @@ paths: ["src/**"]
 - A feature imports another feature only through `@/features/<name>` (its `index.ts`).
 - Budgets: a component under about 200 lines, a store under 300.
 - Nothing a user triggers takes longer than 250 ms to respond; show progress for anything slower.
+- To add a primitive: `src/components/ui/<Name>.tsx` + `<Name>.test.tsx`, export it from `index.ts`, add it to
+  `PRIMITIVES`, add `src/dev/primitives/pages/<Name>Page.tsx` and register it in `src/dev/primitives/registry.ts`;
+  `registry.test.tsx` fails until all four exist.
