@@ -1,9 +1,12 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { Suspense } from "react";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import * as ui from "../../components/ui";
 import { PRIMITIVES, UiProvider } from "../../components/ui";
 import { pages } from "./registry";
+
+// The dotLottie renderer needs WebAssembly and IntersectionObserver, which jsdom lacks.
+vi.mock("../../components/ui/EmptyStateLottie", () => ({ default: () => null }));
 
 test("every name in PRIMITIVES has exactly one example page", () => {
   expect(pages.map((p) => p.name).sort()).toEqual(Object.keys(PRIMITIVES).sort());

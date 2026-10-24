@@ -32,4 +32,9 @@ export const pages: ExamplePage[] = [
   page("Toast", "Transient messages (Sonner)", () => import("./pages/ToastPage")),
   page("Chip", "Status, filter and stepper chips", () => import("./pages/ChipPage")),
   page("Avatar", "Initials avatars with status", () => import("./pages/AvatarPage")),
+  page(
+    "EmptyState",
+    "Empty column / board / first-run states with lazy dotLottie",
+    () => import("./pages/EmptyStatePage"),
+  ),
 ];

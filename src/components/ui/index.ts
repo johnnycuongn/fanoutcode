@@ -52,7 +52,10 @@ export * from "./Chip";
 
 export * from "./Avatar";
 
+export * from "./EmptyState";
+
 export const PRIMITIVES = {
+  EmptyState: ["EmptyState"],
   Avatar: ["Avatar", "AvatarGroup", "initials"],
   Chip: ["Chip"],
   Toast: ["Toaster", "toast"],
