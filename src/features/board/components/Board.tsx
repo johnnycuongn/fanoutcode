@@ -1,5 +1,6 @@
 import { DndContext, DragOverlay } from "@dnd-kit/core";
 import { restrictToWindowEdges } from "@dnd-kit/modifiers";
+import { LayoutGroup } from "motion/react";
 import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { loadActivity, startActivityEvents } from "../activity";
 import { ipc } from "../ipc";
@@ -108,11 +109,13 @@ export function Board({
           className="flex h-full min-h-0 flex-col bg-page text-ink"
         >
           <BoardHeader />
-          {emptyVariant ? (
-            <BoardEmpty variant={emptyVariant} onNewTask={onNewTask} />
-          ) : (
-            <ColumnGrid lane="*" columns={columns} readOnly={readOnly} showProject={false} compactEmpty={false} />
-          )}
+          <LayoutGroup id="board">
+            {emptyVariant ? (
+              <BoardEmpty variant={emptyVariant} onNewTask={onNewTask} />
+            ) : (
+              <ColumnGrid lane="*" columns={columns} readOnly={readOnly} showProject={false} compactEmpty={false} />
+            )}
+          </LayoutGroup>
         </div>
         <DragOverlay dropAnimation={null}>
           {dnd.activeTask ? <CardOverlay task={dnd.activeTask} project={overlayProject} showProject={false} /> : null}

@@ -1,6 +1,8 @@
 import { useDraggable } from "@dnd-kit/core";
+import { motion } from "motion/react";
 import { useCallback, useMemo, type ReactNode, type Ref } from "react";
 import type { Task } from "@/lib/bindings";
+import { transitionFor, useReducedMotion } from "@/lib/motion";
 
 export type DraggableRender = { ref: Ref<HTMLElement>; handleProps: Record<string, unknown>; dragging: boolean };
 
@@ -34,5 +36,12 @@ export function DraggableCard({
     delete props["aria-pressed"]; // the card is an article, not a toggle button
     return props;
   }, [attributes, listeners]);
-  return <>{children({ ref, handleProps, dragging: isDragging })}</>;
+  const reduced = useReducedMotion();
+  // `layoutId` lets a card that changes column (a drop, or a task-changed from the core) glide from its old slot to the
+  // new one; the shared spring is Plan 02's, and reduced motion swaps it for the 150 ms ease.
+  return (
+    <motion.div layout layoutId={task.id} transition={transitionFor(reduced)}>
+      {children({ ref, handleProps, dragging: isDragging })}
+    </motion.div>
+  );
 }
