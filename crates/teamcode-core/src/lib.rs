@@ -9,6 +9,7 @@ pub mod memory;
 pub mod pipeline;
 pub mod prompts;
 pub mod recent;
+pub mod roster;
 #[cfg(test)]
 pub(crate) mod test_support;
 pub mod windows;
