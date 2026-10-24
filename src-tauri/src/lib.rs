@@ -36,6 +36,10 @@ pub fn run() {
             let data_dir = app.path().app_data_dir()?;
             let config_dir = app.path().app_config_dir()?;
             app.manage(AppState::new(&data_dir, &config_dir)?);
+            // the shipped subagents, written once; an edited or deleted-and-restored file is never replaced
+            if let Err(e) = teamcode_core::roster::install_shipped(&config_dir) {
+                eprintln!("Team Code: couldn't install the shipped agents: {e}");
+            }
             let state = app.state::<AppState>();
             let open = {
                 let conn = state.db.lock().expect("db lock");

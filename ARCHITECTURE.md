@@ -75,12 +75,26 @@ windows from Rust, exports commands and events through tauri-specta, and wraps t
 renders; it reads state from module stores (`createStore`) with `useSyncExternalStore` and talks to the shell only
 through the generated `src/lib/bindings.ts`.
 
+Plan 03 adds the pipeline to the core. `pipeline::transition(task, action, ctx)` and `pipeline::move_to` are pure:
+they return `Effect`s, with every stage's entry effects defined once in `pipeline/enter.rs`. `pipeline::apply`
+persists the stage, state, archive flag and timeline in one SQLite transaction, mirrors them to the task's `index.md`,
+and hands the external effects (sessions, worktrees, tests, helpers) back to the shell, whose `effects::dispatch`
+forwards them to Plans 04 and 05. `pipeline::detect_handback` reads a `Stop` for the stage's sentinel line and
+`handback::chip_text` is the source of the hand-back chip texts (`src/test/fixtures/handback.json` mirrors them).
+`memory` owns task folders (atomic writes, unreadable files set aside as `.bad`, a missing folder never recreated);
+`prompts` layers the shipped stage templates under app and project overrides; `roster` holds the shipped subagents;
+`settings` resolves the key table task → project → workspace → app → default; `views::layout` edits pane trees. The
+shell's task commands lock the database, compute, apply, release the lock, dispatch, then emit `task-changed` and
+`needs-you`.
+
 ## Persistence
 
 SQLite at `<app_data>/teamcode.db` (WAL, foreign keys on), migrated at startup by `db::open` from
 `crates/teamcode-core/migrations/00NN_<name>.sql`, where NN is the owning plan; applied versions are recorded in
 `schema_migrations`, one transaction per file. Settings are rows of the `settings` table keyed by scope (ADR 0002);
-Plan 01 writes the app-scope keys `theme`, `worktree_convention`, `first_run_complete`, `open_windows` and `recent`.
+Plan 01 writes the app-scope keys `theme`, `worktree_convention`, `first_run_complete`, `open_windows` and `recent`;
+the registered keys, their levels and defaults are `settings::keys` (Plan 03). `tasks` rows keep the full `Task` in
+`json` beside the columns queries filter on; `task_timeline` is the source the `index.md` timeline mirrors.
 The webview mirrors the theme and accent in `localStorage` only so the first paint is right before IPC returns.
 
 ## Security model
@@ -124,6 +138,9 @@ an example page.
 | A shared type         | `crates/teamcode-core/src/domain.rs`, then `npm run bindings`                 |
 | The schema            | a new `crates/teamcode-core/migrations/00NN_<name>.sql` plus `db::MIGRATIONS` |
 | A command             | `src-tauri/src/commands/<domain>.rs` and `src-tauri/src/specta.rs`            |
+| A setting             | one row in `settings_table!` in `crates/teamcode-core/src/settings/keys.rs`   |
+| A stage's behaviour   | `crates/teamcode-core/src/pipeline/enter.rs` and `pipeline/mod.rs`            |
+| A shipped prompt      | `crates/teamcode-core/src/prompts/templates.rs`                               |
 | An event              | `src-tauri/src/events.rs` and `src-tauri/src/specta.rs`                       |
 | Colours, fonts, radii | `src/styles.css`                                                              |
 | Theme switching       | `src/lib/theme.ts`                                                            |
