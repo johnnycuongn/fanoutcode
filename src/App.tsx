@@ -3,8 +3,11 @@
 import { lazy, Suspense, useEffect, useState, type ReactElement } from "react";
 import { UiProvider } from "@/components/ui";
 import { commands, type WindowInfo } from "@/lib/bindings";
-import { ShellLayout } from "@/features/shell";
-import { Onboarding, StartScreen } from "@/features/start-screen";
+
+// Each kind of window loads only what it shows.
+const ShellLayout = lazy(() => import("@/features/shell").then((m) => ({ default: m.ShellLayout })));
+const StartScreen = lazy(() => import("@/features/start-screen").then((m) => ({ default: m.StartScreen })));
+const Onboarding = lazy(() => import("@/features/start-screen").then((m) => ({ default: m.Onboarding })));
 
 // Dev builds only: `#/dev/primitives` shows the primitives gallery. The dead branch in production lets Rollup drop it.
 const PrimitivesGallery = import.meta.env.DEV ? lazy(() => import("./dev/primitives")) : null;
@@ -23,7 +26,9 @@ export default function App(): ReactElement {
   }
   return (
     <UiProvider>
-      <Root />
+      <Suspense fallback={null}>
+        <Root />
+      </Suspense>
     </UiProvider>
   );
 }
