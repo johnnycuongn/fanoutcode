@@ -4,7 +4,10 @@ use std::path::Path;
 use std::time::Duration;
 
 use rusqlite::{params, Connection, OptionalExtension};
+use serde::de::DeserializeOwned;
+use serde::Serialize;
 
+use crate::domain::{Container, ThemePreference, WorktreeConvention};
 use crate::{Error, Result};
 
 /// `(version, name, sql)`, ascending. Versions have gaps by design (the owning plan's number); each plan adds its
@@ -89,9 +92,57 @@ pub fn user_version(conn: &Connection) -> Result<u32> {
     )
 }
 
+/// An app-scope setting row (`scope_kind = 'app'`, `scope_id = ''`); `None` when unset.
+pub fn app_setting<T: DeserializeOwned>(conn: &Connection, key: &str) -> Result<Option<T>> {
+    let json: Option<String> = conn
+        .query_row(
+            "SELECT json FROM settings WHERE scope_kind = 'app' AND scope_id = '' AND key = ?1",
+            [key],
+            |r| r.get(0),
+        )
+        .optional()?;
+    json.map(|j| serde_json::from_str(&j).map_err(Error::from)).transpose()
+}
+
+/// Upserts an app-scope setting row.
+pub fn set_app_setting<T: Serialize>(conn: &Connection, key: &str, value: &T) -> Result<()> {
+    conn.execute(
+        "INSERT INTO settings (scope_kind, scope_id, key, json) VALUES ('app', '', ?1, ?2)
+         ON CONFLICT (scope_kind, scope_id, key) DO UPDATE SET json = excluded.json",
+        params![key, serde_json::to_string(value)?],
+    )?;
+    Ok(())
+}
+
+/// True until `first_run_complete` is `true`.
+pub fn first_run_pending(conn: &Connection) -> Result<bool> {
+    Ok(app_setting::<bool>(conn, "first_run_complete")? != Some(true))
+}
+
+/// Records the two first-run answers (§4.4) and marks first run complete.
+pub fn complete_first_run(conn: &Connection, convention: WorktreeConvention, theme: ThemePreference) -> Result<()> {
+    set_app_setting(conn, "worktree_convention", &convention)?;
+    set_app_setting(conn, "theme", &theme)?;
+    set_app_setting(conn, "first_run_complete", &true)
+}
+
+/// A `projects` or `workspaces` row with the container's id exists.
+pub fn container_exists(conn: &Connection, container: &Container) -> Result<bool> {
+    let (table, id) = match container {
+        Container::Project { id } => ("projects", id.as_str()),
+        Container::Workspace { id } => ("workspaces", id.as_str()),
+    };
+    Ok(conn.query_row(
+        &format!("SELECT EXISTS (SELECT 1 FROM {table} WHERE id = ?1)"),
+        [id],
+        |r| r.get(0),
+    )?)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::{Container, ProjectId, ThemePreference, WorktreeConvention};
 
     const TABLES: [&str; 11] = [
         "projects",
@@ -171,5 +222,47 @@ mod tests {
             "nothing from the failed file stays"
         );
         assert_eq!(user_version(&conn).unwrap(), 1);
+    }
+
+    #[test]
+    fn app_settings_upsert_and_round_trip() {
+        let conn = open_in_memory().unwrap();
+        assert_eq!(app_setting::<bool>(&conn, "first_run_complete").unwrap(), None);
+        set_app_setting(&conn, "theme", &ThemePreference::Dark).unwrap();
+        set_app_setting(&conn, "theme", &ThemePreference::Light).unwrap();
+        assert_eq!(
+            app_setting::<ThemePreference>(&conn, "theme").unwrap(),
+            Some(ThemePreference::Light)
+        );
+        assert_eq!(
+            conn.query_row("SELECT count(*) FROM settings WHERE scope_kind='app'", [], |r| r
+                .get::<_, i64>(0))
+                .unwrap(),
+            1
+        );
+    }
+
+    #[test]
+    fn first_run_is_pending_until_completed() {
+        let conn = open_in_memory().unwrap();
+        assert!(first_run_pending(&conn).unwrap());
+        complete_first_run(&conn, WorktreeConvention::TeamCodeManaged, ThemePreference::System).unwrap();
+        assert!(!first_run_pending(&conn).unwrap());
+        assert_eq!(
+            app_setting::<WorktreeConvention>(&conn, "worktree_convention").unwrap(),
+            Some(WorktreeConvention::TeamCodeManaged)
+        );
+    }
+
+    #[test]
+    fn container_exists_is_false_for_unknown_ids() {
+        let conn = open_in_memory().unwrap();
+        assert!(!container_exists(
+            &conn,
+            &Container::Project {
+                id: ProjectId::parse("p-404").unwrap()
+            }
+        )
+        .unwrap());
     }
 }

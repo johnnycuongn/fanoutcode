@@ -4,5 +4,6 @@ pub mod db;
 pub mod domain;
 pub mod error;
 pub mod ids;
+pub mod recent;
 
 pub use error::{Error, Result};
