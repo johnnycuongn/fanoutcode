@@ -1,0 +1,23 @@
+/* Keyframes and the Vaul reduced-motion override for the primitives. No colours here. */
+@utility animate-status-pulse {
+  animation: tc-status-pulse 1.6s ease-out infinite;
+}
+@keyframes tc-status-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, currentColor 45%, transparent);
+  }
+  70% {
+    box-shadow: 0 0 0 5px transparent;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-status-pulse {
+    animation: none;
+  }
+}
+[data-motion="reduced"][data-vaul-drawer],
+[data-motion="reduced"][data-vaul-overlay] {
+  transition-duration: 150ms !important;
+  transition-timing-function: ease-out !important;
+}
