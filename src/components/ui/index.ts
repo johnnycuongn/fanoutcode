@@ -48,7 +48,13 @@ export * from "./Drawer";
 
 export * from "./Toast";
 
+export * from "./Chip";
+
+export * from "./Avatar";
+
 export const PRIMITIVES = {
+  Avatar: ["Avatar", "AvatarGroup", "initials"],
+  Chip: ["Chip"],
   Toast: ["Toaster", "toast"],
   Drawer: [
     "Drawer",

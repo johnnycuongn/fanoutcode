@@ -30,4 +30,6 @@ export const pages: ExamplePage[] = [
   page("Dialog", "Modal dialog", () => import("./pages/DialogPage")),
   page("Drawer", "Edge-docked sheet (Vaul)", () => import("./pages/DrawerPage")),
   page("Toast", "Transient messages (Sonner)", () => import("./pages/ToastPage")),
+  page("Chip", "Status, filter and stepper chips", () => import("./pages/ChipPage")),
+  page("Avatar", "Initials avatars with status", () => import("./pages/AvatarPage")),
 ];
