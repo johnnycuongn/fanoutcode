@@ -101,7 +101,10 @@ mod tests {
     #[test]
     fn hook_specs_cover_every_event_once() {
         let specs = hook_specs(&tid(), Path::new("/tmp/x"));
-        assert_eq!(specs.iter().map(|s| s.event.as_str()).collect::<Vec<_>>(), HOOK_EVENTS.to_vec());
+        assert_eq!(
+            specs.iter().map(|s| s.event.as_str()).collect::<Vec<_>>(),
+            HOOK_EVENTS.to_vec()
+        );
         assert!(specs.iter().all(|s| s.matcher.is_none() && s.timeout_s == Some(5)));
     }
 
