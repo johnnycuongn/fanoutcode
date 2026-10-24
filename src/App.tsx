@@ -4,6 +4,7 @@ import { lazy, Suspense, useEffect, useState, type ReactElement } from "react";
 import { UiProvider } from "@/components/ui";
 import { commands, type WindowInfo } from "@/lib/bindings";
 import { ShellLayout } from "@/features/shell";
+import { Onboarding, StartScreen } from "@/features/start-screen";
 
 // Dev builds only: `#/dev/primitives` shows the primitives gallery. The dead branch in production lets Rollup drop it.
 const PrimitivesGallery = import.meta.env.DEV ? lazy(() => import("./dev/primitives")) : null;
@@ -29,7 +30,8 @@ export default function App(): ReactElement {
 
 function Root(): ReactElement | null {
   const [info, setInfo] = useState<WindowInfo | null>(null);
-  const [firstRunPending, setFirstRunPending] = useState(false);
+  const [firstRunPending, setFirstRunPending] = useState<boolean | null>(null);
+  const recheck = () => void commands.settingsFirstRunPending().then(setFirstRunPending);
 
   useEffect(() => {
     let live = true;
@@ -46,12 +48,6 @@ function Root(): ReactElement | null {
 
   if (!info) return null;
   if (info.container) return <ShellLayout info={info} />;
-  return (
-    <main className="grid h-full place-items-center bg-page text-ink">
-      <div className="text-center">
-        <h1 className="text-lg font-semibold">{info.title}</h1>
-        <p className="text-mute">{firstRunPending ? "Onboarding pending." : "Start screen."}</p>
-      </div>
-    </main>
-  );
+  if (firstRunPending === null) return null;
+  return firstRunPending ? <Onboarding onDone={recheck} /> : <StartScreen />;
 }

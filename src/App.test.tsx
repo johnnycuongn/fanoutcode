@@ -1,8 +1,12 @@
 // @vitest-environment jsdom
 import { render, screen } from "@testing-library/react";
-import { beforeEach, expect, it, vi } from "vitest";
+import { expect, it, vi } from "vitest";
 vi.mock("@/lib/bindings", () => mockBindings());
 vi.mock("@/features/shell", () => ({ ShellLayout: () => <div data-testid="shell" /> }));
+vi.mock("@/features/start-screen", () => ({
+  StartScreen: () => <div data-testid="start" />,
+  Onboarding: () => <div data-testid="onboarding" />,
+}));
 import { mockBindings, commands } from "@/test/mockBindings";
 import App from "./App";
 
@@ -11,17 +15,23 @@ const windowInfo = (container: unknown) => ({
   data: { window_id: "w-2", title: "Acme", container, project_ids: container ? ["p-1"] : [] },
 });
 
-beforeEach(() => commands.settingsFirstRunPending.mockResolvedValue(true));
-
 it("shows the shell in a project window", async () => {
+  commands.settingsFirstRunPending.mockResolvedValue(false);
   commands.windowsCurrent.mockResolvedValue(windowInfo({ type: "Project", id: "p-1" }));
   render(<App />);
   expect(await screen.findByTestId("shell")).toBeInTheDocument();
 });
 
-it("shows this window's title and the first-run note on the start screen", async () => {
+it("shows onboarding on first run and the start screen after it", async () => {
   commands.windowsCurrent.mockResolvedValue(windowInfo(null));
+  commands.settingsFirstRunPending.mockResolvedValue(true);
   render(<App />);
-  expect(await screen.findByRole("heading", { name: "Acme" })).toBeTruthy();
-  expect(await screen.findByText("Onboarding pending.")).toBeTruthy();
+  expect(await screen.findByTestId("onboarding")).toBeInTheDocument();
+});
+
+it("shows the start screen once first run is complete", async () => {
+  commands.windowsCurrent.mockResolvedValue(windowInfo(null));
+  commands.settingsFirstRunPending.mockResolvedValue(false);
+  render(<App />);
+  expect(await screen.findByTestId("start")).toBeInTheDocument();
 });
