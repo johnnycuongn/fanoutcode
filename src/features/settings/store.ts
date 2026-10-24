@@ -125,3 +125,15 @@ export const TERMINAL_THEMES: Array<{ id: string; label: string; value: Terminal
 export function terminalThemeId(t: TerminalTheme): string {
   return t.type === "Named" ? t.palette : t.type;
 }
+
+export type SettingsTab = "app" | "project" | "workspace";
+export const settingsDialogStore = createStore<{ open: boolean; tab: SettingsTab }>({ open: false, tab: "app" });
+
+/** ⌘, and the palette's Open settings. */
+export function openSettings(tab: SettingsTab = "app"): void {
+  settingsDialogStore.set({ open: true, tab });
+}
+
+export function closeSettings(): void {
+  settingsDialogStore.set({ open: false });
+}

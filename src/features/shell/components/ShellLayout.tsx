@@ -5,6 +5,7 @@ import { commands, type TaskId, type WindowInfo } from "@/lib/bindings";
 import { projectsStore, selectProjectList } from "@/lib/stores/projectsStore";
 import * as boardModule from "@/features/board";
 import { Board, type OpenTarget } from "@/features/board";
+import { CommandPalette } from "@/features/palette";
 import { settingsStore } from "@/features/settings";
 import { Sidebar } from "@/features/sidebar";
 import { createView, openTaskInView, TaskPicker, ViewCanvas, viewsStore } from "@/features/views";
@@ -86,6 +87,7 @@ export function ShellLayout({ info: given }: { info?: WindowInfo }): ReactElemen
       </div>
       <AttentionStrip />
       <TaskPicker />
+      <CommandPalette />
     </div>
   );
 }
