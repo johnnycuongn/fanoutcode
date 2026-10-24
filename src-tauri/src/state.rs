@@ -4,10 +4,14 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
+use livespec_core::local::LocalServer;
+use livespec_core::project::BriefStore;
+use livespec_core::usage::UsageLedger;
 use rusqlite::Connection;
 use teamcode_core::changes::attributor::Attributor;
 use teamcode_core::changes::ChangeSet;
 use teamcode_core::domain::TaskId;
+use teamcode_core::helpers::HelperKind;
 use teamcode_core::hooks::attribution::Correlator;
 use teamcode_core::pipeline::TestRun;
 use teamcode_core::testrun::{LiveOutput, TestResult};
@@ -41,6 +45,15 @@ pub struct AppState {
     pub test_runs: Mutex<HashMap<TaskId, TestRunSlot>>,
     /// Each task's last finished run.
     pub last_tests: Mutex<HashMap<TaskId, TestResult>>,
+    /// LiveSpec's usage ledger, `<app_data>/usage.json`: every helper and notes call is metered here.
+    pub usage: Arc<UsageLedger>,
+    /// LiveSpec's project briefs, `<app_data>/briefs`.
+    pub briefs: BriefStore,
+    /// One helper run per task and kind; a new one aborts the old.
+    pub helper_runs: Mutex<HashMap<(TaskId, HelperKind), tauri::async_runtime::JoinHandle<()>>>,
+    /// The managed local model server, when the Local provider is used.
+    pub local_server: tokio::sync::Mutex<Option<LocalServer>>,
+    pub http: reqwest::Client,
 }
 
 impl AppState {
@@ -59,6 +72,11 @@ impl AppState {
             tailer: HooksTailer::default(),
             test_runs: Mutex::default(),
             last_tests: Mutex::default(),
+            usage: Arc::new(UsageLedger::new(data_dir.join("usage.json"))),
+            briefs: BriefStore::new(data_dir.join("briefs")),
+            helper_runs: Mutex::default(),
+            local_server: tokio::sync::Mutex::default(),
+            http: reqwest::Client::new(),
         })
     }
 

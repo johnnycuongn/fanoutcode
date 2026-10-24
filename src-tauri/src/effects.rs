@@ -29,7 +29,7 @@ pub fn dispatch(app: &AppHandle, state: &AppState, task: &Task, external: Vec<Ef
                 }
             }
             e @ Effect::RunTest => no_runner(&task, &e), // STUB(plan 05)
-            e @ Effect::RunHelper(_) => no_runner(&task, &e), // STUB(plan 05)
+            Effect::RunHelper(kind) => crate::helpers::run(app, &task.id, kind),
             // apply consumes the persistence effects; none reaches here
             e @ (Effect::SetStage(_) | Effect::SetState(_) | Effect::SetArchived(_) | Effect::WriteIndex(_)) => {
                 eprintln!(

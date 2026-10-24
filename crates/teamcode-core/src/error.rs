@@ -47,6 +47,21 @@ impl From<rusqlite::Error> for Error {
     }
 }
 
+/// livespec-core's errors keep their kind where Team Code has one; network and archive failures are provider and
+/// I/O failures.
+impl From<livespec_core::Error> for Error {
+    fn from(e: livespec_core::Error) -> Self {
+        match e {
+            livespec_core::Error::Precondition(m) => Error::Precondition(m),
+            livespec_core::Error::Provider(m) => Error::Provider(m),
+            livespec_core::Error::Io(e) => Error::Io(e.to_string()),
+            livespec_core::Error::Http(e) => Error::Provider(e.to_string()),
+            livespec_core::Error::Json(e) => Error::Invalid(e.to_string()),
+            livespec_core::Error::Archive(m) => Error::Io(m),
+        }
+    }
+}
+
 impl From<serde_json::Error> for Error {
     fn from(e: serde_json::Error) -> Self {
         Error::Invalid(e.to_string())

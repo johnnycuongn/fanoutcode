@@ -26,6 +26,8 @@ tauri-specta = { version = "=2.0.0-rc.21", features = ["derive", "typescript"] }
 specta = { version = "=2.0.0-rc.22", features = ["derive", "chrono", "serde_json"] }
 specta-typescript = "=0.0.9"
 notify = "8"
+livespec-core = { path = "../crates/livespec-core" }
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls-native-roots"] }
 keyring = { version = "=3.6.3", features = ["apple-native"] }
 tauri-plugin-notification = "2"
 

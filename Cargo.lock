@@ -4435,7 +4435,9 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "keyring",
+ "livespec-core",
  "notify",
+ "reqwest 0.12.28",
  "rusqlite",
  "serde",
  "serde_json",
@@ -4458,6 +4460,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "livespec-core",
+ "reqwest 0.12.28",
  "rusqlite",
  "serde",
  "serde_json",
