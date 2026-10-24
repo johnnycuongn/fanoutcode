@@ -4,6 +4,7 @@ import { Badge, cx, stageClasses, type StageToken } from "@/components/ui";
 import type { Project, Stage, Task } from "@/lib/bindings";
 import { columnDroppableId } from "../dnd";
 import { BoardCard } from "./BoardCard";
+import { EmptyColumn } from "./EmptyColumn";
 
 export type ColumnProps = {
   stage: Stage;
@@ -22,6 +23,7 @@ export const Column = memo(function Column({
   tasks,
   count,
   readOnly,
+  compactEmpty,
   showProject,
   projectsById,
 }: ColumnProps): ReactElement {
@@ -51,6 +53,7 @@ export const Column = memo(function Column({
         data-over={isOver}
         className="flex min-h-24 flex-1 flex-col gap-1.5 rounded-card data-[over=true]:bg-accent/10"
       >
+        {tasks.length === 0 && <EmptyColumn stage={stage} compact={compactEmpty} />}
         {tasks.map((task) => (
           <BoardCard
             key={task.id}

@@ -2,6 +2,7 @@ import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("../ipc");
+vi.mock("@/components/ui/EmptyStateLottie", () => ({ default: () => null })); // jsdom has no WebAssembly
 import { resetBoardStore } from "../store";
 import { makeProject, makeTask, needsYou, projectContainer } from "../testing/fixtures";
 import { mockIpc } from "../testing/mockIpc";
@@ -48,6 +49,7 @@ describe("Board", () => {
     expect(m.ipc.on).toHaveBeenCalledWith("task-changed", expect.any(Function));
   });
   it("keeps the column row wider than 1,200 px so narrower windows scroll horizontally", async () => {
+    m.ipc.tasksList.mockResolvedValue([makeTask({ id: "a" })]);
     mountUi(<Board {...props} />);
     expect(await screen.findByTestId("column-grid")).toHaveClass("min-w-[1200px]");
     expect(screen.getByTestId("column-scroller")).toHaveClass("overflow-x-auto");
@@ -64,6 +66,7 @@ describe("Board", () => {
     expect(within(screen.getByRole("region", { name: "Plan" })).getByTestId("column-count")).toHaveTextContent("1");
   });
   it("the filter button shows the active count and Clear resets it", async () => {
+    m.ipc.tasksList.mockResolvedValue([makeTask({ id: "a" })]);
     mountUi(<Board {...props} />);
     await userEvent.click(await screen.findByRole("button", { name: "Needs you" }));
     await userEvent.click(screen.getByRole("button", { name: /Filter/ }));
@@ -80,6 +83,7 @@ describe("Board", () => {
     expect(onOpenTask).toHaveBeenCalledWith("a", { kind: "current" });
   });
   it("unsubscribes from events on unmount", async () => {
+    m.ipc.tasksList.mockResolvedValue([makeTask({ id: "a" })]);
     const { unmount } = mountUi(<Board {...props} />);
     await screen.findByTestId("column-grid");
     unmount();

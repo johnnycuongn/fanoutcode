@@ -6,25 +6,35 @@ import { ipc } from "../ipc";
 import { all } from "../listen";
 import {
   boardStore,
+  type BoardState,
   configureBoard,
   loadBoard,
   selectColumns,
   selectMode,
   selectReadOnly,
+  selectTotalTaskCount,
+  selectVisibleTasks,
   startBoardEvents,
   useBoard,
 } from "../store";
-import { taskMap } from "../taskCache";
+import { taskMap, type TaskMap } from "../taskCache";
 import type { BoardProps } from "../types";
 import { useBoardDnd } from "../useBoardDnd";
 import { useBoardShortcuts } from "../useBoardShortcuts";
 import { BoardContext, type BoardCtx } from "./boardContext";
+import { BoardEmpty } from "./BoardEmpty";
 import { BoardHeader } from "./BoardHeader";
 import { CardOverlay } from "./BoardCard";
 import { ColumnGrid } from "./ColumnGrid";
 import { useConfirm } from "./ConfirmDialog";
 import { JiraKeyDialog } from "./JiraKeyDialog";
 import type { WindowInfo } from "@/lib/bindings";
+
+/** Nothing to show: no tasks at all, or the filters hide every one. Not before the first load finishes. */
+function selectEmptyVariant(s: BoardState, tasks: TaskMap): "no_tasks" | "filtered_out" | null {
+  if (!s.loaded || selectVisibleTasks(s, tasks).length > 0) return null;
+  return selectTotalTaskCount(s, tasks) === 0 && !s.filters.archived ? "no_tasks" : "filtered_out";
+}
 
 const containerKey = (c: BoardProps["container"]): string => `${c.type}:${c.id}`;
 
@@ -38,7 +48,6 @@ export function Board({
   onOpenTask,
   onNewTask,
 }: BoardProps): ReactElement {
-  void onNewTask; // used by the empty states (Task 13)
   const rootRef = useRef<HTMLDivElement>(null);
   const latest = useRef({ container, projects });
   const key = containerKey(container);
@@ -77,6 +86,7 @@ export function Board({
   const mode = useBoard(selectMode);
   const readOnly = useBoard(selectReadOnly);
   const columns = useBoard(selectColumns);
+  const emptyVariant = useBoard(selectEmptyVariant);
   const jiraTask = jiraTaskId ? taskMap()[jiraTaskId] : undefined;
   const overlayProject = dnd.activeTask ? boardStore.get().projects[dnd.activeTask.project_id] : undefined;
 
@@ -98,7 +108,11 @@ export function Board({
           className="flex h-full min-h-0 flex-col bg-page text-ink"
         >
           <BoardHeader />
-          <ColumnGrid lane="*" columns={columns} readOnly={readOnly} showProject={false} compactEmpty={false} />
+          {emptyVariant ? (
+            <BoardEmpty variant={emptyVariant} onNewTask={onNewTask} />
+          ) : (
+            <ColumnGrid lane="*" columns={columns} readOnly={readOnly} showProject={false} compactEmpty={false} />
+          )}
         </div>
         <DragOverlay dropAnimation={null}>
           {dnd.activeTask ? <CardOverlay task={dnd.activeTask} project={overlayProject} showProject={false} /> : null}
