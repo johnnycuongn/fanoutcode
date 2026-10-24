@@ -15,6 +15,7 @@ import { boardProject, shellStore } from "../store";
 import { useShellEvents } from "../useShellEvents";
 import { useShellKeys } from "../useShellKeys";
 import { AttentionStrip } from "./AttentionStrip";
+import { NotificationBridge } from "./NotificationBridge";
 import { ProjectRail } from "./ProjectRail";
 import { BOARD_PANEL_ID, TabStrip } from "./TabStrip";
 import { WindowChrome } from "./WindowChrome";
@@ -88,6 +89,7 @@ export function ShellLayout({ info: given }: { info?: WindowInfo }): ReactElemen
       <AttentionStrip />
       <TaskPicker />
       <CommandPalette />
+      <NotificationBridge />
     </div>
   );
 }

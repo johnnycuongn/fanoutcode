@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Every app window (labels w-<n>): core IPC, the file and folder pickers, setting its own title and Dock badge, reading its focus, closing and focusing itself. Windows are created in Rust only, so the webview never gets create-webview-window.",
+  "description": "Every app window (labels w-<n>): core IPC, the file and folder pickers, notifications, setting its own title and Dock badge, reading its focus, closing and focusing itself. Windows are created in Rust only, so the webview never gets create-webview-window.",
   "windows": ["w-*"],
   "permissions": [
     "core:default",
@@ -10,6 +10,7 @@
     "core:window:allow-close",
     "core:window:allow-set-focus",
     "core:window:allow-set-badge-count",
-    "core:window:allow-is-focused"
+    "core:window:allow-is-focused",
+    "notification:default"
   ]
 }
