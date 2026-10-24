@@ -4,6 +4,7 @@ pub mod db;
 pub mod domain;
 pub mod error;
 pub mod helpers;
+pub mod hooks;
 pub mod ids;
 pub mod memory;
 pub mod pipeline;
