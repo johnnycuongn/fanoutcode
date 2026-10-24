@@ -1,0 +1,2 @@
+{"agentId":"a1","type":"user","message":{"role":"user","content":"go"}}
+{"agentId":"a1","type":"assistant","message":{"role":"assistant","model":"claude-sonnet-5-5","content":[{"type":"tool_use","id":"toolu_01B","name":"Edit","input":{"file_path":"/Users/j/app/src/Board.tsx"}}]}}
