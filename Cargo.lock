@@ -3998,6 +3998,7 @@ dependencies = [
 name = "teamcode"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "keyring",
  "rusqlite",
  "serde",

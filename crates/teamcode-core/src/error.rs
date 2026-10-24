@@ -28,6 +28,13 @@ impl Serialize for Error {
     }
 }
 
+/// Exported to TypeScript as `string`, matching the serialised form.
+impl specta::Type for Error {
+    fn inline(type_map: &mut specta::TypeCollection, generics: specta::Generics) -> specta::DataType {
+        <String as specta::Type>::inline(type_map, generics)
+    }
+}
+
 impl From<std::io::Error> for Error {
     fn from(e: std::io::Error) -> Self {
         Error::Io(e.to_string())

@@ -2,8 +2,10 @@
 // `data-accent` on <html> before first paint, and mirrors the choice in localStorage so the first paint is right
 // before any IPC returns. Also the swatch class helpers (task and project colours).
 
-/** `domain::ThemePreference`'s serde form. */
-export type ThemePreference = "System" | "Light" | "Dark";
+import type { ThemePreference } from "@/lib/bindings";
+
+export type { ThemePreference } from "@/lib/bindings";
+
 /** The `data-theme` attribute values. */
 export type ResolvedTheme = "light" | "dark";
 export type AccentPreset = "blue" | "violet" | "teal" | "orange";

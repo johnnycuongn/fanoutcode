@@ -1,6 +1,7 @@
 //! Tauri shell: wires `teamcode-core` to the webview. Kept thin on purpose; logic that doesn't need Tauri lives in
 //! the core crate.
 
+pub mod commands;
 pub mod events;
 pub mod secrets;
 pub mod specta;

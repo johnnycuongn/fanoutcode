@@ -7,7 +7,10 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
-use crate::domain::{Container, ThemePreference, WorktreeConvention};
+use crate::domain::{
+    swatch_for, Container, LinkPolicy, MemoryLocation, Project, ProjectColor, ProjectId, ThemePreference, Workspace,
+    WorkspaceId, WorkspaceProject, WorktreeConvention,
+};
 use crate::{Error, Result};
 
 /// `(version, name, sql)`, ascending. Versions have gaps by design (the owning plan's number); each plan adds its
@@ -139,10 +142,124 @@ pub fn container_exists(conn: &Connection, container: &Container) -> Result<bool
     )?)
 }
 
+fn parse_time(s: &str) -> Result<chrono::DateTime<chrono::Utc>> {
+    chrono::DateTime::parse_from_rfc3339(s)
+        .map(|t| t.with_timezone(&chrono::Utc))
+        .map_err(|e| Error::Db(format!("Bad timestamp {s:?}: {e}")))
+}
+
+/// The project rooted at `root`, created on first open: named after the folder, given the next swatch colour,
+/// memory in app storage. The caller canonicalises `root`.
+pub fn find_or_create_project(conn: &Connection, root: &Path) -> Result<Project> {
+    if !root.is_dir() {
+        return Err(Error::Precondition(
+            "That folder no longer exists. Relocate or remove it.".into(),
+        ));
+    }
+    let root_str = root.to_string_lossy();
+    let existing = conn
+        .query_row(
+            "SELECT id, name, root, color, memory_location, created_at FROM projects WHERE root = ?1",
+            [root_str.as_ref()],
+            |r| {
+                Ok([
+                    r.get::<_, String>(0)?,
+                    r.get(1)?,
+                    r.get(2)?,
+                    r.get(3)?,
+                    r.get(4)?,
+                    r.get(5)?,
+                ])
+            },
+        )
+        .optional()?;
+    if let Some([id, name, root, color, memory_location, created_at]) = existing {
+        return Ok(Project {
+            id: ProjectId::parse(&id)?,
+            name,
+            root: root.into(),
+            color: ProjectColor(color),
+            memory_location: serde_json::from_str(&memory_location)?,
+            created_at: parse_time(&created_at)?,
+        });
+    }
+    let count: i64 = conn.query_row("SELECT count(*) FROM projects", [], |r| r.get(0))?;
+    let project = Project {
+        id: ProjectId::new(),
+        name: root
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| root_str.to_string()),
+        root: root.to_owned(),
+        color: ProjectColor(swatch_for(count as usize).to_owned()),
+        memory_location: MemoryLocation::AppStorage,
+        created_at: chrono::Utc::now(),
+    };
+    conn.execute(
+        "INSERT INTO projects (id, name, root, color, memory_location, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![
+            project.id.as_str(),
+            project.name,
+            root_str,
+            project.color.0,
+            serde_json::to_string(&project.memory_location)?,
+            project.created_at.to_rfc3339()
+        ],
+    )?;
+    Ok(project)
+}
+
+/// Upserts the workspace's `name` and `file_path`; its projects come from `workspace_projects` (Plan 10 fills them
+/// from the rest of the file).
+pub fn find_or_create_workspace(
+    conn: &Connection,
+    id: &WorkspaceId,
+    name: &str,
+    file_path: &Path,
+) -> Result<Workspace> {
+    conn.execute(
+        "INSERT INTO workspaces (id, name, file_path, updated_at) VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT (id) DO UPDATE SET name = excluded.name, file_path = excluded.file_path,
+             updated_at = excluded.updated_at",
+        params![
+            id.as_str(),
+            name,
+            file_path.to_string_lossy(),
+            chrono::Utc::now().to_rfc3339()
+        ],
+    )?;
+    let policy: String = conn.query_row("SELECT policy FROM workspaces WHERE id = ?1", [id.as_str()], |r| {
+        r.get(0)
+    })?;
+    let mut stmt = conn.prepare(
+        "SELECT project_id, \"order\", protected FROM workspace_projects WHERE workspace_id = ?1 ORDER BY \"order\"",
+    )?;
+    let rows = stmt.query_map([id.as_str()], |r| {
+        Ok((r.get::<_, String>(0)?, r.get::<_, u32>(1)?, r.get::<_, bool>(2)?))
+    })?;
+    let mut projects = Vec::new();
+    for row in rows {
+        let (project_id, order, protected) = row?;
+        projects.push(WorkspaceProject {
+            project_id: ProjectId::parse(&project_id)?,
+            order,
+            protected,
+        });
+    }
+    Ok(Workspace {
+        id: id.clone(),
+        name: name.to_owned(),
+        file_path: Some(file_path.to_owned()),
+        dirty: false,
+        projects,
+        policy: serde_json::from_value::<LinkPolicy>(serde_json::Value::String(policy))?,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{Container, ProjectId, ThemePreference, WorktreeConvention};
+    use crate::domain::{Container, ProjectId, ThemePreference, WorkspaceId, WorktreeConvention};
 
     const TABLES: [&str; 11] = [
         "projects",
@@ -264,5 +381,38 @@ mod tests {
             }
         )
         .unwrap());
+    }
+
+    #[test]
+    fn find_or_create_project_is_idempotent_by_root_and_rotates_colours() {
+        let conn = open_in_memory().unwrap();
+        let a = tempfile::tempdir().unwrap();
+        let b = tempfile::tempdir().unwrap();
+        let p1 = find_or_create_project(&conn, a.path()).unwrap();
+        let again = find_or_create_project(&conn, a.path()).unwrap();
+        assert_eq!(p1, again);
+        assert_eq!(p1.name, a.path().file_name().unwrap().to_string_lossy());
+        assert_eq!(p1.color.0, "rose");
+        assert_eq!(find_or_create_project(&conn, b.path()).unwrap().color.0, "orange");
+        assert!(matches!(
+            find_or_create_project(&conn, Path::new("/nonexistent/repo")),
+            Err(Error::Precondition(_))
+        ));
+        assert!(container_exists(&conn, &Container::Project { id: p1.id }).unwrap());
+    }
+
+    #[test]
+    fn find_or_create_workspace_upserts_name_and_path() {
+        let conn = open_in_memory().unwrap();
+        let id = WorkspaceId::parse("ws-1").unwrap();
+        let w = find_or_create_workspace(&conn, &id, "Acme", Path::new("/a/acme.teamcode-workspace.json")).unwrap();
+        let w2 = find_or_create_workspace(&conn, &id, "Acme 2", Path::new("/b/acme.teamcode-workspace.json")).unwrap();
+        assert_eq!(w.id, w2.id);
+        assert_eq!(w2.name, "Acme 2");
+        assert_eq!(
+            w2.file_path.as_deref(),
+            Some(Path::new("/b/acme.teamcode-workspace.json"))
+        );
+        assert!(container_exists(&conn, &Container::Workspace { id }).unwrap());
     }
 }

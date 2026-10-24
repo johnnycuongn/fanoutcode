@@ -6,7 +6,100 @@
 
 
 export const commands = {
-
+/**
+ * True until onboarding has been completed; a database that cannot be read counts as pending.
+ */
+async settingsFirstRunPending() : Promise<boolean> {
+    return await TAURI_INVOKE("settings_first_run_pending");
+},
+/**
+ * Records the two first-run answers and marks first run complete.
+ */
+async settingsFirstRunComplete(convention: WorktreeConvention, theme: ThemePreference) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("settings_first_run_complete", { convention, theme }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async windowsList() : Promise<WindowInfo[]> {
+    return await TAURI_INVOKE("windows_list");
+},
+/**
+ * The calling window's entry.
+ */
+async windowsCurrent() : Promise<Result<WindowInfo, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("windows_current") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async windowsFocus(windowId: WindowId) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("windows_focus", { windowId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Focuses the next window in open order; a no-op with one window.
+ */
+async windowsFocusNext() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("windows_focus_next") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Closes that window; its `CloseRequested` handler removes the registry entry and saves.
+ */
+async windowsClose(windowId: WindowId) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("windows_close", { windowId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Recent projects and workspaces, newest first; moved or deleted ones are marked `missing`.
+ */
+async windowsRecent() : Promise<Result<RecentEntry[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("windows_recent") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Opens the project at `path` in its own window (or focuses the window already showing it).
+ */
+async windowsOpenProject(path: string) : Promise<Result<WindowInfo, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("windows_open_project", { path }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Opens the workspace file at `path` in its own window (or focuses the window already showing it).
+ */
+async windowsOpenWorkspace(path: string) : Promise<Result<WindowInfo, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("windows_open_workspace", { path }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+}
 }
 
 /** user-defined events **/
@@ -64,6 +157,20 @@ export type NeedsYou = { container: Container; count: number }
 export type PaneId = string
 export type Priority = "None" | "Low" | "Medium" | "High"
 export type ProjectId = string
+export type RecentEntry = { kind: RecentKind; 
+/**
+ * A project or workspace id.
+ */
+id: string; name: string; 
+/**
+ * The project root or the workspace file.
+ */
+path: string; opened_at: string; 
+/**
+ * Computed by `list` at read time (the folder or file was deleted or moved); the stored value is ignored.
+ */
+missing?: boolean }
+export type RecentKind = "Project" | "Workspace"
 export type RepoBase = { repo_root: string; commit: string }
 export type SessionAttached = { session_id: SessionId; window_id: WindowId; pane_id: PaneId }
 export type SessionExited = { session_id: SessionId; code: number | null }
@@ -94,11 +201,20 @@ export type TaskColor = string
 export type TaskId = string
 export type TasksReloaded = { container: Container }
 export type TestFinished = { task_id: TaskId; code: number }
+/**
+ * The `theme` setting. `System` follows macOS; the webview resolves it (`src/lib/theme.ts`).
+ */
+export type ThemePreference = "System" | "Light" | "Dark"
 export type ViewsChanged = { container: Container }
 /**
  * `w-<n>`, as in LiveSpec; the Tauri window label.
  */
 export type WindowId = string
+/**
+ * One open window. `container: None` is the start screen (with `project_ids` empty); a project window lists its
+ * one project, a workspace window its projects in order.
+ */
+export type WindowInfo = { window_id: WindowId; title: string; container: Container | null; project_ids: ProjectId[] }
 export type Workspace = { id: WorkspaceId; name: string; file_path: string | null; dirty: boolean; projects: WorkspaceProject[]; policy: LinkPolicy }
 export type WorkspaceChanged = { workspace: Workspace }
 export type WorkspaceId = string
@@ -107,6 +223,7 @@ export type WorkspaceProject = { project_id: ProjectId; order: number; protected
  * Per task, resolved from the project default at creation.
  */
 export type WorktreeChoice = "Off" | "On"
+export type WorktreeConvention = "ClaudeCode" | "TeamCodeManaged"
 
 /** tauri-specta globals **/
 
