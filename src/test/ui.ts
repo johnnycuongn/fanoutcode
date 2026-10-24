@@ -1,5 +1,8 @@
 // Test helpers shared by the primitives' tests.
+import { render, type RenderResult } from "@testing-library/react";
 import userEvent, { type UserEvent } from "@testing-library/user-event";
+import { createElement, type ReactElement } from "react";
+import { UiProvider } from "@/components/ui/UiProvider";
 import { REDUCED_MOTION_QUERY } from "@/lib/motion";
 
 type Listener = (event: { matches: boolean }) => void;
@@ -35,4 +38,9 @@ export function mockMatchMedia(reduced: boolean): { set(reduced: boolean): void 
 
 export function setupUser(): UserEvent {
   return userEvent.setup({ pointerEventsCheck: 0 });
+}
+
+/** `render` inside the UiProvider (tooltips need it). */
+export function renderUi(ui: ReactElement): RenderResult {
+  return render(createElement(UiProvider, null, ui));
 }

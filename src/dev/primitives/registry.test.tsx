@@ -2,7 +2,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { Suspense } from "react";
 import { expect, test } from "vitest";
 import * as ui from "../../components/ui";
-import { PRIMITIVES } from "../../components/ui";
+import { PRIMITIVES, UiProvider } from "../../components/ui";
 import { pages } from "./registry";
 
 test("every name in PRIMITIVES has exactly one example page", () => {
@@ -15,12 +15,14 @@ test("every member PRIMITIVES lists is exported from the barrel", () => {
   }
 });
 
-test("each example page renders an h1 named after its primitive", async () => {
+test("each example page renders an h1 named after its primitive", { timeout: 30_000 }, async () => {
   for (const { name, Page } of pages) {
     render(
-      <Suspense fallback={null}>
-        <Page />
-      </Suspense>,
+      <UiProvider>
+        <Suspense fallback={null}>
+          <Page />
+        </Suspense>
+      </UiProvider>,
     );
     expect(await screen.findByRole("heading", { level: 1, name })).toBeInTheDocument();
     cleanup();

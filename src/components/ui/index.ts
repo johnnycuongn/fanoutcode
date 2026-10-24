@@ -24,7 +24,15 @@ export * from "./Checkbox";
 
 export * from "./Switch";
 
+export * from "./Popover";
+
+export * from "./Tooltip";
+
+export * from "./UiProvider";
+
 export const PRIMITIVES = {
+  Tooltip: ["Tooltip", "TooltipProvider"],
+  Popover: ["Popover", "PopoverTrigger", "PopoverContent", "PopoverAnchor", "PopoverClose"],
   Switch: ["Switch"],
   Checkbox: ["Checkbox"],
   Textarea: ["Textarea"],

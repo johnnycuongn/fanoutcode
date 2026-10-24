@@ -19,4 +19,6 @@ export const pages: ExamplePage[] = [
   page("Textarea", "Multi-line input that can grow", () => import("./pages/TextareaPage")),
   page("Checkbox", "Checkbox with indeterminate state", () => import("./pages/CheckboxPage")),
   page("Switch", "On/off switch", () => import("./pages/SwitchPage")),
+  page("Popover", "Anchored floating panel", () => import("./pages/PopoverPage")),
+  page("Tooltip", "Hint on hover and focus, with shortcut", () => import("./pages/TooltipPage")),
 ];
