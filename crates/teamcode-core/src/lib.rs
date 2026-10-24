@@ -5,6 +5,7 @@ pub mod domain;
 pub mod error;
 pub mod ids;
 pub mod memory;
+pub mod pipeline;
 pub mod recent;
 pub mod windows;
 
