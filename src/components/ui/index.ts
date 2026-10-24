@@ -32,7 +32,10 @@ export * from "./UiProvider";
 
 export * from "./Select";
 
+export * from "./Combobox";
+
 export const PRIMITIVES = {
+  Combobox: ["Combobox"],
   Select: [
     "Select",
     "SelectTrigger",

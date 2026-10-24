@@ -22,4 +22,5 @@ export const pages: ExamplePage[] = [
   page("Popover", "Anchored floating panel", () => import("./pages/PopoverPage")),
   page("Tooltip", "Hint on hover and focus, with shortcut", () => import("./pages/TooltipPage")),
   page("Select", "Single choice from a short list", () => import("./pages/SelectPage")),
+  page("Combobox", "Searchable single choice", () => import("./pages/ComboboxPage")),
 ];
