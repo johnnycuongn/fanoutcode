@@ -1,0 +1,192 @@
+//! Which working-tree files belong to the task (§9): files its agents edited (`PostToolUse` of `Edit`, `Write`,
+//! `MultiEdit`, `NotebookEdit`), files that appear in `git status` while one of its `Bash` calls runs, and files the
+//! developer pulled in by hand.
+
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::path::{Path, PathBuf};
+
+use chrono::Utc;
+use serde_json::Value;
+
+use super::{repo_for, AttributedFile, ChangeSource, MAIN_AGENT};
+use crate::git::{FileStatus, StatusEntry};
+use crate::hooks::{HookEvent, TaskEvent};
+
+/// A `git status` the attributor needs: before a `Bash` call (`Snapshot`) or after it (`Delta`), in every repo.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Probe {
+    Snapshot { window: u64 },
+    Delta { window: u64 },
+}
+
+/// One `Bash` call of one agent: the status per repo when it started.
+#[derive(Debug, Clone, Default)]
+struct Window {
+    agent: String,
+    before: HashMap<PathBuf, HashMap<String, FileStatus>>,
+    /// The call finished; the repos still owed a delta.
+    closing: Option<HashSet<PathBuf>>,
+}
+
+/// The edit tools whose `file_path` (`notebook_path`) is the file they wrote.
+const EDIT_TOOLS: [&str; 4] = ["Edit", "Write", "MultiEdit", "NotebookEdit"];
+
+#[derive(Debug, Clone, Default)]
+pub struct Attributor {
+    repos: Vec<PathBuf>,
+    files: Vec<AttributedFile>,
+    windows: BTreeMap<u64, Window>,
+    next_window: u64,
+}
+
+impl Attributor {
+    pub fn new(repos: Vec<PathBuf>) -> Self {
+        Self {
+            repos,
+            ..Self::default()
+        }
+    }
+
+    /// An attributor that already holds `files` (loaded from `task_files`).
+    pub fn with_files(repos: Vec<PathBuf>, files: Vec<AttributedFile>) -> Self {
+        Self {
+            files,
+            ..Self::new(repos)
+        }
+    }
+
+    pub fn repos(&self) -> &[PathBuf] {
+        &self.repos
+    }
+
+    fn add(&mut self, repo: &Path, path: &str, agent: &str, source: ChangeSource) -> Option<AttributedFile> {
+        if self
+            .files
+            .iter()
+            .any(|f| f.repo_root == repo && f.path == path && f.agent_id == agent)
+        {
+            return None;
+        }
+        let f = AttributedFile {
+            repo_root: repo.to_owned(),
+            path: path.to_owned(),
+            agent_id: agent.to_owned(),
+            source,
+            added_at: Utc::now(),
+        };
+        self.files.push(f.clone());
+        Some(f)
+    }
+
+    /// Edits attribute their file; a `Bash` call opens (`PreToolUse`) or closes (`PostToolUse`) a window and asks
+    /// for the matching probe.
+    pub fn on_event(&mut self, ev: &TaskEvent) -> Vec<Probe> {
+        let agent = ev.agent_id.clone().unwrap_or_else(|| MAIN_AGENT.to_owned());
+        match &ev.event {
+            HookEvent::PreToolUse { tool, .. } if tool == "Bash" => {
+                self.next_window += 1;
+                let window = self.next_window;
+                self.windows.insert(
+                    window,
+                    Window {
+                        agent,
+                        ..Window::default()
+                    },
+                );
+                vec![Probe::Snapshot { window }]
+            }
+            HookEvent::PostToolUse { tool, .. } if tool == "Bash" => {
+                let repos: HashSet<PathBuf> = self.repos.iter().cloned().collect();
+                let open = self
+                    .windows
+                    .iter_mut()
+                    .find(|(_, w)| w.agent == agent && w.closing.is_none());
+                match open {
+                    Some((&window, w)) => {
+                        w.closing = Some(repos);
+                        vec![Probe::Delta { window }]
+                    }
+                    None => Vec::new(),
+                }
+            }
+            HookEvent::PostToolUse { tool, input, .. } if EDIT_TOOLS.contains(&tool.as_str()) => {
+                let key = if tool == "NotebookEdit" {
+                    "notebook_path"
+                } else {
+                    "file_path"
+                };
+                let Some(abs) = input.get(key).and_then(Value::as_str) else {
+                    return Vec::new();
+                };
+                let abs = Path::new(abs);
+                if let Some(repo) = repo_for(abs, &self.repos).map(Path::to_owned) {
+                    if let Ok(rel) = abs.strip_prefix(&repo) {
+                        let rel = rel.to_string_lossy().into_owned();
+                        self.add(&repo, &rel, &agent, ChangeSource::Hook);
+                    }
+                }
+                Vec::new()
+            }
+            _ => Vec::new(),
+        }
+    }
+
+    /// A `git status` of `repo` for `window`. The first one is the window's snapshot; every later one (the delta,
+    /// or the git watcher while the call runs) attributes paths that are new or changed since, to the window's
+    /// agent. A closed window is dropped once every repo has had its delta.
+    pub fn on_status(&mut self, repo: &Path, window: u64, status: &[StatusEntry]) -> Vec<AttributedFile> {
+        let Some(w) = self.windows.get_mut(&window) else {
+            return Vec::new();
+        };
+        let now: HashMap<String, FileStatus> = status.iter().map(|e| (e.path.clone(), e.status)).collect();
+        let mut fresh: Vec<String> = match w.before.get(repo) {
+            Some(before) => now
+                .iter()
+                .filter(|(p, s)| before.get(*p) != Some(*s))
+                .map(|(p, _)| p.clone())
+                .collect(),
+            // the first status is the snapshot; a delta that never had one cannot attribute anything safely
+            None => {
+                w.before.insert(repo.to_owned(), now);
+                Vec::new()
+            }
+        };
+        fresh.sort();
+        let agent = w.agent.clone();
+        if let Some(pending) = w.closing.as_mut() {
+            pending.remove(repo);
+            if pending.is_empty() {
+                self.windows.remove(&window);
+            }
+        }
+        fresh
+            .into_iter()
+            .filter_map(|path| self.add(repo, &path, &agent, ChangeSource::BashWindow))
+            .collect()
+    }
+
+    /// The developer pulled a file from "Other changes" into the task's set.
+    pub fn include(&mut self, repo: &Path, path: &str) -> AttributedFile {
+        self.add(repo, path, MAIN_AGENT, ChangeSource::Manual)
+            .unwrap_or_else(|| AttributedFile {
+                repo_root: repo.to_owned(),
+                path: path.to_owned(),
+                agent_id: MAIN_AGENT.to_owned(),
+                source: ChangeSource::Manual,
+                added_at: Utc::now(),
+            })
+    }
+
+    pub fn files(&self) -> &[AttributedFile] {
+        &self.files
+    }
+
+    pub fn has_open_bash_windows(&self) -> bool {
+        !self.windows.is_empty()
+    }
+
+    /// The windows still waiting on a status, oldest first (the git watcher feeds them).
+    pub fn open_windows(&self) -> Vec<u64> {
+        self.windows.keys().copied().collect()
+    }
+}

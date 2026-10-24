@@ -24,6 +24,7 @@ pub mod views;
 pub const MIGRATIONS: &[(u32, &str, &str)] = &[
     (1, "initial", include_str!("../../migrations/0001_initial.sql")),
     (3, "core", include_str!("../../migrations/0003_core.sql")),
+    (5, "observation", include_str!("../../migrations/0005_observation.sql")),
 ];
 
 /// Opens (creating parent folders on first launch), enables WAL and foreign keys, then migrates.
@@ -343,9 +344,11 @@ mod tests {
     #[test]
     fn a_gap_in_versions_still_applies_the_later_file() {
         let mut conn = open_in_memory().unwrap();
-        let later = [(5u32, "later", "CREATE TABLE later (id INTEGER);")];
-        assert_eq!(apply(&mut conn, &later).unwrap(), 5);
-        assert_eq!(apply(&mut conn, &later).unwrap(), 5, "re-running applies nothing");
+        // two past the last real migration, so the gap is real whichever plans have landed
+        let v = MIGRATIONS.last().unwrap().0 + 2;
+        let later = [(v, "later", "CREATE TABLE later (id INTEGER);")];
+        assert_eq!(apply(&mut conn, &later).unwrap(), v);
+        assert_eq!(apply(&mut conn, &later).unwrap(), v, "re-running applies nothing");
         conn.query_row("SELECT count(*) FROM later", [], |r| r.get::<_, i64>(0))
             .unwrap();
     }
