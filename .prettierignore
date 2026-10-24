@@ -1,0 +1,8 @@
+src/lib/bindings.ts
+dist
+target
+docs
+crates/livespec-core
+package-lock.json
+src-tauri/gen
+.superpowers

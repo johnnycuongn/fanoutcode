@@ -98,12 +98,12 @@ error reaches TypeScript as `{ status: "error", error: string }`.
 
 ## Where to change things
 
-| To change | Edit |
-|---|---|
-| A shared type | `crates/teamcode-core/src/domain.rs`, then `npm run bindings` |
-| The schema | a new `crates/teamcode-core/migrations/00NN_<name>.sql` plus `db::MIGRATIONS` |
-| A command | `src-tauri/src/commands/<domain>.rs` and `src-tauri/src/specta.rs` |
-| An event | `src-tauri/src/events.rs` and `src-tauri/src/specta.rs` |
-| Colours, fonts, radii | `src/styles.css` |
-| Theme switching | `src/lib/theme.ts` |
-| A lint rule | `eslint/rules/` and `eslint.config.js` |
+| To change             | Edit                                                                          |
+| --------------------- | ----------------------------------------------------------------------------- |
+| A shared type         | `crates/teamcode-core/src/domain.rs`, then `npm run bindings`                 |
+| The schema            | a new `crates/teamcode-core/migrations/00NN_<name>.sql` plus `db::MIGRATIONS` |
+| A command             | `src-tauri/src/commands/<domain>.rs` and `src-tauri/src/specta.rs`            |
+| An event              | `src-tauri/src/events.rs` and `src-tauri/src/specta.rs`                       |
+| Colours, fonts, radii | `src/styles.css`                                                              |
+| Theme switching       | `src/lib/theme.ts`                                                            |
+| A lint rule           | `eslint/rules/` and `eslint.config.js`                                        |

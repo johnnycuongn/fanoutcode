@@ -38,7 +38,12 @@ export function createStore<T extends object>(initial: T): Store<T> {
     subscribe,
     use: () => useSyncExternalStore(subscribe, get, get),
     // `select` must return a stable value for unchanged input (no fresh objects or arrays), or every change re-renders.
-    useSelector: (select) => useSyncExternalStore(subscribe, () => select(state), () => select(state)),
+    useSelector: (select) =>
+      useSyncExternalStore(
+        subscribe,
+        () => select(state),
+        () => select(state),
+      ),
     reset: () => replace(initial),
   };
 }

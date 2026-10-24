@@ -3,7 +3,6 @@
 // before any IPC returns. Also the swatch class helpers (task and project colours).
 
 import type { ThemePreference } from "@/lib/bindings";
-
 export type { ThemePreference } from "@/lib/bindings";
 
 /** The `data-theme` attribute values. */
@@ -24,11 +23,7 @@ export function resolveTheme(pref: ThemePreference, prefersDark: boolean): Resol
 }
 
 export function systemPrefersDark(): boolean {
-  try {
-    return typeof matchMedia === "function" && matchMedia(DARK_QUERY).matches;
-  } catch {
-    return false;
-  }
+  return typeof matchMedia === "function" && matchMedia(DARK_QUERY).matches;
 }
 
 export function applyTheme(pref: ThemePreference, prefersDark = systemPrefersDark()): ResolvedTheme {
@@ -98,6 +93,7 @@ export function startThemeSync(): () => void {
 }
 
 /** Same order as `domain::SWATCHES`. */
+// prettier-ignore
 export const SWATCHES = ["rose", "orange", "yellow", "lime", "emerald", "cyan", "indigo", "violet", "fuchsia", "slate"] as const;
 export type Swatch = (typeof SWATCHES)[number];
 export type SwatchPart = "bg" | "text" | "edge";
