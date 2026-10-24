@@ -1,10 +1,12 @@
-//! First-run state (§4.4). Plan 03 adds the scoped settings commands here.
+//! Settings commands: first-run state (§4.4) and scoped settings (§6.8, §13).
 
 use tauri::State;
 use teamcode_core::db;
 use teamcode_core::domain::{ThemePreference, WorktreeConvention};
+use teamcode_core::settings::{self, ResolvedSettings, Scope};
 use teamcode_core::Result;
 
+use super::parse_scope;
 use crate::state::AppState;
 
 /// True until onboarding has been completed; a database that cannot be read counts as pending.
@@ -23,4 +25,23 @@ pub fn settings_first_run_complete(
     theme: ThemePreference,
 ) -> Result<()> {
     db::complete_first_run(&state.db.lock().expect("db lock"), convention, theme)
+}
+
+/// Every key resolved at `scope`, most specific layer winning.
+#[tauri::command]
+#[specta::specta]
+pub fn settings_get(state: State<'_, AppState>, scope: Scope) -> Result<ResolvedSettings> {
+    let scope = parse_scope(&scope)?;
+    let values = db::settings::load(&state.db.lock().expect("db lock"), &scope)?;
+    Ok(settings::resolve_all(&values, &scope))
+}
+
+/// Stores `value` for `key` at the scope's most specific layer; `null` removes that layer's override. An unknown
+/// key, a level the key does not allow, or a value of the wrong type is `Invalid` and nothing is stored.
+#[tauri::command]
+#[specta::specta]
+pub fn settings_set(state: State<'_, AppState>, scope: Scope, key: String, value: serde_json::Value) -> Result<()> {
+    let (kind, id) = parse_scope(&scope)?.most_specific();
+    settings::validate(&key, kind, &value)?;
+    db::settings::set(&state.db.lock().expect("db lock"), kind, &id, &key, &value)
 }

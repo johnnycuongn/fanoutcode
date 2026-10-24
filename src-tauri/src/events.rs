@@ -1,8 +1,12 @@
 //! The event catalogue: app-wide facts emitted to every window. Each struct's kebab-case name is the event name
 //! (`TaskChanged` → `task-changed`). Emit with `tauri_specta::Event::emit(&payload, &app)`. `team-event` is Plan 05's.
 
+use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
+use tauri::AppHandle;
+use teamcode_core::db;
 use teamcode_core::domain::{Container, PaneId, SessionId, Task, TaskId, WindowId, Workspace};
+use teamcode_core::{Error, Result};
 
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type, tauri_specta::Event)]
 pub struct TaskChanged {
@@ -57,4 +61,28 @@ pub struct GitChanges {
 pub struct TestFinished {
     pub task_id: TaskId,
     pub code: i32,
+}
+
+/// `task-changed` for `task`, then `needs-you` with the fresh count for its project and, when it has one, its
+/// workspace. Call it after the database lock is released by the caller's write (it takes `conn` only to count).
+pub fn emit_task_changed(app: &AppHandle, conn: &Connection, task: &Task) -> Result<()> {
+    emit(app, TaskChanged { task: task.clone() })?;
+    let mut containers = vec![Container::Project {
+        id: task.project_id.clone(),
+    }];
+    if let Some(id) = &task.workspace_id {
+        containers.push(Container::Workspace { id: id.clone() });
+    }
+    for container in containers {
+        let count = db::tasks::needs_you_count(conn, &container)?;
+        emit(app, NeedsYou { container, count })?;
+    }
+    Ok(())
+}
+
+/// Emits to every window; a failure is a shell problem, reported as `Provider`.
+pub fn emit<E: tauri_specta::Event + Serialize + Clone>(app: &AppHandle, event: E) -> Result<()> {
+    event
+        .emit(app)
+        .map_err(|e| Error::Provider(format!("Couldn't notify the windows: {e}")))
 }

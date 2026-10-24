@@ -23,6 +23,111 @@ async settingsFirstRunComplete(convention: WorktreeConvention, theme: ThemePrefe
     else return { status: "error", error: e  as any };
 }
 },
+/**
+ * Every key resolved at `scope`, most specific layer winning.
+ */
+async settingsGet(scope: Scope) : Promise<Result<ResolvedSettings, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("settings_get", { scope }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Stores `value` for `key` at the scope's most specific layer; `null` removes that layer's override. An unknown
+ * key, a level the key does not allow, or a value of the wrong type is `Invalid` and nothing is stored.
+ */
+async settingsSet(scope: Scope, key: string, value: JsonValue) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("settings_set", { scope, key, value }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * The project rooted at `path`, created on first open.
+ */
+async projectsOpen(path: string) : Promise<Result<Project, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("projects_open", { path }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async projectsList() : Promise<Result<Project[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("projects_list") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async projectsUpdate(id: ProjectId, patch: ProjectPatch) : Promise<Result<Project, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("projects_update", { id, patch }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Closes the window showing this project; the project record stays.
+ */
+async projectsClose(id: ProjectId) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("projects_close", { id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * The file's text; `None` when it or the task's folder is missing.
+ */
+async memoryRead(taskId: TaskId, file: string) : Promise<Result<string | null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("memory_read", { taskId, file }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Writes one of the task's files (never `index.md`) and tells every window, so open Memory tabs re-render.
+ */
+async memoryWrite(taskId: TaskId, file: string, contents: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("memory_write", { taskId, file, contents }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Asks for a folder and makes it the project's memory location; `None` when the picker is cancelled.
+ */
+async memoryPickLocation(projectId: ProjectId) : Promise<Result<string | null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("memory_pick_location", { projectId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * The container's tasks whose memory folder no longer exists; their cards show "memory missing".
+ */
+async memoryMissing(container: Container) : Promise<Result<TaskId[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("memory_missing", { container }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async windowsList() : Promise<WindowInfo[]> {
     return await TAURI_INVOKE("windows_list");
 },
@@ -135,13 +240,18 @@ workspaceChanged: "workspace-changed"
 
 /** user-defined types **/
 
+export type Accent = "Blue" | "Violet" | "Teal" | "Orange"
 export type AgentKind = "ClaudeCode" | "Codex" | "Shell"
 export type AgentState = { type: "Working" } | { type: "NeedsYou"; reason: HandbackReason } | { type: "Idle" }
+export type CanvasLayout = "AutoReflow" | "Pinned"
 /**
  * What a window, a view or a board shows.
  */
 export type Container = { type: "Project"; id: ProjectId } | { type: "Workspace"; id: WorkspaceId }
 export type CostUpdated = { task_id: TaskId }
+export type DetailLevel = "Simple" | "Medium" | "Detailed"
+export type DockPosition = "Bottom" | "Right"
+export type DrillInLens = "ByFile" | "EventStream"
 export type GitChanges = { task_id: TaskId }
 export type HandbackReason = 
 /**
@@ -152,11 +262,32 @@ export type HandbackReason =
  * Stop without a sentinel.
  */
 { type: "Replied"; first_line: string } | { type: "PermissionNeeded" } | { type: "TestFailed"; exit_code: number } | { type: "Error"; message: string }
+export type JsonValue = null | boolean | number | string | JsonValue[] | Partial<{ [key in string]: JsonValue }>
 export type LinkPolicy = "ReadAndModifyOnRequest" | "ReadOnly"
+export type LiveSpecLevel = "Off" | "Simple" | "Heavy"
+export type MemoryLocation = { type: "AppStorage" } | { type: "Folder"; path: string }
+/**
+ * LiveSpec's providers (`claude -p`, API, local); model tiers stay in LiveSpec's own config (A19).
+ */
+export type ModelProvider = "ClaudeCli" | "Api" | "Local"
 export type NeedsYou = { container: Container; count: number }
 export type PaneId = string
 export type Priority = "None" | "Low" | "Medium" | "High"
+export type Project = { id: ProjectId; name: string; root: string; color: ProjectColor; memory_location: MemoryLocation; created_at: string }
+/**
+ * A swatch token name from `SWATCHES`.
+ */
+export type ProjectColor = string
 export type ProjectId = string
+/**
+ * How a workspace window shows its projects in the sidebar.
+ */
+export type ProjectLayer = "MultiRoot" | "Rail"
+/**
+ * The fields `projects_update` may change; `None` leaves a field as it is. A new memory location applies to tasks
+ * created from now on; existing tasks keep their `memory_dir`.
+ */
+export type ProjectPatch = { name: string | null; color: ProjectColor | null; memory_location: MemoryLocation | null }
 export type RecentEntry = { kind: RecentKind; 
 /**
  * A project or workspace id.
@@ -172,6 +303,14 @@ path: string; opened_at: string;
 missing?: boolean }
 export type RecentKind = "Project" | "Workspace"
 export type RepoBase = { repo_root: string; commit: string }
+/**
+ * Every key resolved for one scope; fields are the key names as written (A16).
+ */
+export type ResolvedSettings = { theme: ThemePreference; accent: Accent; detail_level: DetailLevel; dock_position: DockPosition; team_view_arrangement: TeamArrangement; team_view_placement: TeamPlacement; team_canvas_layout: CanvasLayout; team_drill_in_lens: DrillInLens; workspace_project_layer: ProjectLayer; workspace_board: WorkspaceBoard; worktree: WorktreeChoice; worktree_convention: WorktreeConvention | null; worktrees_dir: string | null; may_commit: boolean; test_command: string | null; test_enabled: boolean; advance_on_green: boolean; livespec_level: LiveSpecLevel; agent_kind: AgentKind; model_provider: ModelProvider; cost_overview: boolean; terminal_font_family: string; terminal_font_size: number; terminal_ligatures: boolean; scrollback_lines: number; first_run_complete: boolean }
+/**
+ * The layers a setting is resolved through. The contract's `app` layer is implicit and always present.
+ */
+export type Scope = { workspace: WorkspaceId | null; project: ProjectId | null; task: TaskId | null }
 export type SessionAttached = { session_id: SessionId; window_id: WindowId; pane_id: PaneId }
 export type SessionExited = { session_id: SessionId; code: number | null }
 export type SessionId = string
@@ -200,6 +339,8 @@ export type TaskChanged = { task: Task }
 export type TaskColor = string
 export type TaskId = string
 export type TasksReloaded = { container: Container }
+export type TeamArrangement = "HubGraph" | "Flow"
+export type TeamPlacement = "DockGrows" | "Swap" | "OwnPane"
 export type TestFinished = { task_id: TaskId; code: number }
 /**
  * The `theme` setting. `System` follows macOS; the webview resolves it (`src/lib/theme.ts`).
@@ -216,6 +357,7 @@ export type WindowId = string
  */
 export type WindowInfo = { window_id: WindowId; title: string; container: Container | null; project_ids: ProjectId[] }
 export type Workspace = { id: WorkspaceId; name: string; file_path: string | null; dirty: boolean; projects: WorkspaceProject[]; policy: LinkPolicy }
+export type WorkspaceBoard = "Swimlanes" | "OneProject" | "Mixed"
 export type WorkspaceChanged = { workspace: Workspace }
 export type WorkspaceId = string
 export type WorkspaceProject = { project_id: ProjectId; order: number; protected: boolean }

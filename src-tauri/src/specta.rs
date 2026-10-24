@@ -7,7 +7,7 @@ use specta_typescript::{BigIntExportBehavior, Typescript};
 use tauri_specta::{collect_commands, collect_events, Builder};
 use teamcode_core::{Error, Result};
 
-use crate::commands::{settings, windows};
+use crate::commands::{memory, projects, settings, windows};
 use crate::events::{
     CostUpdated, GitChanges, NeedsYou, SessionAttached, SessionExited, TaskChanged, TasksReloaded, TestFinished,
     ViewsChanged, WorkspaceChanged,
@@ -23,6 +23,16 @@ pub fn builder() -> Builder<tauri::Wry> {
         .commands(collect_commands![
             settings::settings_first_run_pending,
             settings::settings_first_run_complete,
+            settings::settings_get,
+            settings::settings_set,
+            projects::projects_open,
+            projects::projects_list,
+            projects::projects_update,
+            projects::projects_close,
+            memory::memory_read,
+            memory::memory_write,
+            memory::memory_pick_location,
+            memory::memory_missing,
             windows::windows_list,
             windows::windows_current,
             windows::windows_focus,
@@ -88,6 +98,19 @@ mod tests {
         assert!(
             ts.contains("\"NeedsYou\"") && ts.contains("reason: HandbackReason"),
             "the A1 AgentState shape reaches TypeScript"
+        );
+        for command in [
+            "projectsOpen",
+            "settingsGet",
+            "settingsSet",
+            "memoryRead",
+            "memoryMissing",
+        ] {
+            assert!(ts.contains(&format!("async {command}(")), "{command}");
+        }
+        assert!(
+            ts.contains("export type ResolvedSettings = "),
+            "settings_get returns the resolved settings"
         );
         assert!(ts.contains("Do not edit"));
     }

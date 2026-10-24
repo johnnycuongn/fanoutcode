@@ -131,11 +131,15 @@ pub fn first_run_pending(conn: &Connection) -> Result<bool> {
     Ok(app_setting::<bool>(conn, "first_run_complete")? != Some(true))
 }
 
-/// Records the two first-run answers (§4.4) and marks first run complete.
+/// Records the two first-run answers (§4.4) and marks first run complete, through the settings rows.
 pub fn complete_first_run(conn: &Connection, convention: WorktreeConvention, theme: ThemePreference) -> Result<()> {
-    set_app_setting(conn, "worktree_convention", &convention)?;
-    set_app_setting(conn, "theme", &theme)?;
-    set_app_setting(conn, "first_run_complete", &true)
+    use crate::settings::ScopeKind::App;
+    let tx = conn.unchecked_transaction()?;
+    settings::set(&tx, App, "", "worktree_convention", &serde_json::to_value(convention)?)?;
+    settings::set(&tx, App, "", "theme", &serde_json::to_value(theme)?)?;
+    settings::set(&tx, App, "", "first_run_complete", &serde_json::Value::Bool(true))?;
+    tx.commit()?;
+    Ok(())
 }
 
 /// A `projects` or `workspaces` row with the container's id exists.

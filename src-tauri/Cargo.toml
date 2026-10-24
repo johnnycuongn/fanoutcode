@@ -23,7 +23,7 @@ tokio = { workspace = true }
 chrono = "0.4"
 rusqlite = { version = "0.32", features = ["bundled"] }
 tauri-specta = { version = "=2.0.0-rc.21", features = ["derive", "typescript"] }
-specta = { version = "=2.0.0-rc.22", features = ["derive", "chrono"] }
+specta = { version = "=2.0.0-rc.22", features = ["derive", "chrono", "serde_json"] }
 specta-typescript = "=0.0.9"
 keyring = { version = "=3.6.3", features = ["apple-native"] }
 

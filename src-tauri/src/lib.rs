@@ -2,6 +2,7 @@
 //! the core crate.
 
 pub mod commands;
+pub mod effects;
 pub mod events;
 pub mod secrets;
 pub mod specta;
