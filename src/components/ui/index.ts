@@ -42,7 +42,19 @@ export * from "./Menu";
 
 export * from "./ContextMenu";
 
+export * from "./Dialog";
+
 export const PRIMITIVES = {
+  Dialog: [
+    "Dialog",
+    "DialogTrigger",
+    "DialogContent",
+    "DialogHeader",
+    "DialogTitle",
+    "DialogDescription",
+    "DialogFooter",
+    "DialogClose",
+  ],
   ContextMenu: [
     "ContextMenu",
     "ContextMenuTrigger",

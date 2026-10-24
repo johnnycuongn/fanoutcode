@@ -27,4 +27,5 @@ export const pages: ExamplePage[] = [
   page("Tabs", "Underline, pill and bar tab sets", () => import("./pages/TabsPage")),
   page("Menu", "Dropdown menu with shortcuts and submenus", () => import("./pages/MenuPage")),
   page("ContextMenu", "Right-click menu", () => import("./pages/ContextMenuPage")),
+  page("Dialog", "Modal dialog", () => import("./pages/DialogPage")),
 ];
