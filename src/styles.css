@@ -1,0 +1,140 @@
+/* Team Code theme: the only file in the repository that may contain a hex colour.
+   Components use semantic classes (`bg-page text-ink border-line`, `bg-stage-plan`, `bg-swatch-violet`); the two
+   themes are switched by the `data-theme` attribute on <html>, which src/lib/theme.ts sets before first paint
+   (it resolves System from macOS), and `data-accent` picks an accent preset. Fonts are bundled (Fontsource),
+   never fetched: the app works offline and the CSP only allows 'self'. */
+
+@import "tailwindcss";
+@import "@fontsource-variable/inter/opsz.css";
+@import "@fontsource-variable/literata/opsz.css";
+@import "@fontsource-variable/jetbrains-mono";
+
+@theme {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Literata Variable", ui-serif, Georgia, serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --radius-card: 5px;
+  --radius-well: 6px;
+
+  /* Stage colours, shared by both themes (§11.1). */
+  --color-stage-spec: #7c5cff;
+  --color-stage-plan: #2f6fed;
+  --color-stage-build: #e8961e;
+  --color-stage-review: #e0457b;
+  --color-stage-test: #14b8a6;
+  --color-stage-commit: #1f9d55;
+  --color-stage-done: #8e8e93;
+
+  /* Task and project colours (domain::SWATCHES); none equals a stage colour. */
+  --color-swatch-rose: #e11d48;
+  --color-swatch-orange: #f97316;
+  --color-swatch-yellow: #eab308;
+  --color-swatch-lime: #84cc16;
+  --color-swatch-emerald: #10b981;
+  --color-swatch-cyan: #06b6d4;
+  --color-swatch-indigo: #6366f1;
+  --color-swatch-violet: #8b5cf6;
+  --color-swatch-fuchsia: #d946ef;
+  --color-swatch-slate: #64748b;
+}
+
+/* Semantic tokens: components say `bg-page text-ink border-line`; the theme is handled here once. */
+@theme inline {
+  --color-page: var(--tc-page);
+  --color-bar: var(--tc-bar);
+  --color-well: var(--tc-well);
+  --color-card: var(--tc-card);
+  --color-line: var(--tc-line);
+  --color-ink: var(--tc-ink);
+  --color-mute: var(--tc-mute);
+  --color-accent: var(--tc-accent);
+  --color-ok: var(--tc-ok);
+  --color-warn: var(--tc-warn);
+  --color-bad: var(--tc-bad);
+  --shadow-card: var(--tc-shadow-card);
+}
+
+/* Light, the default: Soft White Neutral. */
+:root,
+:root[data-theme="light"] {
+  color-scheme: light;
+  --tc-page: #f6f6f7;
+  --tc-bar: #f0f0f2;
+  --tc-well: #ededef;
+  --tc-card: #ffffff;
+  --tc-line: #e2e2e6;
+  --tc-ink: #18181b;
+  --tc-mute: #71717a;
+  --tc-accent: #3b6cff;
+  --tc-ok: #1f9d55;
+  --tc-warn: #d97706;
+  --tc-bad: #dc2626;
+  --tc-shadow-card: 0 1px 0 rgb(0 0 0 / 0.04);
+}
+
+/* Dark: Graphite. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --tc-page: #111318;
+  --tc-bar: #0d0f13;
+  --tc-well: #161920;
+  --tc-card: #1a1e26;
+  --tc-line: #262b35;
+  --tc-ink: #e7e9ee;
+  --tc-mute: #8a91a0;
+  --tc-accent: #5b8cff;
+  --tc-ok: #3ddc84;
+  --tc-warn: #f5a524;
+  --tc-bad: #f87171;
+  --tc-shadow-card: none;
+}
+
+/* Accent presets change the accent token only; blue is the default (no attribute). */
+:root[data-accent="violet"] {
+  --tc-accent: #7c5cff;
+}
+:root[data-accent="teal"] {
+  --tc-accent: #0f9f90;
+}
+:root[data-accent="orange"] {
+  --tc-accent: #ea7a1a;
+}
+:root[data-theme="dark"][data-accent="violet"] {
+  --tc-accent: #9b85ff;
+}
+:root[data-theme="dark"][data-accent="teal"] {
+  --tc-accent: #2dd4bf;
+}
+:root[data-theme="dark"][data-accent="orange"] {
+  --tc-accent: #fb923c;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    background: var(--color-page);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+}
+
+/* Reduced motion: springs become 150 ms eases and loops stop (§11.3). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-iteration-count: 1 !important;
+    transition-duration: 150ms !important;
+  }
+}
