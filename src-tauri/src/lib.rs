@@ -1,6 +1,7 @@
 //! Tauri shell: wires `teamcode-core` to the webview. Kept thin on purpose; logic that doesn't need Tauri lives in
 //! the core crate.
 
+pub mod secrets;
 pub mod state;
 pub mod windows;
 
@@ -36,7 +37,9 @@ pub fn run() {
                     None
                 });
                 let mut registry = state.windows.lock().expect("windows lock");
-                registry.restore(saved.unwrap_or_default(), |c| db::container_exists(&conn, c).unwrap_or(false))
+                registry.restore(saved.unwrap_or_default(), |c| {
+                    db::container_exists(&conn, c).unwrap_or(false)
+                })
             };
             // One window failing to build must not stop the rest; with none on screen the app would run
             // invisible, so then the last error ends the launch.
