@@ -19,10 +19,26 @@ function Group({ id, title, tasks }: { id: string; title: string; tasks: Task[] 
   );
 }
 
-export function TasksSection({ projectId }: { projectId?: ProjectId }): ReactElement {
+/** `grouped: false` (inside a workspace root) lists the same order without group headings. */
+export function TasksSection({
+  projectId,
+  grouped = true,
+}: {
+  projectId?: ProjectId;
+  grouped?: boolean;
+}): ReactElement {
   const all = tasksStore.useSelector(selectTaskList);
   const tasks = projectId ? all.filter((t) => t.project_id === projectId) : all;
   const g = tasksByState(tasks);
+  if (!grouped)
+    return (
+      <div className="flex flex-col">
+        <ViewsList projectId={projectId} />
+        {[...g.needsYou, ...g.running, ...g.idle].map((t) => (
+          <TaskRow key={t.id} task={t} />
+        ))}
+      </div>
+    );
   return (
     <div className="flex flex-col">
       <ViewsList projectId={projectId} />
