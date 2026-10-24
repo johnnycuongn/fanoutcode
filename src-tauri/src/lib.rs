@@ -4,6 +4,9 @@
 pub mod commands;
 pub mod effects;
 pub mod events;
+pub mod git_watcher;
+pub mod observation;
+pub mod observe;
 pub mod secrets;
 pub mod specta;
 pub mod state;
@@ -41,6 +44,7 @@ pub fn run() {
             if let Err(e) = teamcode_core::roster::install_shipped(&config_dir) {
                 eprintln!("Team Code: couldn't install the shipped agents: {e}");
             }
+            git_watcher::GitWatcher::start(app.handle());
             let state = app.state::<AppState>();
             let open = {
                 let conn = state.db.lock().expect("db lock");

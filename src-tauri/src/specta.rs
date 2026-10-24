@@ -7,7 +7,7 @@ use specta_typescript::{BigIntExportBehavior, Typescript};
 use tauri_specta::{collect_commands, collect_events, Builder};
 use teamcode_core::{Error, Result};
 
-use crate::commands::{memory, projects, settings, tasks, views, windows};
+use crate::commands::{git, memory, projects, settings, tasks, views, windows};
 use crate::events::{
     CostUpdated, GitChanges, NeedsYou, SessionAttached, SessionExited, TaskChanged, TasksReloaded, TestFinished,
     ViewsChanged, WorkspaceChanged,
@@ -61,6 +61,11 @@ pub fn builder() -> Builder<tauri::Wry> {
             windows::windows_recent,
             windows::windows_open_project,
             windows::windows_open_workspace,
+            git::git_changes,
+            git::git_diff,
+            git::git_file_read,
+            git::git_file_write,
+            git::git_include_other,
         ])
         .events(collect_events![
             TaskChanged,
@@ -129,6 +134,9 @@ mod tests {
             "settingsSet",
             "memoryRead",
             "memoryMissing",
+            "gitChanges",
+            "gitDiff",
+            "gitIncludeOther",
         ] {
             assert!(ts.contains(&format!("async {command}(")), "{command}");
         }

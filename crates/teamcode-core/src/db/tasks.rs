@@ -71,6 +71,13 @@ pub fn list(conn: &Connection, c: &Container) -> Result<Vec<Task>> {
     rows.map(|r| task_from_json(r?)).collect()
 }
 
+/// Every task in every project, archived included, oldest first (the watchers start from this at launch).
+pub fn list_all(conn: &Connection) -> Result<Vec<Task>> {
+    let mut stmt = conn.prepare("SELECT json FROM tasks ORDER BY created_at, id")?;
+    let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
+    rows.map(|r| task_from_json(r?)).collect()
+}
+
 /// Rewrites the whole row from `t` (including `updated_at`); `Invalid` for an unknown id.
 pub fn update(conn: &Connection, t: &Task) -> Result<()> {
     let n = conn.execute(

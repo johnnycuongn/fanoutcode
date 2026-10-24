@@ -373,6 +373,61 @@ async windowsOpenWorkspace(path: string) : Promise<Result<WindowInfo, string>> {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+/**
+ * The task's change set, rebuilt now.
+ */
+async gitChanges(taskId: TaskId) : Promise<Result<RepoChanges[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("git_changes", { taskId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Both sides of one file: `before` at the repo's base (empty when absent there), `after` the working tree.
+ */
+async gitDiff(taskId: TaskId, repo: string, path: string) : Promise<Result<FileDiff, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("git_diff", { taskId, repo, path }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * The working-tree file's text.
+ */
+async gitFileRead(taskId: TaskId, repo: string, path: string) : Promise<Result<string, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("git_file_read", { taskId, repo, path }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Saves the working-tree side from the diff editor (atomic); the watcher recomputes the diff.
+ */
+async gitFileWrite(taskId: TaskId, repo: string, path: string, contents: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("git_file_write", { taskId, repo, path, contents }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Pulls a file from "Other changes" into the task's set.
+ */
+async gitIncludeOther(taskId: TaskId, repo: string, path: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("git_include_other", { taskId, repo, path }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
@@ -422,6 +477,15 @@ export type AgentState = { type: "Working" } | { type: "NeedsYou"; reason: Handb
 export type Branch = "First" | "Second"
 export type CanvasLayout = "AutoReflow" | "Pinned"
 /**
+ * Why a file is in the task's set. `Worktree` also marks the "Other changes", which are only seen in the tree.
+ */
+export type ChangeSource = "Worktree" | "Hook" | "BashWindow" | "Manual"
+export type ChangedFile = { path: string; status: FileStatus; added: number; removed: number; binary: boolean; 
+/**
+ * Distinct agents that touched it, first seen first.
+ */
+owners: string[]; shared: boolean; source: ChangeSource }
+/**
  * What a window, a view or a board shows.
  */
 export type Container = { type: "Project"; id: ProjectId } | { type: "Workspace"; id: WorkspaceId }
@@ -429,6 +493,11 @@ export type CostUpdated = { task_id: TaskId }
 export type DetailLevel = "Simple" | "Medium" | "Detailed"
 export type DockPosition = "Bottom" | "Right"
 export type DrillInLens = "ByFile" | "EventStream"
+/**
+ * Both sides of one file for the diff editor; `before` is the base version (empty when absent there).
+ */
+export type FileDiff = { repo_root: string; path: string; status: FileStatus; before: string; after: string; binary: boolean }
+export type FileStatus = "Added" | "Modified" | "Deleted" | "Renamed" | "Untracked"
 export type GitChanges = { task_id: TaskId }
 export type HandbackReason = 
 /**
@@ -486,6 +555,10 @@ path: string; opened_at: string;
 missing?: boolean }
 export type RecentKind = "Project" | "Workspace"
 export type RepoBase = { repo_root: string; commit: string }
+/**
+ * One repo's part: the task's `files` and the unattributed `other` changes.
+ */
+export type RepoChanges = { repo_root: string; base: string | null; files: ChangedFile[]; other: ChangedFile[] }
 /**
  * Every key resolved for one scope; fields are the key names as written (A16).
  */

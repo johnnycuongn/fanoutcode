@@ -1,7 +1,10 @@
 //! The task's change set (§9), grouped by repo: the task's own files and the "Other changes" beside them.
 
 pub mod attributor;
+pub mod repos;
 pub mod store;
+
+pub use repos::{done_paths, repos_of};
 
 use std::path::{Component, Path, PathBuf};
 

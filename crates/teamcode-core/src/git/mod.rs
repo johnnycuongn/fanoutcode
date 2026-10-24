@@ -210,6 +210,65 @@ pub fn effective_base(task: &crate::domain::Task, repo_root: &Path, head: &str) 
     Some(head.to_owned())
 }
 
+/// True when none of `task_files` is still pending in the working tree or index: each is committed or was undone,
+/// so nothing is left for the developer to commit. An empty list is true. The base plays no part.
+pub async fn commit_done(repo: &Path, task_files: &[String]) -> Result<bool> {
+    if task_files.is_empty() {
+        return Ok(true);
+    }
+    Ok(!status(repo)
+        .await?
+        .iter()
+        .any(|e| task_files.contains(&e.path) || e.orig_path.as_ref().is_some_and(|o| task_files.contains(o))))
+}
+
+/// What a file-system event in a watched repo means for the task.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WatchHit {
+    /// Nothing that changes the task's diff (git objects, lock files).
+    None,
+    /// The tree, the index or a ref: recompute the change set.
+    Tree,
+    /// Only the task's memory folder inside the repo changed (the spec watcher's own write, Review Focus 4).
+    MemoryOnly,
+}
+
+/// A path inside a git directory: `HEAD`, `index` and `refs/**` are `Tree` so commits are noticed; objects, lock
+/// files and the rest are `None`.
+pub fn git_dir_hit(changed: &Path, git_dir: &Path) -> WatchHit {
+    let Ok(rel) = changed.strip_prefix(git_dir) else {
+        return WatchHit::None;
+    };
+    if changed.extension().is_some_and(|e| e == "lock") || rel.starts_with("objects") {
+        return WatchHit::None;
+    }
+    if rel == Path::new("HEAD")
+        || rel == Path::new("index")
+        || rel.starts_with("refs")
+        || rel == Path::new("packed-refs")
+    {
+        WatchHit::Tree
+    } else {
+        WatchHit::None
+    }
+}
+
+/// Classifies a changed path of `repo`: inside `.git` by `git_dir_hit`, under `memory_dir` `MemoryOnly`, any other
+/// path in the repo `Tree`, a path outside it `None`. (`*.lock` is ignored only inside `.git`: `Cargo.lock` is a
+/// real change.)
+pub fn watch_filter(changed: &Path, repo: &Path, memory_dir: &Path) -> WatchHit {
+    let git_dir = repo.join(".git");
+    if changed.starts_with(&git_dir) {
+        git_dir_hit(changed, &git_dir)
+    } else if changed.starts_with(memory_dir) {
+        WatchHit::MemoryOnly
+    } else if changed.starts_with(repo) {
+        WatchHit::Tree
+    } else {
+        WatchHit::None
+    }
+}
+
 #[cfg(test)]
 pub mod test_support;
 
@@ -323,5 +382,60 @@ mod tests {
             effective_base(&t, Path::new("/repo/.worktrees/x"), "bbb").as_deref(),
             Some("aaa")
         );
+    }
+
+    #[tokio::test]
+    async fn commit_done_needs_every_task_file_committed() {
+        let r = temp_repo();
+        write(&r, "a.rs", "1");
+        write(&r, "b.rs", "2");
+        run(r.path(), &["add", "a.rs"]).await.unwrap();
+        run(r.path(), &["commit", "-qm", "a"]).await.unwrap();
+        assert!(!commit_done(r.path(), &["a.rs".into(), "b.rs".into()]).await.unwrap());
+        run(r.path(), &["add", "b.rs"]).await.unwrap();
+        run(r.path(), &["commit", "-qm", "b"]).await.unwrap();
+        assert!(commit_done(r.path(), &["a.rs".into(), "b.rs".into()]).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn commit_done_is_false_while_a_task_file_is_dirty() {
+        let r = temp_repo();
+        write(&r, "a.rs", "1");
+        commit_all(r.path(), "a");
+        write(&r, "a.rs", "2");
+        assert!(!commit_done(r.path(), &["a.rs".into()]).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn a_set_whose_edits_were_reverted_counts_as_clean() {
+        let r = temp_repo();
+        write(&r, "a.rs", "1");
+        commit_all(r.path(), "a");
+        write(&r, "a.rs", "2");
+        write(&r, "a.rs", "1");
+        assert!(commit_done(r.path(), &["a.rs".into()]).await.unwrap());
+        assert!(commit_done(r.path(), &[]).await.unwrap());
+    }
+
+    #[test]
+    fn watch_filter_classifies_paths() {
+        let (repo, mem) = (Path::new("/repo"), Path::new("/repo/docs/tasks/2026-10-24-x"));
+        assert_eq!(
+            watch_filter(Path::new("/repo/.git/objects/ab/cd"), repo, mem),
+            WatchHit::None
+        );
+        assert_eq!(
+            watch_filter(Path::new("/repo/.git/index.lock"), repo, mem),
+            WatchHit::None
+        );
+        assert_eq!(
+            watch_filter(Path::new("/repo/.git/refs/heads/main"), repo, mem),
+            WatchHit::Tree
+        );
+        assert_eq!(
+            watch_filter(Path::new("/repo/docs/tasks/2026-10-24-x/spec.md"), repo, mem),
+            WatchHit::MemoryOnly
+        );
+        assert_eq!(watch_filter(Path::new("/repo/src/a.rs"), repo, mem), WatchHit::Tree);
     }
 }

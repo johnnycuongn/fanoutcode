@@ -28,7 +28,10 @@ fn project_of(conn: &rusqlite::Connection, task: &Task) -> Result<Project> {
 /// Dispatches, notifies, and returns the outcome. Called with no lock held.
 fn finish(app: &AppHandle, state: &AppState, task: Task, external: Vec<Effect>) -> Result<ActionOutcome> {
     let toasts = effects::dispatch(app, state, &task, external);
-    events::emit_task_changed(app, &state.db.lock().expect("db lock"), &task)?;
+    // a runner may have changed the task (its worktree), so the row is the truth
+    let conn = state.db.lock().expect("db lock");
+    let task = db::tasks::get(&conn, &task.id)?.unwrap_or(task);
+    events::emit_task_changed(app, &conn, &task)?;
     Ok(ActionOutcome { task, toasts })
 }
 
@@ -65,6 +68,16 @@ fn run(
         )?
     };
     finish(app, state, applied.task, applied.external)
+}
+
+/// A stage action the app itself takes (Done detection, a test result): `tasks_action` without the webview. The
+/// toasts have no window to go to, so they are logged.
+pub(crate) fn run_action(app: &AppHandle, state: &AppState, id: &TaskId, action: StageAction) -> Result<Task> {
+    let outcome = run(app, state, id, |task, tctx| pipeline::transition(task, action, tctx))?;
+    for t in &outcome.toasts {
+        eprintln!("Team Code: {} ({})", t, outcome.task.id);
+    }
+    Ok(outcome.task)
 }
 
 /// Persists an edited task (no stage change) and rewrites its `index.md`.

@@ -152,6 +152,56 @@ pub fn can_change_flag(task: &Task) -> Result<()> {
     Ok(())
 }
 
+/// The convention and worktrees dir for `task` rooted at `root`: settings `worktree_convention` (unset:
+/// Team Code-managed) through `convention_for`, and `worktrees_dir` (unset: `<root>/.worktrees`; relative: under
+/// the root). Plan 04's launch and the `CreateWorktree` runner both read them here.
+pub fn settings_for(conn: &rusqlite::Connection, task: &Task, root: &Path) -> Result<(WorktreeConvention, PathBuf)> {
+    use crate::settings::{keys, resolve};
+    let scope = crate::pipeline::ctx::task_scope(task);
+    let values = crate::db::settings::load(conn, &scope)?;
+    let setting = resolve::<keys::WorktreeConvention>(&values, &scope).unwrap_or(WorktreeConvention::TeamCodeManaged);
+    let dir = match resolve::<keys::WorktreesDir>(&values, &scope) {
+        Some(d) if !d.trim().is_empty() => root.join(d.trim()),
+        _ => default_worktrees_dir(root),
+    };
+    Ok((convention_for(task.agent_kind, setting), dir))
+}
+
+/// The `CreateWorktree` effect: the worktree path and branch the task records. Managed: `git worktree add` now
+/// (blocking, reusing an existing `tc/<slug>` branch); Claude Code's own: only its path, since `claude --worktree`
+/// creates it at launch.
+pub fn prepare(
+    task: &Task,
+    root: &Path,
+    convention: WorktreeConvention,
+    worktrees_dir: &Path,
+) -> Result<(PathBuf, Option<String>)> {
+    let slug = slug_of(task);
+    match convention {
+        WorktreeConvention::ClaudeCode => Ok((claude_code_path(root, &slug), None)),
+        WorktreeConvention::TeamCodeManaged => {
+            let path = managed_path(worktrees_dir, &slug);
+            let branch = branch_for(&slug);
+            if !path.exists() {
+                if let Some(parent) = path.parent() {
+                    std::fs::create_dir_all(parent)?;
+                }
+                let c = ManagedCreate {
+                    repo_root: root.to_owned(),
+                    path: path.clone(),
+                    branch: branch.clone(),
+                };
+                // the shell runs effects outside any async runtime, so a short-lived one is fine here
+                tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()?
+                    .block_on(create_managed(&c))?;
+            }
+            Ok((path, Some(branch)))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -284,6 +334,56 @@ mod tests {
         t.primary_session = Some(SessionId::parse("s-1").unwrap());
         assert!(
             matches!(can_change_flag(&t), Err(Error::Precondition(m)) if m == "The worktree setting is fixed once a session has started. Use Start fresh session to change it.")
+        );
+    }
+
+    #[test]
+    fn worktree_settings_default_to_managed_under_dot_worktrees() {
+        let c = crate::test_support::test_conn();
+        crate::test_support::insert_project(&c, "p-1a-1");
+        let t = crate::test_support::insert_task(&c, "t-1a-1", "p-1a-1");
+        let (conv, dir) = settings_for(&c, &t, Path::new("/repo")).unwrap();
+        assert_eq!(
+            (conv, dir),
+            (WorktreeConvention::TeamCodeManaged, PathBuf::from("/repo/.worktrees"))
+        );
+        crate::db::settings::set(
+            &c,
+            crate::settings::ScopeKind::Project,
+            "p-1a-1",
+            "worktrees_dir",
+            &serde_json::json!("wt"),
+        )
+        .unwrap();
+        crate::db::settings::set(
+            &c,
+            crate::settings::ScopeKind::App,
+            "",
+            "worktree_convention",
+            &serde_json::json!("ClaudeCode"),
+        )
+        .unwrap();
+        assert_eq!(
+            settings_for(&c, &t, Path::new("/repo")).unwrap(),
+            (WorktreeConvention::ClaudeCode, PathBuf::from("/repo/wt"))
+        );
+    }
+
+    #[test]
+    fn prepare_creates_a_managed_worktree_and_names_claude_codes() {
+        let r = temp_repo();
+        let wt = tempfile::tempdir().unwrap();
+        let t = task_named("2026-10-24-board-swimlanes", WorktreeChoice::On);
+        let (path, branch) = prepare(&t, r.path(), WorktreeConvention::TeamCodeManaged, wt.path()).unwrap();
+        assert_eq!(
+            (path.clone(), branch.as_deref()),
+            (wt.path().join("board-swimlanes"), Some("tc/board-swimlanes"))
+        );
+        assert!(path.join(".git").exists());
+        let (path, branch) = prepare(&t, r.path(), WorktreeConvention::ClaudeCode, wt.path()).unwrap();
+        assert_eq!(
+            (path, branch),
+            (r.path().join(".claude/worktrees/board-swimlanes"), None)
         );
     }
 }

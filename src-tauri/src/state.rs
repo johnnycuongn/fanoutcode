@@ -1,13 +1,18 @@
 //! `AppState`: what every window shares. Every lock is `std` and is never held across `.await`.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use rusqlite::Connection;
+use teamcode_core::changes::attributor::Attributor;
+use teamcode_core::changes::ChangeSet;
 use teamcode_core::domain::TaskId;
 use teamcode_core::pipeline::TestRun;
 use teamcode_core::windows::WindowRegistry;
 use teamcode_core::{db, Result};
+
+use crate::git_watcher::GitWatcher;
 
 pub struct AppState {
     /// `<app_data>/teamcode.db`, migrated at open.
@@ -16,6 +21,11 @@ pub struct AppState {
     pub windows: Mutex<WindowRegistry>,
     pub data_dir: PathBuf,
     pub config_dir: PathBuf,
+    /// Each task's change-set attributions (Plan 05), loaded from `task_files` on first use.
+    pub attributors: Mutex<HashMap<TaskId, Attributor>>,
+    /// Each task's last built change set (the board's `+/-` and Done detection read it).
+    pub change_sets: Mutex<HashMap<TaskId, ChangeSet>>,
+    pub git_watcher: GitWatcher,
 }
 
 impl AppState {
@@ -26,6 +36,9 @@ impl AppState {
             windows: Mutex::new(WindowRegistry::new()),
             data_dir: data_dir.to_owned(),
             config_dir: config_dir.to_owned(),
+            attributors: Mutex::default(),
+            change_sets: Mutex::default(),
+            git_watcher: GitWatcher::default(),
         })
     }
 
