@@ -7,6 +7,9 @@ import tailwindcss from "@tailwindcss/vite";
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
+  // dotLottie files are fetched at run time, and the CSP (`default-src 'self'`) blocks a fetch of a data: URL, so they
+  // are never inlined however small they are.
+  build: { assetsInlineLimit: (file) => (file.endsWith(".lottie") ? false : undefined) },
   clearScreen: false,
   server: { port: 1420, strictPort: true, watch: { ignored: ["**/src-tauri/**", "**/crates/**"] } },
 });
