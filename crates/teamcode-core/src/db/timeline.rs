@@ -13,6 +13,7 @@ pub fn append(conn: &Connection, task: &TaskId, e: &IndexEntry) -> Result<()> {
     let detail = match &e.kind {
         TimelineKind::Handback { chip } => Some(json!({ "chip": chip })),
         TimelineKind::Commit { repo, sha } => Some(json!({ "repo": repo, "sha": sha })),
+        TimelineKind::Spec { reason } => Some(json!({ "reason": reason })),
         _ => None,
     };
     conn.execute(
@@ -46,6 +47,9 @@ fn entry(at: String, kind: String, stage: Option<String>, detail: Option<String>
         "commit" => TimelineKind::Commit {
             repo: field("repo")?,
             sha: field("sha")?,
+        },
+        "spec" => TimelineKind::Spec {
+            reason: field("reason")?,
         },
         word => TimelineKind::unit_from_word(word).ok_or_else(bad)?,
     };
@@ -131,5 +135,27 @@ mod tests {
                 sha: "abc".into()
             }
         );
+    }
+
+    #[test]
+    fn spec_watcher_entries_keep_their_reason() {
+        let c = test_conn();
+        insert_project(&c, "p-1a-1");
+        let t = task_fixture("t-1a-1", "p-1a-1");
+        crate::db::tasks::insert(&c, &t).unwrap();
+        let kind = TimelineKind::Spec {
+            reason: "rows collapse".into(),
+        };
+        append(
+            &c,
+            &t.id,
+            &IndexEntry {
+                at: Utc::now(),
+                stage: Stage::Review,
+                kind: kind.clone(),
+            },
+        )
+        .unwrap();
+        assert_eq!(list(&c, &t.id).unwrap()[0].kind, kind);
     }
 }

@@ -495,6 +495,7 @@ gitChanges: GitChanges,
 needsYou: NeedsYou,
 sessionAttached: SessionAttached,
 sessionExited: SessionExited,
+specWatcher: SpecWatcher,
 taskChanged: TaskChanged,
 tasksReloaded: TasksReloaded,
 teamEvent: TeamEvent,
@@ -507,6 +508,7 @@ gitChanges: "git-changes",
 needsYou: "needs-you",
 sessionAttached: "session-attached",
 sessionExited: "session-exited",
+specWatcher: "spec-watcher",
 taskChanged: "task-changed",
 tasksReloaded: "tasks-reloaded",
 teamEvent: "team-event",
@@ -652,6 +654,10 @@ export type Scope = { workspace: WorkspaceId | null; project: ProjectId | null; 
 export type SessionAttached = { session_id: SessionId; window_id: WindowId; pane_id: PaneId }
 export type SessionExited = { session_id: SessionId; code: number | null }
 export type SessionId = string
+/**
+ * The spec watcher rewrote `spec.md` (A15), once per applied change.
+ */
+export type SpecWatcher = { task_id: TaskId; at: string; reason: string }
 /**
  * `Horizontal` is side by side (⌘D), `Vertical` is stacked (⌘⇧D) (A5).
  */

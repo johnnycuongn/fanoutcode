@@ -58,6 +58,14 @@ pub struct GitChanges {
     pub task_id: TaskId,
 }
 
+/// The spec watcher rewrote `spec.md` (A15), once per applied change.
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type, tauri_specta::Event)]
+pub struct SpecWatcher {
+    pub task_id: TaskId,
+    pub at: chrono::DateTime<chrono::Utc>,
+    pub reason: String,
+}
+
 /// Every parsed hook event except `StatusLine` (Plan 05's tailer).
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type, tauri_specta::Event)]
 pub struct TeamEvent {

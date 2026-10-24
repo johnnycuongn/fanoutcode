@@ -95,8 +95,17 @@ pub enum TimelineKind {
     Entered,
     Exited,
     Skipped,
-    Handback { chip: String },
-    Commit { repo: String, sha: String },
+    Handback {
+        chip: String,
+    },
+    Commit {
+        repo: String,
+        sha: String,
+    },
+    /// The spec watcher rewrote `spec.md` (Plan 05): `· spec: <reason>`.
+    Spec {
+        reason: String,
+    },
     Archived,
     Restored,
 }
@@ -111,6 +120,7 @@ impl TimelineKind {
             TimelineKind::Skipped => "skipped",
             TimelineKind::Handback { .. } => "handback",
             TimelineKind::Commit { .. } => "commit",
+            TimelineKind::Spec { .. } => "spec",
             TimelineKind::Archived => "archived",
             TimelineKind::Restored => "restored",
         }
@@ -218,6 +228,7 @@ pub fn render_entry(e: &IndexEntry) -> String {
     let kind = match &e.kind {
         TimelineKind::Handback { chip } => format!("handback: {chip}"),
         TimelineKind::Commit { repo, sha } => format!("commit: {repo} {sha}"),
+        TimelineKind::Spec { reason } => format!("spec: {reason}"),
         other => other.word().to_owned(),
     };
     format!("- {} · {} · {kind}", e.at.format(MINUTE_FORMAT), e.stage.as_str())
@@ -232,6 +243,10 @@ fn parse_entry(line: &str) -> Option<IndexEntry> {
     let kind = parts.next()?;
     let kind = if let Some(chip) = kind.strip_prefix("handback: ") {
         TimelineKind::Handback { chip: chip.to_owned() }
+    } else if let Some(reason) = kind.strip_prefix("spec: ") {
+        TimelineKind::Spec {
+            reason: reason.to_owned(),
+        }
     } else if let Some(rest) = kind.strip_prefix("commit: ") {
         let (repo, sha) = rest.rsplit_once(' ')?;
         TimelineKind::Commit {
@@ -440,5 +455,19 @@ mod tests {
             },
         };
         assert_eq!(render_entry(&e), "- 2026-10-24T05:12Z · commit · commit: /r abc123");
+    }
+
+    #[test]
+    fn a_spec_watcher_line_renders_and_parses_back() {
+        let e = IndexEntry {
+            at: "2026-10-24T05:12:33Z".parse().unwrap(),
+            stage: Stage::Review,
+            kind: TimelineKind::Spec {
+                reason: "rows are now collapsible".into(),
+            },
+        };
+        let line = render_entry(&e);
+        assert_eq!(line, "- 2026-10-24T05:12Z · review · spec: rows are now collapsible");
+        assert_eq!(parse_entry(&line).unwrap().kind, e.kind);
     }
 }

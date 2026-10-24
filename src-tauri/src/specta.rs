@@ -10,8 +10,8 @@ use teamcode_core::{Error, Result};
 use crate::commands::tests as test_runs;
 use crate::commands::{git, hooks, memory, projects, settings, tasks, views, windows};
 use crate::events::{
-    CostUpdated, GitChanges, NeedsYou, SessionAttached, SessionExited, TaskChanged, TasksReloaded, TeamEvent,
-    TestFinished, ViewsChanged, WorkspaceChanged,
+    CostUpdated, GitChanges, NeedsYou, SessionAttached, SessionExited, SpecWatcher, TaskChanged, TasksReloaded,
+    TeamEvent, TestFinished, ViewsChanged, WorkspaceChanged,
 };
 
 /// `@ts-nocheck`: the generated globals import `Channel` before any command takes one, which `noUnusedLocals` would
@@ -85,6 +85,7 @@ pub fn builder() -> Builder<tauri::Wry> {
             GitChanges,
             TestFinished,
             TeamEvent,
+            SpecWatcher,
         ])
 }
 
@@ -120,6 +121,7 @@ mod tests {
             "git-changes",
             "test-finished",
             "team-event",
+            "spec-watcher",
         ] {
             assert!(ts.contains(&format!("\"{name}\"")), "{name}");
         }

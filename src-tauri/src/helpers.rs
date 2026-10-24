@@ -2,18 +2,27 @@
 //! LiveSpec does. Naming runs on the fast tier; the spec watcher and commit messages on the deep tier. The prompts,
 //! parsing and rules live in `teamcode_core::helpers`.
 
+use std::time::Duration;
+
+use chrono::Utc;
 use livespec_core::llm::Usage;
 use livespec_core::settings::Tier;
 use tauri::{AppHandle, Manager};
+use teamcode_core::db;
+use teamcode_core::domain::Stage;
 use teamcode_core::domain::TaskId;
+use teamcode_core::helpers::spec_watcher::{self, SpecWatchOutcome};
 use teamcode_core::helpers::{briefs, naming, tag_for, HelperKind};
 use teamcode_core::memory::slug::title_from_intent;
+use teamcode_core::memory::{IndexEntry, TimelineKind};
 use teamcode_core::memory::{MemoryFile, TaskFolder};
+use teamcode_core::pipeline::{self, Effect};
 use teamcode_core::Result;
 
+use crate::events::{self, SpecWatcher};
 use crate::observe::{self, log_err};
 use crate::state::AppState;
-use crate::{observation, provider};
+use crate::{git_watcher, observation, provider};
 
 /// The tier a helper runs on.
 pub fn tier_for(kind: HelperKind) -> Tier {
@@ -25,8 +34,14 @@ pub fn tier_for(kind: HelperKind) -> Tier {
 
 /// Starts the helper for the task, replacing any run of the same kind still in flight.
 pub fn run(app: &AppHandle, task_id: &TaskId, kind: HelperKind) {
+    run_after(app, task_id, kind, Duration::ZERO);
+}
+
+/// As `run`, after `delay`; a newer call in the meantime replaces it, so this also debounces.
+pub fn run_after(app: &AppHandle, task_id: &TaskId, kind: HelperKind, delay: Duration) {
     let (app2, id) = (app.clone(), task_id.clone());
     let handle = tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(delay).await;
         log_err(&format!("the {kind:?} helper"), job(&app2, &id, kind).await);
     });
     let state = app.state::<AppState>();
@@ -44,8 +59,9 @@ async fn job(app: &AppHandle, id: &TaskId, kind: HelperKind) -> Result<()> {
     match kind {
         HelperKind::Naming => naming(app, id).await,
         HelperKind::ProjectBrief => project_briefs(app, id).await,
-        // the spec watcher, commit messages and commit runners land with their own tasks of this plan
-        HelperKind::SpecWatcher | HelperKind::CommitMessages | HelperKind::GitCommit => Ok(()),
+        HelperKind::SpecWatcher => spec_watcher(app, id).await,
+        // the commit messages and commit runners land with their own task of this plan
+        HelperKind::CommitMessages | HelperKind::GitCommit => Ok(()),
     }
 }
 
@@ -70,6 +86,53 @@ async fn naming(app: &AppHandle, id: &TaskId) -> Result<()> {
         }
     })?;
     Ok(())
+}
+
+/// During Review: rewrites `spec.md` from the diff when the watcher finds it out of step, logs the reason on the
+/// timeline and emits `spec-watcher`. The app writes the file, and only over the text the watcher read.
+async fn spec_watcher(app: &AppHandle, id: &TaskId) -> Result<()> {
+    let state = app.state::<AppState>();
+    let (task, _) = observe::task_and_home(&state, id)?;
+    if task.stage != Stage::Review {
+        return Ok(());
+    }
+    let folder = TaskFolder::open(task.memory_dir.clone());
+    let Some(spec) = folder.read(MemoryFile::Spec)?.filter(|s| !s.trim().is_empty()) else {
+        return Ok(());
+    };
+    let (task, set, _) = git_watcher::refresh(app, id).await?;
+    let provider = provider::resolve(app, tier_for(HelperKind::SpecWatcher)).await?;
+    let (outcome, usage) = spec_watcher::run_with_usage(&provider, state.usage.clone(), &task, &set, &spec).await?;
+    note_usage(app, id, &usage);
+    let at = Utc::now();
+    let (Some(ev), SpecWatchOutcome::Rewrite { spec_md, reason }) =
+        (spec_watcher::event_for(id, at, &outcome), outcome)
+    else {
+        return Ok(());
+    };
+    if folder.read(MemoryFile::Spec)?.as_deref() != Some(spec.as_str()) {
+        return Ok(()); // the developer edited it meanwhile; their text wins
+    }
+    folder.write(MemoryFile::Spec, &spec_md)?;
+    let applied = {
+        let mut conn = state.db.lock().expect("db lock");
+        let task = db::tasks::require(&conn, id)?;
+        let entry = IndexEntry {
+            at,
+            stage: task.stage,
+            kind: TimelineKind::Spec { reason },
+        };
+        pipeline::apply(&mut conn, &folder, &task, vec![Effect::WriteIndex(entry)], at)?
+    };
+    events::emit_task_changed(app, &state.db.lock().expect("db lock"), &applied.task)?;
+    events::emit(
+        app,
+        SpecWatcher {
+            task_id: ev.task_id,
+            at: ev.at,
+            reason: ev.reason,
+        },
+    )
 }
 
 /// Builds the brief of every project linked to the task that has none yet.

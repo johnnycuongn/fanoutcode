@@ -12,6 +12,8 @@ use tauri::{AppHandle, Manager};
 use teamcode_core::changes::{self, ChangeSet, RepoSnapshot};
 use teamcode_core::domain::{Stage, Task, TaskId};
 use teamcode_core::git::{self, WatchHit};
+use teamcode_core::helpers::spec_watcher;
+use teamcode_core::helpers::HelperKind;
 use teamcode_core::pipeline::StageAction;
 use teamcode_core::{db, Result};
 
@@ -282,7 +284,15 @@ pub async fn refresh(app: &AppHandle, task_id: &TaskId) -> Result<(Task, ChangeS
 async fn on_settled(app: &AppHandle, task_id: &TaskId) -> Result<()> {
     let (task, _set, previous) = refresh(app, task_id).await?;
     let state = app.state::<AppState>();
-    let _hits = state.git_watcher.take_hits(task_id);
+    let hits = state.git_watcher.take_hits(task_id);
+    if spec_watcher::should_trigger(task.stage, &hits) {
+        crate::helpers::run_after(
+            app,
+            task_id,
+            HelperKind::SpecWatcher,
+            Duration::from_millis(spec_watcher::DEBOUNCE_MS),
+        );
+    }
     if task.stage == Stage::Commit {
         let repos = state.git_watcher.watched_repos(task_id).unwrap_or_default();
         let files = observe::with_attributor(&state, task_id, &repos, |a| a.files().to_vec())?;

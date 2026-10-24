@@ -3,6 +3,7 @@
 
 pub mod briefs;
 pub mod naming;
+pub mod spec_watcher;
 #[cfg(test)]
 pub(crate) mod test_server;
 
