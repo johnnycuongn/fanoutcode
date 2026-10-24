@@ -30,7 +30,19 @@ export * from "./Tooltip";
 
 export * from "./UiProvider";
 
+export * from "./Select";
+
 export const PRIMITIVES = {
+  Select: [
+    "Select",
+    "SelectTrigger",
+    "SelectValue",
+    "SelectContent",
+    "SelectItem",
+    "SelectGroup",
+    "SelectLabel",
+    "SelectSeparator",
+  ],
   Tooltip: ["Tooltip", "TooltipProvider"],
   Popover: ["Popover", "PopoverTrigger", "PopoverContent", "PopoverAnchor", "PopoverClose"],
   Switch: ["Switch"],
