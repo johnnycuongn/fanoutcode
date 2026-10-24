@@ -4,6 +4,7 @@
 pub mod briefs;
 pub mod commit_messages;
 pub mod livespec_level;
+pub mod livespec_run;
 pub mod naming;
 pub mod spec_watcher;
 #[cfg(test)]

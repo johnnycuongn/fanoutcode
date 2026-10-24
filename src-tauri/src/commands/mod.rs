@@ -8,6 +8,7 @@ use teamcode_core::Result;
 pub mod cost;
 pub mod git;
 pub mod hooks;
+pub mod livespec;
 pub mod memory;
 pub mod projects;
 pub mod settings;

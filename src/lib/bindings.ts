@@ -513,6 +513,28 @@ async costSummary(scope: Scope) : Promise<Result<CostSummary, string>> {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+/**
+ * Starts the LiveSpec notes for the task's `spec.md` at the level its project chose; `Precondition` when Off.
+ */
+async livespecAnalyze(taskId: TaskId, onEvent: TAURI_CHANNEL<LiveSpecEvent>) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("livespec_analyze", { taskId, onEvent }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Stops the task's LiveSpec run, if one is in flight.
+ */
+async livespecCancel(taskId: TaskId) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("livespec_cancel", { taskId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
@@ -618,6 +640,15 @@ export type LinkPolicy = "ReadAndModifyOnRequest" | "ReadOnly"
  * The status line's running numbers for a task's session, reported beside the ledger (which lags until a Stop).
  */
 export type LiveCost = { cost_usd: number; context_used_pct: number; at: string }
+/**
+ * One fact-check verdict. `verdict` is livespec-core's serialised value (`"contradicted"`); livespec-core's own
+ * type has no `specta::Type`, hence this mirror.
+ */
+export type LiveSpecCheck = { claim: string; verdict: string; confidence: number | null; path: string | null; line: number | null }
+/**
+ * What `livespec_analyze` streams to the Spec stage editor (A14).
+ */
+export type LiveSpecEvent = { type: "Text"; text: string; lane: number } | { type: "Started" } | { type: "Skipped" } | { type: "Notice"; message: string } | { type: "Checking"; count: number; total: number } | { type: "Check"; result: LiveSpecCheck } | { type: "Done"; text: string; partial: boolean } | { type: "Error"; message: string }
 export type LiveSpecLevel = "Off" | "Simple" | "Heavy"
 export type MemoryLocation = { type: "AppStorage" } | { type: "Folder"; path: string }
 /**

@@ -6,12 +6,14 @@ use std::sync::{Arc, Mutex};
 
 use livespec_core::local::LocalServer;
 use livespec_core::project::BriefStore;
+use livespec_core::project::ProjectIndex;
 use livespec_core::usage::UsageLedger;
 use rusqlite::Connection;
 use teamcode_core::changes::attributor::Attributor;
 use teamcode_core::changes::ChangeSet;
 use teamcode_core::cost::LiveCost;
 use teamcode_core::domain::TaskId;
+use teamcode_core::helpers::livespec_run::RunSlots;
 use teamcode_core::helpers::HelperKind;
 use teamcode_core::hooks::attribution::Correlator;
 use teamcode_core::pipeline::TestRun;
@@ -57,6 +59,12 @@ pub struct AppState {
     pub http: reqwest::Client,
     /// Each task's latest status-line numbers.
     pub live_cost: Mutex<HashMap<TaskId, LiveCost>>,
+    /// The LiveSpec run in flight per task; a new one replaces it.
+    pub livespec_runs: RunSlots<TaskId>,
+    /// The last draft each task's notes were written for (the Jev gate's "previous").
+    pub livespec_last: Mutex<HashMap<TaskId, String>>,
+    /// Scanned project indexes, by home root, scanned on first use.
+    pub livespec_indexes: Mutex<HashMap<PathBuf, Arc<ProjectIndex>>>,
 }
 
 impl AppState {
@@ -81,6 +89,9 @@ impl AppState {
             local_server: tokio::sync::Mutex::default(),
             http: reqwest::Client::new(),
             live_cost: Mutex::default(),
+            livespec_runs: RunSlots::default(),
+            livespec_last: Mutex::default(),
+            livespec_indexes: Mutex::default(),
         })
     }
 

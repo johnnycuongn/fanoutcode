@@ -8,7 +8,7 @@ use tauri_specta::{collect_commands, collect_events, Builder};
 use teamcode_core::{Error, Result};
 
 use crate::commands::tests as test_runs;
-use crate::commands::{cost, git, hooks, memory, projects, settings, tasks, views, windows};
+use crate::commands::{cost, git, hooks, livespec, memory, projects, settings, tasks, views, windows};
 use crate::events::{
     CostUpdated, GitChanges, NeedsYou, SessionAttached, SessionExited, SpecWatcher, TaskChanged, TasksReloaded,
     TeamEvent, TestFinished, ViewsChanged, WorkspaceChanged,
@@ -75,6 +75,8 @@ pub fn builder() -> Builder<tauri::Wry> {
             test_runs::tests_stop,
             test_runs::tests_add_linked,
             cost::cost_summary,
+            livespec::livespec_analyze,
+            livespec::livespec_cancel,
         ])
         .events(collect_events![
             TaskChanged,
