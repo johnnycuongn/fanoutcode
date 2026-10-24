@@ -91,4 +91,4 @@ Conventional Commits. Every commit passes the gates: typecheck, lint, vitest (le
 
 ## Current stage
 
-Plan 01 Foundation in progress.
+Plan 01 Foundation complete; Plan 02 UI primitives next.

@@ -1,0 +1,10 @@
+# The fast gates, before every commit. CI runs these plus bindings:check, cargo test, clippy and the build.
+pre-commit:
+  parallel: true
+  commands:
+    typecheck:
+      run: npm run typecheck
+    lint:
+      run: npm run lint
+    test:
+      run: npx vitest run
