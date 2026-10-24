@@ -2,40 +2,21 @@ import { DndContext, DragOverlay } from "@dnd-kit/core";
 import { restrictToWindowEdges } from "@dnd-kit/modifiers";
 import { LayoutGroup } from "motion/react";
 import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
+import type { WindowInfo } from "@/lib/bindings";
 import { loadActivity, startActivityEvents } from "../activity";
 import { ipc } from "../ipc";
 import { all } from "../listen";
-import {
-  boardStore,
-  type BoardState,
-  configureBoard,
-  loadBoard,
-  selectColumns,
-  selectMode,
-  selectReadOnly,
-  selectTotalTaskCount,
-  selectVisibleTasks,
-  startBoardEvents,
-  useBoard,
-} from "../store";
-import { taskMap, type TaskMap } from "../taskCache";
+import { boardStore, configureBoard, loadBoard, selectMode, startBoardEvents, useBoard } from "../store";
+import { taskMap } from "../taskCache";
 import type { BoardProps } from "../types";
 import { useBoardDnd } from "../useBoardDnd";
 import { useBoardShortcuts } from "../useBoardShortcuts";
 import { BoardContext, type BoardCtx } from "./boardContext";
-import { BoardEmpty } from "./BoardEmpty";
+import { BoardBody } from "./BoardBody";
 import { BoardHeader } from "./BoardHeader";
 import { CardOverlay } from "./BoardCard";
-import { ColumnGrid } from "./ColumnGrid";
 import { useConfirm } from "./ConfirmDialog";
 import { JiraKeyDialog } from "./JiraKeyDialog";
-import type { WindowInfo } from "@/lib/bindings";
-
-/** Nothing to show: no tasks at all, or the filters hide every one. Not before the first load finishes. */
-function selectEmptyVariant(s: BoardState, tasks: TaskMap): "no_tasks" | "filtered_out" | null {
-  if (!s.loaded || selectVisibleTasks(s, tasks).length > 0) return null;
-  return selectTotalTaskCount(s, tasks) === 0 && !s.filters.archived ? "no_tasks" : "filtered_out";
-}
 
 const containerKey = (c: BoardProps["container"]): string => `${c.type}:${c.id}`;
 
@@ -85,9 +66,6 @@ export function Board({
   );
 
   const mode = useBoard(selectMode);
-  const readOnly = useBoard(selectReadOnly);
-  const columns = useBoard(selectColumns);
-  const emptyVariant = useBoard(selectEmptyVariant);
   const jiraTask = jiraTaskId ? taskMap()[jiraTaskId] : undefined;
   const overlayProject = dnd.activeTask ? boardStore.get().projects[dnd.activeTask.project_id] : undefined;
 
@@ -110,11 +88,7 @@ export function Board({
         >
           <BoardHeader />
           <LayoutGroup id="board">
-            {emptyVariant ? (
-              <BoardEmpty variant={emptyVariant} onNewTask={onNewTask} />
-            ) : (
-              <ColumnGrid lane="*" columns={columns} readOnly={readOnly} showProject={false} compactEmpty={false} />
-            )}
+            <BoardBody onNewTask={onNewTask} />
           </LayoutGroup>
         </div>
         <DragOverlay dropAnimation={null}>
