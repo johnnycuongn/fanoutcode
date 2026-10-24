@@ -17,6 +17,7 @@ in `docs/superpowers/specs/2026-10-24-team-code-design.md`. Each implementation 
 - [Security model](#security-model)
 - [Errors](#errors)
 - [UI primitives](#ui-primitives)
+- [The board](#the-board)
 - [Where to change things](#where-to-change-things)
 
 ## At a glance
@@ -131,6 +132,28 @@ an example page.
 - Tests: `src/test/setup.ts` (jsdom gaps, jest-dom, cleanup) and `src/test/ui.ts` (`mockMatchMedia`, `setupUser`,
   `renderUi`).
 
+## The board
+
+`src/features/board/` is the Kanban board. The shell mounts `Board(BoardProps)` as tab zero and passes the window's
+container, its projects, the resolved settings, the focused project and `onOpenTask(taskId, OpenTarget)`; the board
+knows nothing about windows or views. Other features import only `src/features/board/index.ts`.
+
+- **State.** `boardStore` (`store.ts`) holds view state: filters, settings, focus, swimlane order, the last drop.
+  Tasks live in the shared `tasksStore` cache and are read and written through `taskCache.ts` alone. Columns,
+  swimlanes and the mode are memoised selectors (`selectors.ts`) read with `useBoard`.
+- **IPC.** `ipc.ts` is the only board file that imports `src/lib/bindings.ts`; tests mock that one module.
+- **Moves.** A drag calls `moveTask` (`actions.ts`): the card moves at once, `tasks_move` decides, and a refusal puts
+  the card back with an error toast. Order inside a column is derived (needs you, working, idle; flagged; priority;
+  newest), never dragged.
+- **Events.** `task-changed` from another container is ignored; `team-event` and `git-changes` feed the card's last
+  line, current file and team (`activity.ts`); the elapsed time is one shared ticker whose snapshot is a string, so
+  a card re-renders only when its text changes.
+- **Workspaces.** `workspace_board` and `workspace_project_layer` choose swimlanes, one project at a time or mixed.
+  Swimlane order and collapsed rows are remembered per container in localStorage.
+- **Motion.** Cards animate between columns with Motion `layoutId`, the destination column glows for `GLOW_MS`, and
+  the Done column plays a one-shot dotLottie. `.lottie` files are never inlined (`vite.config.ts`), because the CSP
+  blocks fetching a data: URL.
+
 ## Where to change things
 
 | To change             | Edit                                                                          |
@@ -146,3 +169,4 @@ an example page.
 | Theme switching       | `src/lib/theme.ts`                                                            |
 | A lint rule           | `eslint/rules/` and `eslint.config.js`                                        |
 | A primitive           | `src/components/ui/<Name>.tsx`, `index.ts`, and its example page              |
+| A board card or menu  | `src/features/board/components/TaskCard.tsx`, `menu.ts`                       |
