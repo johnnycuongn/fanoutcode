@@ -46,9 +46,15 @@ struct HookInput {
 fn fallback_roots(roots_file: &Path) -> Option<RootsFile> {
     let app_data = roots_file.parent()?.parent()?;
     let home = std::env::var_os("HOME").map_or_else(|| PathBuf::from("/"), PathBuf::from);
+    let mut app_files = vec![app_data.to_owned()];
+    if let Ok(canonical) = std::fs::canonicalize(app_data) {
+        if canonical != app_data {
+            app_files.push(canonical);
+        }
+    }
     Some(RootsFile {
         protected: Vec::new(),
-        app_files: vec![app_data.to_owned()],
+        app_files,
         home_dir: home,
     })
 }

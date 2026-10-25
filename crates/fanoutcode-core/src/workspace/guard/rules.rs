@@ -98,6 +98,19 @@ pub(crate) fn clean(p: &Path) -> PathBuf {
     out
 }
 
+/// `path` with the deepest existing ancestor canonicalised; `None` when nothing of it exists.
+fn canonical_lenient(path: &Path) -> Option<PathBuf> {
+    let mut rest = Vec::new();
+    let mut base = path;
+    loop {
+        if let Ok(c) = std::fs::canonicalize(base) {
+            return Some(rest.iter().rev().fold(c, |acc: PathBuf, part| acc.join(part)));
+        }
+        rest.push(base.file_name()?.to_owned());
+        base = base.parent()?;
+    }
+}
+
 /// Case-insensitive on macOS, whose default file system ignores case.
 fn fold(p: &Path) -> PathBuf {
     if cfg!(target_os = "macos") {
@@ -135,14 +148,52 @@ impl Ctx<'_> {
         self.roots.iter().find(|r| p.starts_with(fold(r)))
     }
 
+    /// The protected root a write, move or delete of `path` reaches: one `path` lies in, or one inside `path` (moving
+    /// or removing a folder takes everything under it). Compared lexically and through the canonical form of
+    /// `path`. A path beside a root, or a read, never counts.
+    fn target_root(&self, path: &Path) -> Option<&PathBuf> {
+        let forms = [Some(path.to_owned()), canonical_lenient(path)];
+        forms.iter().flatten().find_map(|p| {
+            let p = fold(p);
+            self.roots.iter().find(|r| {
+                let r = fold(r);
+                p.starts_with(&r) || r.starts_with(&p)
+            })
+        })
+    }
+
     /// The root a word names (as a path, or as the value of `--opt=value`), resolved against `cwd`.
     fn word_root(&self, word: &str, cwd: &Path) -> Option<&PathBuf> {
+        self.word_paths(word, cwd).iter().find_map(|p| self.root_of(p))
+    }
+
+    /// `word_root` for a word the command writes, moves or deletes (`target_root`).
+    fn word_target(&self, word: &str, cwd: &Path) -> Option<&PathBuf> {
+        self.word_paths(word, cwd).iter().find_map(|p| self.target_root(p))
+    }
+
+    fn word_paths(&self, word: &str, cwd: &Path) -> Vec<PathBuf> {
         let value = word.split_once('=').map(|(_, v)| v);
         [Some(word), value]
             .into_iter()
             .flatten()
             .filter(|w| !w.is_empty())
-            .find_map(|w| self.root_of(&self.resolve(w, cwd)))
+            .map(|w| self.resolve(w, cwd))
+            .collect()
+    }
+
+    /// A copy-like destination: into an existing folder that holds a root, only the names the sources land on count
+    /// (`cp x ~/` does not write the app data under `~/Library`; `cp -r grants <app_data>/` does).
+    fn dest_target(&self, dest: &str, sources: &[&String], cwd: &Path) -> Option<&PathBuf> {
+        let d = self.resolve(dest, cwd);
+        let strict_ancestor = self.root_of(&d).is_none() && self.target_root(&d).is_some();
+        if !(strict_ancestor && d.is_dir()) {
+            return self.target_root(&d);
+        }
+        sources.iter().find_map(|s| {
+            let name = Path::new(s.as_str()).file_name()?;
+            self.target_root(&d.join(name))
+        })
     }
 
     /// The segment names a root in any word, or runs inside one.
@@ -232,7 +283,7 @@ pub(super) fn evaluate_in(ctx: &Ctx, command: &str, cwd: &mut PathBuf, depth: u8
 
 fn segment(ctx: &Ctx, seg: &Segment, cwd: &mut PathBuf, depth: u8) -> GuardDecision {
     for t in &seg.write_targets {
-        if let Some(root) = ctx.root_of(&ctx.resolve(t, cwd)) {
+        if let Some(root) = ctx.target_root(&ctx.resolve(t, cwd)) {
             return deny(root.clone(), GuardRule::Redirect);
         }
     }
@@ -292,10 +343,20 @@ fn segment(ctx: &Ctx, seg: &Segment, cwd: &mut PathBuf, depth: u8) -> GuardDecis
 fn writer(ctx: &Ctx, name: &'static str, args: &[String], cwd: &Path) -> GuardDecision {
     let pos = positionals(args);
     let root = if DEST_ONLY.contains(&name) {
-        pos.last().and_then(|d| ctx.word_root(d, cwd)).cloned()
+        let (dest, sources) = match pos.split_last() {
+            Some((d, s)) => (Some(d), s),
+            None => (None, &[][..]),
+        };
+        // `mv` also takes its sources away
+        let moved = (name == "mv")
+            .then(|| sources.iter().find_map(|s| ctx.word_target(s, cwd)))
+            .flatten();
+        moved
+            .or_else(|| dest.and_then(|d| ctx.dest_target(d, sources, cwd)))
+            .cloned()
     } else {
         ctx.root_of(cwd)
-            .or_else(|| pos.iter().find_map(|p| ctx.word_root(p, cwd)))
+            .or_else(|| pos.iter().find_map(|p| ctx.word_target(p, cwd)))
             .cloned()
     };
     root.map_or(GuardDecision::Allow, |r| deny(r, GuardRule::Program(name)))
@@ -362,9 +423,9 @@ fn find(ctx: &Ctx, args: &[String], cwd: &Path) -> GuardDecision {
         .take_while(|a| !a.starts_with('-') && a.as_str() != "!" && a.as_str() != "(")
         .collect();
     let root = if paths.is_empty() {
-        ctx.root_of(cwd).cloned()
+        ctx.target_root(cwd).cloned()
     } else {
-        paths.iter().find_map(|p| ctx.word_root(p, cwd)).cloned()
+        paths.iter().find_map(|p| ctx.word_target(p, cwd)).cloned()
     };
     root.map_or(GuardDecision::Allow, |r| deny(r, GuardRule::FindDelete))
 }

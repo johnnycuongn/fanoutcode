@@ -60,7 +60,7 @@ fn more_shapes() {
         ("echo x >> \"/w/api/log\"", "/w/web", true),
         ("perl -pi -e 's/a/b/' /w/api/x", "/w/web", true),
         ("git -C /w/api fetch", "/w/web", false),
-        ("mv /w/api/a /w/web/a", "/w/web", false),
+        ("mv /w/api/a /w/web/a", "/w/web", true), // moving a file out writes the root it leaves
         ("npm install --prefix=/w/api", "/w/web", true),
         ("find /w/web -exec rm {} +", "/w/web", false),
         ("xargs rm < list.txt", "/w/api", true),
@@ -68,6 +68,96 @@ fn more_shapes() {
     for (cmd, cwd, expect) in cases {
         assert_eq!(deny(cmd, cwd), *expect, "command: {cmd} (cwd {cwd})");
     }
+}
+
+#[test]
+fn moving_a_protected_folder_is_denied() {
+    for cmd in [
+        "mv /w/api /tmp/x",
+        "mv /w /tmp/y",
+        "mv /w/api/src /tmp/z",
+        "rm -rf /w",
+        "rm -r /w/api/..",
+        "chmod -R 000 /w",
+        "find /w -name '*.ts' -delete",
+        "cd /w && find . -delete",
+    ] {
+        assert!(deny(cmd, "/elsewhere"), "{cmd}");
+    }
+    // reads of an ancestor, and running inside one, are not writes to the root
+    for cmd in ["ls /w", "cat /w/README", "cd /w && rm notes.txt", "cp /w/api/x /tmp/x"] {
+        assert!(!deny(cmd, "/elsewhere"), "{cmd}");
+    }
+}
+
+/// `<tmp>/data/app` is app data with its overlap folders, guarded through `run_guard` as a launch writes it.
+fn app_data_guard() -> (tempfile::TempDir, PathBuf, PathBuf) {
+    let dir = tempfile::tempdir().unwrap();
+    let base = std::fs::canonicalize(dir.path()).unwrap().join("data");
+    let app = base.join("app");
+    let files: Vec<PathBuf> = ["grants", "claims"].iter().map(|d| app.join(d)).collect();
+    for f in &files {
+        std::fs::create_dir_all(f).unwrap();
+    }
+    let roots = write_roots_file(&app.join("guards"), &"t-1".parse_id(), &[], &files, Path::new("/h")).unwrap();
+    (dir, app, roots)
+}
+
+trait ParseId {
+    fn parse_id(&self) -> crate::domain::TaskId;
+}
+impl ParseId for str {
+    fn parse_id(&self) -> crate::domain::TaskId {
+        crate::domain::TaskId::parse(self).unwrap()
+    }
+}
+
+fn guard_says_deny(roots: &Path, cmd: &str) -> bool {
+    let input = serde_json::json!({"tool_name": "Bash", "tool_input": {"command": cmd}, "cwd": "/"});
+    let mut out = Vec::new();
+    run_guard(&mut input.to_string().as_bytes(), &mut out, roots);
+    String::from_utf8(out).unwrap().contains("\"deny\"")
+}
+
+#[test]
+fn deleting_app_data_is_denied() {
+    let (_d, app, roots) = app_data_guard();
+    let a = app.display();
+    let parent = app.parent().unwrap().display().to_string();
+    for cmd in [
+        format!("mv {a}/grants /tmp/x"),
+        format!("mv {a} /tmp/y"),
+        format!("rm -rf {a}"),
+        format!("rm -r {a}/grants/.."),
+        format!("rm -rf {parent}"),
+        format!("rm -f {a}/claims/0123456789abcdef.json"),
+        format!("mv {a}/claims/k.json /tmp/k.json"),
+    ] {
+        assert!(guard_says_deny(&roots, &cmd), "{cmd}");
+    }
+}
+
+#[test]
+fn writing_a_sibling_of_app_data_is_allowed() {
+    let (_d, app, roots) = app_data_guard();
+    let parent = app.parent().unwrap().display().to_string();
+    for cmd in [
+        format!("echo x > {parent}/other.txt"),
+        format!("rm -rf {parent}/other"),
+        format!("touch {parent}/app-backup"),
+        format!("mkdir {parent}/app2"),
+        format!("cp /tmp/x {parent}/"),
+        format!("cp /tmp/x {parent}"),
+        format!("ls {parent}"),
+        format!("cat {}/grants/t-1.json", app.display()),
+    ] {
+        assert!(!guard_says_deny(&roots, &cmd), "{cmd}");
+    }
+    // but a copy whose name lands on a guarded folder is a write to it
+    assert!(guard_says_deny(
+        &roots,
+        &format!("cp -r /tmp/grants {}/", app.display())
+    ));
 }
 
 #[test]
@@ -213,6 +303,23 @@ mod protocol {
         // anything else is allowed as before
         assert!(!run("echo x > /w/web/out.txt"));
         assert!(!run(&format!("cat {}/grants/t-1.json", data.display())));
+    }
+
+    #[test]
+    fn the_fallback_protects_the_canonical_app_data() {
+        let dir = tempfile::tempdir().unwrap();
+        let real = std::fs::canonicalize(dir.path()).unwrap().join("real");
+        std::fs::create_dir_all(real.join("guards")).unwrap();
+        let alias = real.with_file_name("alias");
+        std::os::unix::fs::symlink(&real, &alias).unwrap();
+        // the roots file the session was told to read, through the link, is gone
+        let roots = alias.join("guards/t-1.guard.json");
+        for data in [&alias, &real] {
+            let mut out = Vec::new();
+            let cmd = format!("echo x > {}/grants/t-1.json", data.display());
+            run_guard(&mut hook_json(&cmd, "/w/web").as_slice(), &mut out, &roots);
+            assert!(String::from_utf8(out).unwrap().contains("\"deny\""), "{cmd}");
+        }
     }
 
     #[test]
