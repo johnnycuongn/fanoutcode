@@ -15,12 +15,33 @@ import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { useReducedMotion } from "@/lib/motion";
 import { repoFor, showRepoBadges } from "../repo";
 import { moveNode, select, useCanvas, type CanvasState } from "../store";
-import type { CanvasPosition, ViewOptions } from "../types";
+import { NODE_SIZE } from "../layout";
+import type { CanvasEdge, CanvasPosition, ViewOptions } from "../types";
 import { edgeTypes, type FlowEdge } from "./edges";
 import { nodeTypes, type FlowNode } from "./nodes";
 import { usePositionSpring } from "./usePositionSpring";
 
 type FlowState = Pick<CanvasState, "model" | "graph" | "settings" | "task" | "roots">;
+type Side = "top" | "right" | "bottom" | "left";
+
+/** The facing sides of two nodes: depends edges run left to right; others follow the dominant axis between centres. */
+export function handlesFor(
+  edge: Pick<CanvasEdge, "kind">,
+  from: CanvasPosition | undefined,
+  to: CanvasPosition | undefined,
+): { sourceHandle: string; targetHandle: string } {
+  let out: Side = "bottom";
+  let into: Side = "top";
+  if (edge.kind === "depends") [out, into] = ["right", "left"];
+  else if (from && to) {
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    if (Math.abs(dy) >= Math.abs(dx) - NODE_SIZE.step.width / 2)
+      [out, into] = dy >= 0 ? ["bottom", "top"] : ["top", "bottom"];
+    else [out, into] = dx >= 0 ? ["right", "left"] : ["left", "right"];
+  }
+  return { sourceHandle: `${out}-out`, targetHandle: `${into}-in` };
+}
 
 /** Graph nodes and edges as React Flow elements: view options, owner roles, the done stack, the drawn positions. */
 export function toFlowElements(
@@ -38,7 +59,7 @@ export function toFlowElements(
   };
   const at = new Map(positions.map((p) => [p.node_id, p]));
   const doneIds = state.graph.nodes.filter((n) => n.kind === "step" && n.data.status === "done").map((n) => n.id);
-  const stacking = state.settings.layout === "AutoReflow";
+  const stacking = state.settings.layout === "AutoReflow" && state.settings.arrangement !== "Flow";
   const nodes = state.graph.nodes.map((n): FlowNode => {
     const p = at.get(n.id);
     const base = { id: n.id, position: p ? { x: p.x, y: p.y } : { x: 0, y: 0 }, hidden: positions.length > 0 && !p };
@@ -48,7 +69,7 @@ export function toFlowElements(
       return {
         ...base,
         type: "step",
-        zIndex: stackIndex ?? 0,
+        zIndex: stackIndex === null ? 0 : doneIds.length - stackIndex,
         data: { ...n.data, stackIndex, stackCount: doneIds.length, view },
       };
     }
@@ -60,6 +81,7 @@ export function toFlowElements(
     id: e.id,
     source: e.source,
     target: e.target,
+    ...handlesFor(e, at.get(e.source), at.get(e.target)),
     type: e.kind,
     data: { working: e.working },
   }));
@@ -89,7 +111,7 @@ function Surface({ taskId }: { taskId: string }): ReactElement {
     const key = focus.join("|");
     if (s.positions.length === 0 || focus.length === 0 || fitted.current === key) return;
     fitted.current = key;
-    void rf.fitView({ nodes: focus.map((id) => ({ id })), padding: 0.3, duration: reduced ? 150 : 300 });
+    void rf.fitView({ nodes: focus.map((id) => ({ id })), padding: 0.3, maxZoom: 1, duration: reduced ? 150 : 300 });
   }, [focus, s.positions, rf, reduced]);
 
   const onNodesChange = (changes: NodeChange<FlowNode>[]) => {
@@ -131,9 +153,10 @@ function Surface({ taskId }: { taskId: string }): ReactElement {
       minZoom={0.25}
       maxZoom={2}
       fitView
+      fitViewOptions={{ maxZoom: 1 }}
       proOptions={{ hideAttribution: true }}
     >
-      <MiniMap pannable zoomable className="border border-line bg-card" />
+      <MiniMap pannable zoomable nodeClassName="fill-line" className="border border-line bg-card" />
     </ReactFlow>
   );
 }

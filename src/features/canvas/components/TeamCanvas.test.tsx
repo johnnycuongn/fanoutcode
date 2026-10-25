@@ -40,7 +40,7 @@ vi.mock("../store", async () => {
     select: vi.fn(),
   };
 });
-const { TeamCanvas, toFlowElements } = await import("./TeamCanvas");
+const { TeamCanvas, toFlowElements, handlesFor } = await import("./TeamCanvas");
 
 describe("TeamCanvas", () => {
   it("renders one card per graph node and a minimap", async () => {
@@ -57,7 +57,7 @@ describe("TeamCanvas", () => {
   it("stacks done steps in auto re-flow and resolves owner roles for file avatars", () => {
     const model = deriveCanvas({ steps: samplePlan(), events: sampleBuild(), memoryDir: MEMORY_DIR, roots: ROOTS });
     const graph = toGraph(model, "HubGraph");
-    const settings = { detail: "Simple", showCost: false, layout: "AutoReflow" } as const;
+    const settings = { detail: "Simple", showCost: false, layout: "AutoReflow", arrangement: "HubGraph" } as const;
     const state = { model, graph, settings, task: { workspace_id: null }, roots: ROOTS } as never;
     const { nodes, edges } = toFlowElements(state, [], true);
     const done = nodes.filter((n) => n.type === "step" && n.data.status === "done");
@@ -68,5 +68,25 @@ describe("TeamCanvas", () => {
     const file = nodes.find((n) => n.id === "file:/repo/app/src/a.ts")!;
     expect(file.type === "file" && file.data.ownerRoles).toMatchObject({ a1: "frontend", a2: "backend" });
     expect(edges.filter((e) => e.data?.working)).toHaveLength(3);
+    expect(edges.every((e) => e.sourceHandle?.endsWith("-out") && e.targetHandle?.endsWith("-in"))).toBe(true);
+    const flow = { ...(state as object), settings: { ...settings, arrangement: "Flow" } } as never;
+    expect(toFlowElements(flow, [], true).nodes.some((n) => n.type === "step" && n.data.stackIndex !== null)).toBe(
+      false,
+    );
+  });
+  it("routes edges between the sides that face each other", () => {
+    const p = (x: number, y: number) => ({ node_id: "n", x, y });
+    expect(handlesFor({ kind: "depends" }, p(0, 0), p(0, 500))).toEqual({
+      sourceHandle: "right-out",
+      targetHandle: "left-in",
+    });
+    expect(handlesFor({ kind: "touches" }, p(0, 400), p(0, 0))).toEqual({
+      sourceHandle: "top-out",
+      targetHandle: "bottom-in",
+    });
+    expect(handlesFor({ kind: "touches" }, p(0, 0), p(600, 20))).toEqual({
+      sourceHandle: "right-out",
+      targetHandle: "left-in",
+    });
   });
 });

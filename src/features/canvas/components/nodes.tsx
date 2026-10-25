@@ -16,13 +16,38 @@ export type FileFlowNode = Node<WithView<FileNodeData & { ownerRoles: Record<str
 export type FlowNode = StepFlowNode | AgentFlowNode | FileFlowNode;
 
 const HIDDEN = { opacity: 0 };
+const SIDES = [
+  ["top", Position.Top],
+  ["right", Position.Right],
+  ["bottom", Position.Bottom],
+  ["left", Position.Left],
+] as const;
 
+/** A source and a target handle on every side (`<side>-out`, `<side>-in`); edges pick the sides that face. */
 function Handles({ children }: { children: ReactElement }): ReactElement {
   return (
     <>
-      <Handle type="target" position={Position.Top} isConnectable={false} style={HIDDEN} />
+      {SIDES.map(([side, position]) => (
+        <Handle
+          key={`${side}-in`}
+          id={`${side}-in`}
+          type="target"
+          position={position}
+          isConnectable={false}
+          style={HIDDEN}
+        />
+      ))}
       {children}
-      <Handle type="source" position={Position.Bottom} isConnectable={false} style={HIDDEN} />
+      {SIDES.map(([side, position]) => (
+        <Handle
+          key={`${side}-out`}
+          id={`${side}-out`}
+          type="source"
+          position={position}
+          isConnectable={false}
+          style={HIDDEN}
+        />
+      ))}
     </>
   );
 }
