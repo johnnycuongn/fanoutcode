@@ -778,6 +778,15 @@ export type HandbackReason =
  * the IPC shape only; the parser picks the variant from the log line's first field, never from the payload.
  */
 export type HookEvent = { type: "SessionStart"; session_id: string; transcript_path: string } | { type: "UserPromptSubmit" } | { type: "PreToolUse"; tool: string; input: JsonValue } | { type: "PostToolUse"; tool: string; input: JsonValue; response: JsonValue } | { type: "SubagentStart"; agent_id: string; agent_type: string; description: string | null } | { type: "SubagentStop"; agent_id: string } | { type: "PermissionRequest"; tool: string } | { type: "Notification"; message: string } | { type: "Stop"; last_assistant_message: string; background_tasks: number } | { type: "StopFailure"; message: string } | { type: "StatusLine"; cost_usd: number; input_tokens: number; output_tokens: number; context_used_pct: number } | { type: "Unknown"; name: string }
+/**
+ * A linked Atlassian site. `account` names the keychain entry holding the API token (e.g. `jira:project:p-1`); the
+ * token itself never leaves the keychain except into a request. Owned here (A19).
+ */
+export type JiraSite = { site_url: string; email: string; account: string }
+/**
+ * Moves the issue when the task enters a stage: stage word (`"review"`) → transition name (`"In Review"`).
+ */
+export type JiraTransitions = { enabled: boolean; on_stage: Partial<{ [key in string]: string }> }
 export type JsonValue = null | boolean | number | string | JsonValue[] | Partial<{ [key in string]: JsonValue }>
 export type LayoutNode = { type: "Leaf"; pane: PaneId; content: PaneContent } | { type: "Split"; direction: SplitDirection; ratio: number; first: LayoutNode; second: LayoutNode }
 export type LinkPolicy = "ReadAndModifyOnRequest" | "ReadOnly"
@@ -869,7 +878,7 @@ export type RepoCommits = { repo_root: string; commits: DraftCommit[] }
 /**
  * Every key resolved for one scope; fields are the key names as written (A16).
  */
-export type ResolvedSettings = { theme: ThemePreference; accent: Accent; detail_level: DetailLevel; dock_position: DockPosition; team_view_arrangement: TeamArrangement; team_view_placement: TeamPlacement; team_canvas_layout: CanvasLayout; team_drill_in_lens: DrillInLens; workspace_project_layer: ProjectLayer; workspace_board: WorkspaceBoard; worktree: WorktreeChoice; worktree_convention: WorktreeConvention | null; worktrees_dir: string | null; may_commit: boolean; test_command: string | null; test_enabled: boolean; advance_on_green: boolean; livespec_level: LiveSpecLevel; agent_kind: AgentKind; model_provider: ModelProvider; cost_overview: boolean; terminal_theme: TerminalTheme; terminal_font_family: string; terminal_font_size: number; terminal_ligatures: boolean; scrollback_lines: number; first_run_complete: boolean }
+export type ResolvedSettings = { theme: ThemePreference; accent: Accent; detail_level: DetailLevel; dock_position: DockPosition; team_view_arrangement: TeamArrangement; team_view_placement: TeamPlacement; team_canvas_layout: CanvasLayout; team_drill_in_lens: DrillInLens; workspace_project_layer: ProjectLayer; workspace_board: WorkspaceBoard; worktree: WorktreeChoice; worktree_convention: WorktreeConvention | null; worktrees_dir: string | null; may_commit: boolean; test_command: string | null; test_enabled: boolean; advance_on_green: boolean; livespec_level: LiveSpecLevel; agent_kind: AgentKind; model_provider: ModelProvider; cost_overview: boolean; terminal_theme: TerminalTheme; terminal_font_family: string; terminal_font_size: number; terminal_ligatures: boolean; scrollback_lines: number; jira: JiraSite | null; jira_transitions: JiraTransitions; first_run_complete: boolean }
 /**
  * The layers a setting is resolved through. The contract's `app` layer is implicit and always present.
  */

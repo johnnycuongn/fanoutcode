@@ -206,8 +206,7 @@ mod tests {
     #[test]
     fn registry_is_the_a12_keys_this_plan_owns_and_resolve_all_uses_defaults() {
         let names: Vec<&str> = KEYS.iter().map(|k| k.key).collect();
-        // A12 order without the two rows Plan 10 inserts (jira, jira_transitions after scrollback_lines): 27 keys here, A12's 29
-        // once Plan 10 adds its keys to this list in its own failing-test step (Plan 04 added terminal_theme)
+        // A12's 29 keys in order (Plan 04 added terminal_theme, Plan 10 jira and jira_transitions)
         assert_eq!(
             names,
             [
@@ -237,6 +236,8 @@ mod tests {
                 "terminal_font_size",
                 "terminal_ligatures",
                 "scrollback_lines",
+                "jira",
+                "jira_transitions",
                 "first_run_complete"
             ]
         );

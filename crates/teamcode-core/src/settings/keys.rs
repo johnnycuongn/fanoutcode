@@ -84,6 +84,8 @@ settings_table! {
     TerminalFontSize, terminal_font_size, [App], (u32), 13;
     TerminalLigatures, terminal_ligatures, [App], (bool), false;
     ScrollbackLines, scrollback_lines, [App], (u32), 10_000;
+    Jira, jira, [Workspace, Project], (Option<crate::jira::client::JiraSite>), None;
+    JiraTransitions, jira_transitions, [Project], (crate::jira::settings::JiraTransitions), crate::jira::settings::JiraTransitions::default();
     FirstRunComplete, first_run_complete, [App], (bool), false;
 }
 
