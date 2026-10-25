@@ -40,8 +40,10 @@ pub struct PromptCtx {
     pub app_override: Option<String>,
     /// `<project memory root>/prompts/<stage>.md`, if any.
     pub project_override: Option<String>,
-    /// Instructions the workspace adds (workspace file, Plan 10).
+    /// Instructions the workspace adds for the stage being assembled (workspace file, Plan 10).
     pub workspace_fragment: Option<String>,
+    /// The workspace's instructions per stage word (`"plan"` …); `build_stage_prompts` picks the stage's one.
+    pub workspace_fragments: std::collections::BTreeMap<String, String>,
     /// For example a reviewer-note reply prefixed with `file:line` (Plan 08).
     pub task_additions: Vec<String>,
 }
@@ -224,6 +226,7 @@ mod tests {
             app_override: None,
             project_override: None,
             workspace_fragment: None,
+            workspace_fragments: Default::default(),
             task_additions: vec![],
         }
     }

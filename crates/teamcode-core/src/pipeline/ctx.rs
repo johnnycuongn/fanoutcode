@@ -30,8 +30,8 @@ fn values(conn: &Connection, task: &Task) -> Result<(Scope, ScopeValues)> {
 }
 
 /// The prompt context of a task. Overrides are left `None` (`build_stage_prompts` sets them per stage); linked
-/// projects come from `linked_roots`, named from the projects table or else the folder; the link policy and the
-/// context lists are Plan 10's to fill.
+/// projects come from `linked_roots`, named from the projects table or else the folder; the workspace parts are
+/// filled by `workspace::launch::fill_prompt_ctx`.
 pub fn build_prompt_ctx(
     conn: &Connection,
     task: &Task,
@@ -57,7 +57,7 @@ pub fn build_prompt_ctx(
             protected: false,
         });
     }
-    Ok(PromptCtx {
+    let mut ctx = PromptCtx {
         task_folder: task.memory_dir.clone(),
         project_root: project.root.clone(),
         worktree: task.worktree_path.clone(),
@@ -70,8 +70,12 @@ pub fn build_prompt_ctx(
         app_override: None,
         project_override: None,
         workspace_fragment: None,
+        workspace_fragments: Default::default(),
         task_additions: Vec::new(),
-    })
+    };
+    // the workspace's policy, protection, references and stage instructions (Plan 10)
+    crate::workspace::launch::fill_prompt_ctx(conn, task, &mut ctx, app_data)?;
+    Ok(ctx)
 }
 
 /// Assembles the Spec, Plan, Build, Review and fix-tests prompts, each with its app and project overrides
@@ -81,6 +85,7 @@ pub fn build_stage_prompts(ctx: &mut PromptCtx, app_config: &Path, memory_root: 
     let project_dir = prompts::prompts_dir_project(memory_root);
     let has_run = ctx.last_test.is_some();
     let mut one = |stage: Stage| -> Result<String> {
+        ctx.workspace_fragment = ctx.workspace_fragments.get(stage.as_str()).cloned();
         ctx.app_override = prompts::load_override(&app_dir, stage)?;
         ctx.project_override = prompts::load_override(&project_dir, stage)?;
         Ok(prompts::assemble(stage, ctx))

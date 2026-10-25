@@ -13,6 +13,7 @@ use teamcode_core::roster::{self, RosterLevel, RosterScope};
 use teamcode_core::sessions::{
     claude_launch, codex_launch, settings_path, shell_launch, ClaudeLaunch, GeneratedSettings, LaunchSpec,
 };
+use teamcode_core::workspace::launch as workspace_launch;
 use teamcode_core::{db, memory, worktree, Error, Result};
 
 use crate::events::{self, SessionExited, SessionQueueChanged};
@@ -41,6 +42,8 @@ pub fn open_primary(app: &AppHandle, task_id: &TaskId, fresh: bool) -> Result<Se
             return Ok(id);
         }
     }
+    // the links are fixed at the first start, before the launch arguments (Plan 10)
+    crate::linking::bind_if_first_start(app, &state, None, task_id)?;
     let (launch, kind) = {
         let conn = state.db.lock().expect("db lock");
         let task = db::tasks::require(&conn, task_id)?;
@@ -178,48 +181,57 @@ fn task_launch(
     match task.agent_kind {
         AgentKind::ClaudeCode => {
             let settings = settings_path(&state.data_dir, &task.id)?;
-            generated_settings(&state.data_dir, task).write(&settings)?;
-            let agents = roster::resolve(&roster_scope(state, project));
-            claude_launch(&ClaudeLaunch {
+            let exe = std::env::current_exe()?;
+            let home = std::env::var_os("HOME").map_or_else(|| PathBuf::from("/"), PathBuf::from);
+            // protected roots: deny rules and the Bash guard; refuses the launch for a root that can't be protected
+            let extras = workspace_launch::launch_extras(conn, task, &state.data_dir, &exe, &home)?;
+            generated_settings(&state.data_dir, task, &extras).write(&settings)?;
+            let agents = roster::resolve(&roster_scope(state, conn, task, project));
+            let mut spec = claude_launch(&ClaudeLaunch {
                 task,
                 project_root: &project.root,
                 settings_path: &settings,
                 agents: &agents,
                 convention,
                 fresh,
-            })
+            })?;
+            for dir in extras.add_dirs {
+                spec.args.extend(["--add-dir".to_owned(), dir.display().to_string()]);
+            }
+            Ok(spec)
         }
         AgentKind::Codex => Ok(codex_launch(&worktree_cwd()?)),
         AgentKind::Shell => Ok(shell_launch(&worktree_cwd()?, &login_shell())),
     }
 }
 
-/// Hooks and the status line from Plan 05, the protected-root deny rules from Plan 10.
-fn generated_settings(app_data: &Path, task: &Task) -> GeneratedSettings {
+/// Hooks and the status line from Plan 05, the protected-root deny rules and the Bash guard from Plan 10.
+fn generated_settings(app_data: &Path, task: &Task, extras: &workspace_launch::LaunchExtras) -> GeneratedSettings {
     let user = home_claude_settings().and_then(|text| user_status_line(&text));
+    let mut hooks = hook_specs(&task.id, app_data);
+    hooks.extend(extras.guard.clone());
     GeneratedSettings {
-        hooks: hook_specs(&task.id, app_data),
+        hooks,
         status_line: Some(status_line_command(
             &event_log_path(app_data, &task.id),
             user.as_deref(),
         )),
-        permission_deny: protected_deny_rules(task),
+        permission_deny: extras.deny.clone(),
         bg_isolation_none: false,
     }
 }
 
-/// `workspace::protected_deny_rules(&Task)` is Plan 10's.
-fn protected_deny_rules(_task: &Task) -> Vec<String> {
-    Vec::new() // STUB(plan 10)
-}
-
-/// The app's and the project's agents; the workspace level is Plan 10's.
-fn roster_scope(state: &AppState, project: &Project) -> RosterScope {
+/// The app's, the workspace's (from its file) and the project's agents.
+fn roster_scope(state: &AppState, conn: &rusqlite::Connection, task: &Task, project: &Project) -> RosterScope {
     let load =
         |dir: PathBuf, level| log_err("reading the agent roster", roster::load_dir(&dir, level)).unwrap_or_default();
     RosterScope {
         app: load(roster::agents_dir_app(&state.config_dir), RosterLevel::App),
-        workspace: Vec::new(), // STUB(plan 10)
+        workspace: log_err(
+            "reading the workspace agents",
+            workspace_launch::workspace_agents(conn, task),
+        )
+        .unwrap_or_default(),
         project: load(
             roster::agents_dir_project(&memory::root_for(project, &state.data_dir)),
             RosterLevel::Project,

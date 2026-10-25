@@ -9,11 +9,13 @@ use teamcode_core::{Error, Result};
 
 use crate::commands::tests as test_runs;
 use crate::commands::{
-    activity, canvas, cost, git, hooks, livespec, memory, projects, sessions, settings, tasks, views, windows,
+    activity, canvas, context_docs, cost, git, hooks, livespec, memory, projects, sessions, settings, tasks, views,
+    windows, workspaces,
 };
 use crate::events::{
-    CostUpdated, GitChanges, NeedsYou, SessionAttached, SessionExited, SessionQueueChanged, SpecWatcher, TaskChanged,
-    TasksReloaded, TeamEvent, TestFinished, ViewsChanged, WorkspaceChanged,
+    ContextDocsChanged, CostUpdated, GitChanges, NeedsYou, SessionAttached, SessionExited, SessionQueueChanged,
+    SpecWatcher, TaskChanged, TasksReloaded, TeamEvent, TestFinished, ViewsChanged, WindowContainerChanged,
+    WorkspaceChanged, WorkspaceFileChanged,
 };
 
 /// `@ts-nocheck`: the generated globals import `Channel` before any command takes one, which `noUnusedLocals` would
@@ -93,6 +95,32 @@ pub fn builder() -> Builder<tauri::Wry> {
             sessions::sessions_get,
             sessions::sessions_list,
             sessions::sessions_stop,
+            workspaces::workspaces_list,
+            workspaces::workspaces_open,
+            workspaces::workspaces_preview_open,
+            workspaces::workspaces_confirm_open,
+            workspaces::workspaces_create,
+            workspaces::workspaces_add_project,
+            workspaces::workspaces_remove_project,
+            workspaces::workspaces_save,
+            workspaces::workspaces_save_as,
+            workspaces::workspaces_set_policy,
+            workspaces::workspaces_status,
+            workspaces::workspaces_reload,
+            workspaces::workspaces_relocate_file,
+            workspaces::workspaces_relocate_project,
+            workspaces::workspaces_reorder_projects,
+            workspaces::workspaces_fragments,
+            workspaces::workspaces_set_fragment,
+            workspaces::workspaces_agents,
+            workspaces::workspaces_set_agent,
+            workspaces::workspaces_convert,
+            workspaces::workspaces_create_from_windows,
+            workspaces::workspaces_link_status,
+            context_docs::context_docs_list,
+            context_docs::context_docs_add,
+            context_docs::context_docs_remove,
+            context_docs::context_docs_fetch,
         ])
         .events(collect_events![
             TaskChanged,
@@ -101,6 +129,9 @@ pub fn builder() -> Builder<tauri::Wry> {
             SessionExited,
             SessionAttached,
             WorkspaceChanged,
+            WorkspaceFileChanged,
+            ContextDocsChanged,
+            WindowContainerChanged,
             ViewsChanged,
             CostUpdated,
             GitChanges,
@@ -183,10 +214,23 @@ mod tests {
             "sessionsAck",
             "sessionsGet",
             "sessionsStop",
+            "workspacesConvert",
+            "workspacesPreviewOpen",
+            "workspacesConfirmOpen",
+            "contextDocsFetch",
         ] {
             assert!(ts.contains(&format!("async {command}(")), "{command}");
         }
-        for ty in ["TaskPatch", "ActionOutcome", "Branch", "StageAction"] {
+        for ty in [
+            "TaskPatch",
+            "ActionOutcome",
+            "Branch",
+            "StageAction",
+            "WorkspaceStatus",
+            "LinkStatus",
+            "ContextDoc",
+            "WorkspaceImportPreview",
+        ] {
             assert!(ts.contains(&format!("export type {ty} = ")), "{ty}");
         }
         assert!(

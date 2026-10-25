@@ -2,9 +2,8 @@
 
 use std::path::{Path, PathBuf};
 
-use serde::Deserialize;
 use tauri::{AppHandle, Manager, State, Window};
-use teamcode_core::domain::{Container, ProjectId, WindowId, WorkspaceId};
+use teamcode_core::domain::{Container, ProjectId, WindowId};
 use teamcode_core::recent::{self, RecentEntry, RecentKind};
 use teamcode_core::windows::WindowInfo;
 use teamcode_core::{db, Error, Result};
@@ -115,28 +114,25 @@ pub async fn windows_open_project(window: Window, state: State<'_, AppState>, pa
     )
 }
 
-/// The two keys Plan 01 reads from a `<name>.teamcode-workspace.json`; Plan 10 owns the rest.
-#[derive(Deserialize)]
-struct Envelope {
-    id: String,
-    name: String,
-}
-
-/// Opens the workspace file at `path` in its own window (or focuses the window already showing it).
+/// Opens the workspace file at `path` in its own window (or focuses the window already showing it). Only a file this
+/// app wrote for the record at that path opens directly; any other file is reviewed first through
+/// `workspaces_preview_open` and `workspaces_confirm_open` (Plan 10).
 #[tauri::command]
 #[specta::specta]
 pub async fn windows_open_workspace(window: Window, state: State<'_, AppState>, path: PathBuf) -> Result<WindowInfo> {
-    let file = canonical(&path, "That workspace file no longer exists. Relocate or remove it.")?;
-    let not_a_workspace = || Error::Invalid("Not a Team Code workspace file.".into());
-    let text = std::fs::read_to_string(&file)?;
-    let envelope: Envelope = serde_json::from_str(&text).map_err(|_| not_a_workspace())?;
-    let id = WorkspaceId::parse(&envelope.id).map_err(|_| not_a_workspace())?;
-    let workspace = db::find_or_create_workspace(&state.db.lock().expect("db lock"), &id, &envelope.name, &file)?;
+    open_workspace_window(&window, &state, &path)
+}
+
+/// `windows_open_workspace` for callers in the shell.
+pub(crate) fn open_workspace_window(window: &Window, state: &AppState, path: &Path) -> Result<WindowInfo> {
+    let file = canonical(path, "That workspace file no longer exists. Relocate or remove it.")?;
+    let workspace = teamcode_core::workspace::import::open_file(&state.workspaces, &file)?;
+    let id = workspace.id.clone();
     let project_ids: Vec<ProjectId> = workspace.projects.iter().map(|p| p.project_id.clone()).collect();
     let entry = recent_entry(RecentKind::Workspace, id.as_str(), &workspace.name, &file);
     open_container(
-        &window,
-        &state,
+        window,
+        state,
         Container::Workspace { id },
         workspace.name,
         project_ids,

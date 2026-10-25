@@ -5,7 +5,7 @@ use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
 use teamcode_core::db;
-use teamcode_core::domain::{Container, PaneId, SessionId, Task, TaskId, WindowId, Workspace};
+use teamcode_core::domain::{Container, PaneId, SessionId, Task, TaskId, WindowId, Workspace, WorkspaceId};
 use teamcode_core::hooks::TaskEvent;
 use teamcode_core::{Error, Result};
 
@@ -48,6 +48,24 @@ pub struct SessionAttached {
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type, tauri_specta::Event)]
 pub struct WorkspaceChanged {
     pub workspace: Workspace,
+}
+
+/// A workspace file saved outside app data changed on disk (Plan 10's watcher); the window offers a reload.
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type, tauri_specta::Event)]
+pub struct WorkspaceFileChanged {
+    pub workspace_id: WorkspaceId,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type, tauri_specta::Event)]
+pub struct ContextDocsChanged {
+    pub container: Container,
+}
+
+/// A window now shows a different container (a project window converted into a workspace).
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type, tauri_specta::Event)]
+pub struct WindowContainerChanged {
+    pub window_id: WindowId,
+    pub container: Container,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type, tauri_specta::Event)]

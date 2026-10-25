@@ -7,6 +7,7 @@ use teamcode_core::Result;
 
 pub mod activity;
 pub mod canvas;
+pub mod context_docs;
 pub mod cost;
 pub mod git;
 pub mod hooks;
@@ -19,6 +20,7 @@ pub mod tasks;
 pub mod tests;
 pub mod views;
 pub mod windows;
+pub mod workspaces;
 
 /// Re-parses a container's id from the webview (serde's transparent `Deserialize` does not validate).
 pub(crate) fn parse_container(c: &Container) -> Result<Container> {

@@ -11,6 +11,7 @@ pub mod fragments;
 pub mod guard;
 pub mod import;
 pub(crate) mod import_checks;
+pub mod launch;
 pub mod link;
 pub mod open;
 pub mod policy;

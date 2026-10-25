@@ -8,6 +8,7 @@ pub mod git_watcher;
 pub mod helpers;
 pub mod hook_feed;
 pub mod hooks_tailer;
+pub mod linking;
 pub mod observation;
 pub mod observe;
 pub mod provider;
@@ -17,6 +18,7 @@ pub mod session_service;
 pub mod specta;
 pub mod state;
 pub mod windows;
+pub mod workspace_sync;
 
 use tauri::Manager;
 use teamcode_core::db;
@@ -73,6 +75,7 @@ pub fn run() {
             // the first launch would otherwise wait for the login shell's PATH
             std::thread::spawn(livespec_core::shell_env::login_shell_path);
             git_watcher::GitWatcher::start(app.handle());
+            workspace_sync::start(app.handle());
             let state = app.state::<AppState>();
             let open = {
                 let conn = state.db.lock().expect("db lock");

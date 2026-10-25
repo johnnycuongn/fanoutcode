@@ -13,7 +13,9 @@ use teamcode_core::activity::ActivityTracker;
 use teamcode_core::changes::attributor::Attributor;
 use teamcode_core::changes::ChangeSet;
 use teamcode_core::cost::LiveCost;
+use teamcode_core::db::Db;
 use teamcode_core::domain::TaskId;
+use teamcode_core::domain::WorkspaceId;
 use teamcode_core::helpers::livespec_run::RunSlots;
 use teamcode_core::helpers::HelperKind;
 use teamcode_core::hooks::attribution::Correlator;
@@ -22,6 +24,9 @@ use teamcode_core::sessions::{OwnedDriver, PtySpawner, SessionDriver, SessionReg
 use teamcode_core::settings::{keys, resolve, Scope};
 use teamcode_core::testrun::{LiveOutput, TestResult};
 use teamcode_core::windows::WindowRegistry;
+use teamcode_core::workspace::context_docs::ContextDocs;
+use teamcode_core::workspace::store::WorkspaceStore;
+use teamcode_core::workspace::watcher::WorkspaceFileWatcher;
 use teamcode_core::{db, Result};
 
 use crate::git_watcher::GitWatcher;
@@ -32,8 +37,15 @@ use crate::pty::PortablePtySpawner;
 pub type TestRunSlot = (tauri::async_runtime::JoinHandle<()>, Arc<LiveOutput>);
 
 pub struct AppState {
-    /// `<app_data>/teamcode.db`, migrated at open.
-    pub db: Mutex<Connection>,
+    /// `<app_data>/teamcode.db`, migrated at open; shared with the workspace stores, which lock it per call (never
+    /// call one while holding this lock).
+    pub db: Db,
+    /// Workspace records and their file mirrors (Plan 10).
+    pub workspaces: WorkspaceStore,
+    pub context_docs: ContextDocs,
+    pub workspace_watcher: Arc<WorkspaceFileWatcher>,
+    /// The watcher's reports, taken by `setup` to emit `workspace-file-changed`.
+    pub workspace_file_changes: Mutex<Option<std::sync::mpsc::Receiver<WorkspaceId>>>,
     /// Which window shows which container.
     pub windows: Mutex<WindowRegistry>,
     pub data_dir: PathBuf,
@@ -87,8 +99,18 @@ impl AppState {
     pub fn new(data_dir: &Path, config_dir: &Path) -> Result<Self> {
         let conn = db::open(&data_dir.join("teamcode.db"))?;
         let lines = scrollback_lines(&conn)?;
+        let db = db::shared(conn);
+        let (tx, rx) = std::sync::mpsc::channel();
+        let tx = Mutex::new(tx);
+        let workspace_watcher = WorkspaceFileWatcher::new(Box::new(move |id| {
+            let _ = tx.lock().expect("watcher channel lock").send(id);
+        }))?;
         Ok(Self {
-            db: Mutex::new(conn),
+            workspaces: WorkspaceStore::new(db.clone(), data_dir.to_owned(), Some(workspace_watcher.clone())),
+            context_docs: ContextDocs::new(db.clone()),
+            workspace_watcher,
+            workspace_file_changes: Mutex::new(Some(rx)),
+            db,
             windows: Mutex::new(WindowRegistry::new()),
             data_dir: data_dir.to_owned(),
             config_dir: config_dir.to_owned(),

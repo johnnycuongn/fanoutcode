@@ -364,7 +364,9 @@ async windowsOpenProject(path: string) : Promise<Result<WindowInfo, string>> {
 }
 },
 /**
- * Opens the workspace file at `path` in its own window (or focuses the window already showing it).
+ * Opens the workspace file at `path` in its own window (or focuses the window already showing it). Only a file this
+ * app wrote for the record at that path opens directly; any other file is reviewed first through
+ * `workspaces_preview_open` and `workspaces_confirm_open` (Plan 10).
  */
 async windowsOpenWorkspace(path: string) : Promise<Result<WindowInfo, string>> {
     try {
@@ -673,6 +675,252 @@ async sessionsStop(sessionId: SessionId) : Promise<Result<null, string>> {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+async workspacesList() : Promise<Result<Workspace[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("workspaces_list") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Reopens a workspace file this app wrote for the record already at that path (and that adds nothing since).
+ * Any other file needs `workspaces_preview_open` and `workspaces_confirm_open`.
+ */
+async workspacesOpen(path: string) : Promise<Result<Workspace, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("workspaces_open", { path }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * What opening the file would bring in; writes nothing.
+ */
+async workspacesPreviewOpen(path: string) : Promise<Result<WorkspaceImportPreview, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("workspaces_preview_open", { path }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Imports exactly what the preview with this token showed.
+ */
+async workspacesConfirmOpen(token: string) : Promise<Result<Workspace, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("workspaces_confirm_open", { token }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async workspacesCreate(name: string, projectIds: ProjectId[]) : Promise<Result<Workspace, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("workspaces_create", { name, projectIds }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Adds the project at `path` (opened as `projects_open` does).
+ */
+async workspacesAddProject(id: WorkspaceId, path: string) : Promise<Result<Workspace, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("workspaces_add_project", { id, path }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Removes the project; panes showing its tasks or terminals close in this workspace's views, and their sessions
+ * keep running, detached.
+ */
+async workspacesRemoveProject(id: WorkspaceId, projectId: ProjectId) : Promise<Result<Workspace, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("workspaces_remove_project", { id, projectId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async workspacesSave(id: WorkspaceId) : Promise<Result<Workspace, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("workspaces_save", { id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async workspacesSaveAs(id: WorkspaceId, path: string) : Promise<Result<Workspace, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("workspaces_save_as", { id, path }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * The policy and the protected targets (`overrides`); applies to sessions started from now on.
+ */
+async workspacesSetPolicy(id: WorkspaceId, policy: LinkPolicy, overrides: ProjectId[]) : Promise<Result<Workspace, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("workspaces_set_policy", { id, policy, overrides }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async workspacesStatus(id: WorkspaceId) : Promise<Result<WorkspaceStatus, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("workspaces_status", { id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Re-reads the file; refuses unsaved changes unless `discard_unsaved`, and a file that now adds folders, agents
+ * or instructions (those go through the preview).
+ */
+async workspacesReload(id: WorkspaceId, discardUnsaved: boolean) : Promise<Result<Workspace, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("workspaces_reload", { id, discardUnsaved }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async workspacesRelocateFile(id: WorkspaceId, path: string) : Promise<Result<Workspace, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("workspaces_relocate_file", { id, path }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async workspacesRelocateProject(id: WorkspaceId, projectId: ProjectId, path: string) : Promise<Result<Workspace, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("workspaces_relocate_project", { id, projectId, path }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async workspacesReorderProjects(id: WorkspaceId, projectIds: ProjectId[]) : Promise<Result<Workspace, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("workspaces_reorder_projects", { id, projectIds }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async workspacesFragments(id: WorkspaceId) : Promise<Result<Partial<{ [key in string]: string }>, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("workspaces_fragments", { id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async workspacesSetFragment(id: WorkspaceId, stage: string, text: string | null) : Promise<Result<Workspace, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("workspaces_set_fragment", { id, stage, text }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async workspacesAgents(id: WorkspaceId) : Promise<Result<Partial<{ [key in string]: string }>, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("workspaces_agents", { id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async workspacesSetAgent(id: WorkspaceId, name: string, markdown: string | null) : Promise<Result<Workspace, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("workspaces_set_agent", { id, name, markdown }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Turns the calling project window into a workspace of that project and the one at `path`, keeping its views.
+ */
+async workspacesConvert(projectId: ProjectId, path: string) : Promise<Result<Workspace, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("workspaces_convert", { projectId, path }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * A new workspace of every project shown in the open windows, their views merged into it; those windows close and
+ * the workspace opens in a window of its own.
+ */
+async workspacesCreateFromWindows(name: string) : Promise<Result<Workspace, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("workspaces_create_from_windows", { name }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async workspacesLinkStatus(taskId: TaskId) : Promise<Result<LinkStatus, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("workspaces_link_status", { taskId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async contextDocsList(container: Container) : Promise<Result<ContextDoc[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("context_docs_list", { container }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * A file or folder path is canonicalised; links are checked by the store.
+ */
+async contextDocsAdd(container: Container, kind: ContextDocKind, target: string, label: string | null) : Promise<Result<ContextDoc, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("context_docs_add", { container, kind, target, label }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async contextDocsRemove(container: Container, id: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("context_docs_remove", { container, id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Fetches the reference's text now, caches it and returns it for a preview. Confluence pages use the Atlassian
+ * site linked for Jira at the container's scope and its token from the keychain; the token never leaves the shell.
+ */
+async contextDocsFetch(container: Container, id: string) : Promise<Result<string, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("context_docs_fetch", { container, id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
@@ -680,6 +928,7 @@ async sessionsStop(sessionId: SessionId) : Promise<Result<null, string>> {
 
 
 export const events = __makeEvents__<{
+contextDocsChanged: ContextDocsChanged,
 costUpdated: CostUpdated,
 gitChanges: GitChanges,
 needsYou: NeedsYou,
@@ -692,8 +941,11 @@ tasksReloaded: TasksReloaded,
 teamEvent: TeamEvent,
 testFinished: TestFinished,
 viewsChanged: ViewsChanged,
-workspaceChanged: WorkspaceChanged
+windowContainerChanged: WindowContainerChanged,
+workspaceChanged: WorkspaceChanged,
+workspaceFileChanged: WorkspaceFileChanged
 }>({
+contextDocsChanged: "context-docs-changed",
 costUpdated: "cost-updated",
 gitChanges: "git-changes",
 needsYou: "needs-you",
@@ -706,7 +958,9 @@ tasksReloaded: "tasks-reloaded",
 teamEvent: "team-event",
 testFinished: "test-finished",
 viewsChanged: "views-changed",
-workspaceChanged: "workspace-changed"
+windowContainerChanged: "window-container-changed",
+workspaceChanged: "workspace-changed",
+workspaceFileChanged: "workspace-file-changed"
 })
 
 /** user-defined constants **/
@@ -745,6 +999,16 @@ owners: string[]; shared: boolean; source: ChangeSource }
  */
 export type Container = { type: "Project"; id: ProjectId } | { type: "Workspace"; id: WorkspaceId }
 /**
+ * One reference listed in prompts under "Project references" or "Workspace references".
+ */
+export type ContextDoc = { id: string; kind: ContextDocKind; target: string; label: string; page_id: string | null; fetched_at: string | null; order: number }
+/**
+ * What a context doc points at. Serialises as `"File"`, `"Folder"`, `"Url"`, `"Confluence"` (A16), the strings
+ * stored in `context_docs.kind`.
+ */
+export type ContextDocKind = "File" | "Folder" | "Url" | "Confluence"
+export type ContextDocsChanged = { container: Container }
+/**
  * One breakdown row (A19); `by_agent` keys are agent ids, `"main"` and `"helpers"`.
  */
 export type CostLine = { key: string; cost_usd: number; input_tokens: number; output_tokens: number; estimated: boolean }
@@ -779,6 +1043,18 @@ export type HandbackReason =
  */
 export type HookEvent = { type: "SessionStart"; session_id: string; transcript_path: string } | { type: "UserPromptSubmit" } | { type: "PreToolUse"; tool: string; input: JsonValue } | { type: "PostToolUse"; tool: string; input: JsonValue; response: JsonValue } | { type: "SubagentStart"; agent_id: string; agent_type: string; description: string | null } | { type: "SubagentStop"; agent_id: string } | { type: "PermissionRequest"; tool: string } | { type: "Notification"; message: string } | { type: "Stop"; last_assistant_message: string; background_tasks: number } | { type: "StopFailure"; message: string } | { type: "StatusLine"; cost_usd: number; input_tokens: number; output_tokens: number; context_used_pct: number } | { type: "Unknown"; name: string }
 /**
+ * One reference the file lists, as the prompts would name it.
+ */
+export type ImportDoc = { kind: ContextDocKind; target: string; label: string; page_id: string | null }
+/**
+ * One project root the file names.
+ */
+export type ImportRoot = { path: string; exists: boolean; is_dir: boolean; 
+/**
+ * No project with this root is open in Team Code yet.
+ */
+new_to_app: boolean; protected: boolean }
+/**
  * A linked Atlassian site. `account` names the keychain entry holding the API token (e.g. `jira:project:p-1`); the
  * token itself never leaves the keychain except into a request. Owned here (A19).
  */
@@ -790,6 +1066,10 @@ export type JiraTransitions = { enabled: boolean; on_stage: Partial<{ [key in st
 export type JsonValue = null | boolean | number | string | JsonValue[] | Partial<{ [key in string]: JsonValue }>
 export type LayoutNode = { type: "Leaf"; pane: PaneId; content: PaneContent } | { type: "Split"; direction: SplitDirection; ratio: number; first: LayoutNode; second: LayoutNode }
 export type LinkPolicy = "ReadAndModifyOnRequest" | "ReadOnly"
+/**
+ * A bound task's links against the workspace as it is now.
+ */
+export type LinkStatus = { type: "Unbound" } | { type: "Bound"; workspace_id: WorkspaceId | null; linked_roots: string[] } | { type: "Changed"; added: string[]; removed: string[] }
 /**
  * The status line's running numbers for a task's session, reported beside the ledger (which lags until a Stop).
  */
@@ -998,6 +1278,10 @@ export type View = { id: ViewId; container: Container; name: string; order: numb
 export type ViewId = string
 export type ViewsChanged = { container: Container }
 /**
+ * A window now shows a different container (a project window converted into a workspace).
+ */
+export type WindowContainerChanged = { window_id: WindowId; container: Container }
+/**
  * `w-<n>`, as in LiveSpec; the Tauri window label.
  */
 export type WindowId = string
@@ -1009,8 +1293,44 @@ export type WindowInfo = { window_id: WindowId; title: string; container: Contai
 export type Workspace = { id: WorkspaceId; name: string; file_path: string | null; dirty: boolean; projects: WorkspaceProject[]; policy: LinkPolicy }
 export type WorkspaceBoard = "Swimlanes" | "OneProject" | "Mixed"
 export type WorkspaceChanged = { workspace: Workspace }
+/**
+ * A workspace file saved outside app data changed on disk (Plan 10's watcher); the window offers a reload.
+ */
+export type WorkspaceFileChanged = { workspace_id: WorkspaceId }
 export type WorkspaceId = string
+/**
+ * What opening the file would bring in, shown before anything is written.
+ */
+export type WorkspaceImportPreview = { name: string; roots: ImportRoot[]; policy: LinkPolicy; agent_names: string[]; fragment_stages: string[]; settings_keys: string[]; docs: ImportDoc[]; 
+/**
+ * Every dropped field and every refused root, as sentences.
+ */
+problems: string[]; 
+/**
+ * A refused root: `confirm_open` will fail.
+ */
+blocked: boolean; 
+/**
+ * False when the file is this app's own for the record at that path and adds nothing since its last save.
+ */
+needs_confirmation: boolean; 
+/**
+ * Pass to `confirm_open`; random, single use, valid for `PREVIEW_TTL`.
+ */
+token: string }
 export type WorkspaceProject = { project_id: ProjectId; order: number; protected: boolean }
+/**
+ * What the settings screen and the window warn about.
+ */
+export type WorkspaceStatus = { file_missing: boolean; 
+/**
+ * Members whose root folder no longer exists.
+ */
+missing_projects: ProjectId[]; 
+/**
+ * The file lives outside app data, so changes wait for `save`.
+ */
+explicit_save: boolean }
 /**
  * Per task, resolved from the project default at creation.
  */
