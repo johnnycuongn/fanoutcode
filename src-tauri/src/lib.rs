@@ -58,8 +58,15 @@ pub fn run() {
             if let Err(e) = teamcode_core::roster::install_shipped(&config_dir) {
                 eprintln!("Team Code: couldn't install the shipped agents: {e}");
             }
-            // Plan 04 subscribes its note_hook_event here, before the replay (A18)
+            // Plan 04's note_hook_event, subscribed before the replay (A18); the tailer never names session_service
+            let handle = app.handle().clone();
+            hooks_tailer::subscribe(Box::new(move |task_id, ev| {
+                session_service::note_hook_event(&handle, task_id, ev)
+            }));
             hooks_tailer::HooksTailer::start(app.handle());
+            session_service::start_codex_ticker(app.handle());
+            // the first launch would otherwise wait for the login shell's PATH
+            std::thread::spawn(livespec_core::shell_env::login_shell_path);
             git_watcher::GitWatcher::start(app.handle());
             let state = app.state::<AppState>();
             let open = {

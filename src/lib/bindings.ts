@@ -640,6 +640,17 @@ async sessionsGet(sessionId: SessionId) : Promise<Result<Session, string>> {
  */
 async sessionsList() : Promise<Session[]> {
     return await TAURI_INVOKE("sessions_list");
+},
+/**
+ * Stop agent: the graceful end (`/exit`, up to 5 s, then kill) on a worker thread; `session-exited` follows.
+ */
+async sessionsStop(sessionId: SessionId) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("sessions_stop", { sessionId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 

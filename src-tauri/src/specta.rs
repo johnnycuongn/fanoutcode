@@ -90,6 +90,7 @@ pub fn builder() -> Builder<tauri::Wry> {
             sessions::sessions_ack,
             sessions::sessions_get,
             sessions::sessions_list,
+            sessions::sessions_stop,
         ])
         .events(collect_events![
             TaskChanged,
@@ -179,6 +180,7 @@ mod tests {
             "sessionsBring",
             "sessionsAck",
             "sessionsGet",
+            "sessionsStop",
         ] {
             assert!(ts.contains(&format!("async {command}(")), "{command}");
         }

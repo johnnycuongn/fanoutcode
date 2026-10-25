@@ -26,8 +26,14 @@ fn project_of(conn: &rusqlite::Connection, task: &Task) -> Result<Project> {
 }
 
 /// Dispatches, notifies, and returns the outcome. Called with no lock held.
-fn finish(app: &AppHandle, state: &AppState, task: Task, external: Vec<Effect>) -> Result<ActionOutcome> {
-    let toasts = effects::dispatch(app, state, &task, external);
+fn finish(
+    app: &AppHandle,
+    state: &AppState,
+    task: Task,
+    action: Option<&StageAction>,
+    external: Vec<Effect>,
+) -> Result<ActionOutcome> {
+    let toasts = effects::dispatch(app, state, &task, action, external);
     // a runner may have changed the task (its worktree), so the row is the truth
     let conn = state.db.lock().expect("db lock");
     let task = db::tasks::get(&conn, &task.id)?.unwrap_or(task);
@@ -41,6 +47,17 @@ pub(crate) fn run(
     app: &AppHandle,
     state: &AppState,
     id: &TaskId,
+    compute: impl FnOnce(&Task, &pipeline::TransitionCtx) -> Result<Vec<Effect>>,
+) -> Result<ActionOutcome> {
+    run_with(app, state, id, None, compute)
+}
+
+/// `run` for a stage action: the session runner needs it to tell Start fresh session and Archive apart (Plan 04).
+pub(crate) fn run_with(
+    app: &AppHandle,
+    state: &AppState,
+    id: &TaskId,
+    action: Option<&StageAction>,
     compute: impl FnOnce(&Task, &pipeline::TransitionCtx) -> Result<Vec<Effect>>,
 ) -> Result<ActionOutcome> {
     let id = TaskId::parse(id.as_str())?;
@@ -67,13 +84,15 @@ pub(crate) fn run(
             now,
         )?
     };
-    finish(app, state, applied.task, applied.external)
+    finish(app, state, applied.task, action, applied.external)
 }
 
 /// A stage action the app itself takes (Done detection, a test result): `tasks_action` without the webview. The
 /// toasts have no window to go to, so they are logged.
 pub(crate) fn run_action(app: &AppHandle, state: &AppState, id: &TaskId, action: StageAction) -> Result<Task> {
-    let outcome = run(app, state, id, |task, tctx| pipeline::transition(task, action, tctx))?;
+    let outcome = run_with(app, state, id, Some(&action.clone()), |task, tctx| {
+        pipeline::transition(task, action, tctx)
+    })?;
     for t in &outcome.toasts {
         eprintln!("Team Code: {} ({})", t, outcome.task.id);
     }
@@ -92,7 +111,7 @@ fn save(app: &AppHandle, state: &AppState, task: Task) -> Result<Task> {
             task.updated_at,
         )?
     };
-    Ok(finish(app, state, applied.task, applied.external)?.task)
+    Ok(finish(app, state, applied.task, None, applied.external)?.task)
 }
 
 #[tauri::command]
@@ -120,7 +139,7 @@ pub fn tasks_create(
         };
         pipeline::create_task(&mut conn, &state.data_dir, new)?
     };
-    let outcome = finish(&app, &state, created.task, created.external)?;
+    let outcome = finish(&app, &state, created.task, None, created.external)?;
     let mut containers = vec![Container::Project { id: project_id }];
     containers.extend(workspace_id.map(|id| Container::Workspace { id }));
     for container in containers {
@@ -179,13 +198,16 @@ pub fn tasks_action(
     id: TaskId,
     action: StageAction,
 ) -> Result<ActionOutcome> {
-    run(&app, &state, &id, |task, tctx| pipeline::transition(task, action, tctx))
+    let named = action.clone();
+    run_with(&app, &state, &id, Some(&named), |task, tctx| {
+        pipeline::transition(task, action, tctx)
+    })
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn tasks_archive(app: AppHandle, state: State<'_, AppState>, id: TaskId) -> Result<ActionOutcome> {
-    run(&app, &state, &id, |task, tctx| {
+    run_with(&app, &state, &id, Some(&StageAction::Archive), |task, tctx| {
         pipeline::transition(task, StageAction::Archive, tctx)
     })
 }
@@ -193,7 +215,7 @@ pub fn tasks_archive(app: AppHandle, state: State<'_, AppState>, id: TaskId) -> 
 #[tauri::command]
 #[specta::specta]
 pub fn tasks_restore(app: AppHandle, state: State<'_, AppState>, id: TaskId) -> Result<ActionOutcome> {
-    run(&app, &state, &id, |task, tctx| {
+    run_with(&app, &state, &id, Some(&StageAction::Restore), |task, tctx| {
         pipeline::transition(task, StageAction::Restore, tctx)
     })
 }

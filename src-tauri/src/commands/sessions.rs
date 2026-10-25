@@ -142,3 +142,10 @@ pub fn sessions_get(state: State<'_, AppState>, session_id: SessionId) -> Result
 pub fn sessions_list(state: State<'_, AppState>) -> Vec<Session> {
     state.registry().list()
 }
+
+/// Stop agent: the graceful end (`/exit`, up to 5 s, then kill) on a worker thread; `session-exited` follows.
+#[tauri::command]
+#[specta::specta]
+pub fn sessions_stop(app: AppHandle, session_id: SessionId) -> Result<()> {
+    session_service::stop(&app, &SessionId::parse(session_id.as_str())?)
+}

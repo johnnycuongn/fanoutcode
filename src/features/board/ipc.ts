@@ -17,7 +17,6 @@ import {
   type TasksReloaded,
   type WindowInfo,
 } from "@/lib/bindings";
-import { sessionsStop } from "./stubs/plan04";
 import { costSummary, gitChanges } from "@/lib/pendingCommands";
 import {
   listenTeamEvent,
@@ -107,7 +106,9 @@ export const ipc = {
   async tasksRestore(id: string): Promise<ActionOutcome> {
     return unwrap(await commands.tasksRestore(id));
   },
-  sessionsStop: (sessionId: string): Promise<void> => sessionsStop(sessionId),
+  async sessionsStop(sessionId: string): Promise<void> {
+    unwrap(await commands.sessionsStop(sessionId));
+  },
   async windowsList(): Promise<WindowInfo[]> {
     return unwrap(await commands.windowsList());
   },

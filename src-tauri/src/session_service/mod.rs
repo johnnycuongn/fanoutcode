@@ -19,6 +19,12 @@ use crate::events::{self, SessionExited, SessionQueueChanged};
 use crate::observe::log_err;
 use crate::state::{scrollback_lines, AppState};
 
+mod effects;
+mod stop;
+
+pub use effects::*;
+pub use stop::*;
+
 /// Every session starts at this size; the pane's first fit resizes it.
 pub const START_SIZE: (u16, u16) = (80, 24);
 
