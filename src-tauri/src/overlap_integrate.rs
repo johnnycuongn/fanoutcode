@@ -9,7 +9,7 @@ use fanoutcode_core::domain::{AgentState, HandbackReason, RepoBase, Task, TaskId
 use fanoutcode_core::hooks::{HookEvent, TaskEvent};
 use fanoutcode_core::memory::{MemoryFile, TaskFolder};
 use fanoutcode_core::overlap::integrate::{
-    conflict_ctxs, integration_result, stop_effects, IntegrationResult, OtherIntent,
+    conflict_ctxs, integration_result, stop_effects, valid_branch, IntegrationResult, OtherIntent,
 };
 use fanoutcode_core::overlap::prompts::ConflictCtx;
 use fanoutcode_core::overlap::store;
@@ -138,7 +138,7 @@ pub async fn on_main_stop(app: &AppHandle, state: &AppState, task: &Task, ev: &T
         _ => Vec::new(),
     };
     let aborted = state.integration_aborts.lock().expect("aborts lock").contains(&task.id);
-    let base = task.base_branch.clone().unwrap_or_else(|| "the base branch".to_owned());
+    let base = (task.base_branch.clone().filter(|b| valid_branch(b))).unwrap_or_else(|| "the base branch".to_owned());
     if result == IntegrationResult::Done {
         state.integrating.lock().expect("integrating lock").remove(&task.id);
         state.integration_aborts.lock().expect("aborts lock").remove(&task.id);

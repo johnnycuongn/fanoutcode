@@ -163,16 +163,17 @@ pub fn new_task_note(title: &str, branch: &str, planned: &[String]) -> String {
 }
 
 /// The prompt behind **Bring <base> in** (§6.3), assembled from data rather than from the stage templates. The
-/// only prompt that tells the agent to merge or rebase (`.claude/rules/prompts.md`).
+/// only prompt that tells the agent to merge or rebase (`.claude/rules/prompts.md`). `base` must be a
+/// `git::valid_branch` (the shell checks it); it is single-quoted after `--` in the command line all the same.
 pub fn integrate(base: &str, mode: Integration, conflicts: &[ConflictCtx]) -> String {
     let (verb, how) = match mode {
         Integration::Merge => (
             "merge",
-            format!("Merge `{base}` into your current branch: `git merge {base}`."),
+            format!("Merge `{base}` into your current branch: `git merge -- '{base}'`."),
         ),
         Integration::Rebase => (
             "rebase",
-            format!("Rebase your current branch onto `{base}`: `git rebase {base}`."),
+            format!("Rebase your current branch onto `{base}`: `git rebase -- '{base}'`."),
         ),
     };
     let mut out = format!(
@@ -408,7 +409,7 @@ merge."
 changed the same lines, write the version that does what each task's spec asks. Run the tests. If you cannot keep \
 both, stop, leave the conflict markers in place, and say which files and why."
         ));
-        assert!(merge.contains("git merge main"), "{merge}");
+        assert!(merge.contains("`git merge -- 'main'`"), "{merge}");
         assert!(!merge.contains("git rebase"), "{merge}");
         for needle in [
             "src/auth/session.ts",
@@ -427,7 +428,7 @@ both, stop, leave the conflict markers in place, and say which files and why."
         assert!(!merge.contains("{{"));
 
         let rebase = integrate("develop", Integration::Rebase, &[]);
-        assert!(rebase.contains("git rebase develop"), "{rebase}");
+        assert!(rebase.contains("`git rebase -- 'develop'`"), "{rebase}");
         assert_eq!(rebase.trim_end().lines().last().unwrap(), INTEGRATE_SENTINEL);
         assert_eq!(INTEGRATE_SENTINEL, "FANOUTCODE: integrate done");
     }

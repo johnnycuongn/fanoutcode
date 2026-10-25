@@ -9,6 +9,7 @@ use chrono::{DateTime, Utc};
 use super::prompts::{ConflictCtx, INTEGRATE_SENTINEL};
 use super::OverlapRow;
 use crate::domain::{AgentState, HandbackReason, Stage, TaskId};
+pub use crate::git::valid_branch;
 use crate::memory::{IndexEntry, TimelineKind};
 use crate::pipeline::Effect;
 use crate::settings::Integration;
@@ -143,21 +144,6 @@ pub fn conflict_ctxs(rows: &[OverlapRow], intent_of: impl Fn(&TaskId) -> Option<
     }
     out.sort_by(|a, b| (&a.path, &a.other_title).cmp(&(&b.path, &b.other_title)));
     out
-}
-
-/// A branch name `git check-ref-format --branch` would accept (the base the developer confirms): no whitespace or
-/// control characters, none of `~^:?*[\`, no `..`, `//` or `@{`, not `@`, and no leading `-` or `/` nor trailing
-/// `/`, `.` or `.lock`.
-pub fn valid_branch(name: &str) -> bool {
-    !name.is_empty()
-        && name != "@"
-        && !name
-            .chars()
-            .any(|c| c.is_whitespace() || c.is_control() || "~^:?*[\\".contains(c))
-        && !["..", "//", "@{"].iter().any(|s| name.contains(s))
-        && !name.starts_with(['-', '/'])
-        && !name.ends_with(['/', '.'])
-        && !name.ends_with(".lock")
 }
 
 /// The effects of an integrating session's `Stop` (§6.3): `Done` returns the task to Idle and records the
@@ -343,19 +329,6 @@ mod tests {
         assert_eq!(got[0].plan_excerpt, "- src/a.ts — form");
         assert_eq!((got[1].spec_excerpt.as_str(), got[1].plan_excerpt.as_str()), ("", ""));
         assert!(conflict_ctxs(&[], intent_of).is_empty());
-    }
-
-    #[test]
-    fn valid_branch_accepts_names_git_accepts() {
-        for ok in ["main", "develop", "release/1.2", "feat/login-form", "v2_x"] {
-            assert!(valid_branch(ok), "{ok}");
-        }
-        for bad in [
-            "", " ", "main dev", "-main", "/main", "main/", "a..b", "a~1", "a^", "a:b", "a?", "a*", "a[b", "a\\b",
-            "x.lock", "x.", "a//b", "a@{1}", "@", "a\tb",
-        ] {
-            assert!(!valid_branch(bad), "{bad:?}");
-        }
     }
 
     #[test]

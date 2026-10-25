@@ -47,7 +47,8 @@ pub fn overlap_integrate(app: AppHandle, state: State<'_, AppState>, task_id: Ta
             "Bring the base branch in from a Done task that has its own worktree.".into(),
         ));
     }
-    let Some(base) = task.base_branch.clone() else {
+    // a stored name that is not a safe branch name is asked for again, never put in the prompt
+    let Some(base) = task.base_branch.clone().filter(|b| valid_branch(b)) else {
         return Err(Error::Precondition("Confirm the base branch first.".into()));
     };
     let ctxs = contexts(&state, &task.id)?;
@@ -79,8 +80,8 @@ pub fn overlap_set_base(app: AppHandle, state: State<'_, AppState>, task_id: Tas
 pub async fn overlap_base_suggestion(app: AppHandle, task_id: TaskId) -> Result<Option<String>> {
     let state = app.state::<AppState>();
     let (task, home) = observe::task_and_home(&state, &TaskId::parse(task_id.as_str())?)?;
-    if task.base_branch.is_some() {
-        return Ok(task.base_branch);
+    if let Some(stored) = task.base_branch.filter(|b| valid_branch(b)) {
+        return Ok(Some(stored));
     }
     git::default_branch(&home).await
 }
@@ -104,7 +105,7 @@ pub fn overlap_resume(app: AppHandle, state: State<'_, AppState>, task_id: TaskI
 pub fn overlap_abort(app: AppHandle, state: State<'_, AppState>, task_id: TaskId) -> Result<()> {
     let task = task_of(&state, &task_id)?;
     require_integrating(&state, &task)?;
-    let base = task.base_branch.clone().unwrap_or_else(|| "the base branch".to_owned());
+    let base = (task.base_branch.clone().filter(|b| valid_branch(b))).unwrap_or_else(|| "the base branch".to_owned());
     let prompt = abort_prompt(&base, mode_of(&state, &task)?);
     state
         .integration_aborts
