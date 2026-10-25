@@ -8,6 +8,7 @@ import { dockStore, type DockStore } from "../store";
 import { GROWN_HEIGHT, resolveTab, visibleTabs } from "../tabRules";
 import type { DockTab } from "../types";
 import { DockTabStrip } from "./DockTabStrip";
+import { MemoryTab } from "./MemoryTab";
 
 export interface DockProps {
   task: Task;
@@ -21,6 +22,8 @@ export interface DockProps {
 
 function body(tab: DockTab, p: DockProps): ReactNode {
   switch (tab) {
+    case "memory":
+      return <MemoryTab key={p.task.id} task={p.task} />;
     case "team":
       return p.teamSlot ?? <EmptyState size="sm" title="The team view arrives with the canvas" />;
     default:

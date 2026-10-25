@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
+vi.mock("@/lib/bindings", async () => (await import("@/test/mockBindings")).mockBindings());
 import { makeSettings, makeTask } from "@/test/taskPageFixtures";
 import { createDockStore } from "../store";
 import { mem } from "../testing/fakes";

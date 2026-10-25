@@ -56,7 +56,7 @@ export function createSpecStore(
 
   async function readSpec(task: Task): Promise<string> {
     const text = await ipc.memoryRead(task.id, SPEC);
-    if (text !== null) return text;
+    if (typeof text === "string") return text;
     // A missing folder reads as nothing; only memory_missing tells it from a spec.md not written yet (§8).
     const missing = (await ipc.memoryMissing?.({ type: "Project", id: task.project_id })) ?? [];
     if (missing.includes(task.id)) throw `Task memory folder is missing: ${task.memory_dir}`;
