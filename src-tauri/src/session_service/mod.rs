@@ -20,9 +20,11 @@ use crate::observe::log_err;
 use crate::state::{scrollback_lines, AppState};
 
 mod effects;
+mod quit;
 mod stop;
 
 pub use effects::*;
+pub use quit::*;
 pub use stop::*;
 
 /// Every session starts at this size; the pane's first fit resizes it.

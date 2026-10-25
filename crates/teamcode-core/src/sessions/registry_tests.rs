@@ -54,6 +54,14 @@ fn session(kind: AgentKind) -> Session {
     }
 }
 
+pub(super) fn insert_second(r: &mut SessionRegistry, kind: AgentKind) -> SessionId {
+    let s = session(kind);
+    let id = s.id.clone();
+    let (pty, _) = FakePty::pair();
+    r.insert(s, Box::new(pty), (80, 24));
+    id
+}
+
 pub(super) fn registry_with_fake(kind: AgentKind) -> (SessionRegistry, SessionId, FakePtyHandle) {
     let mut r = SessionRegistry::new(100);
     let s = session(kind);
@@ -200,4 +208,19 @@ fn pump_sends_one_prompt_per_idle_in_fifo_order() {
     assert_eq!(r.pump(&id, now).unwrap(), Some(1));
     assert_eq!(r.pump(&id, now).unwrap(), None);
     assert_eq!(pty.writes(), vec![frame_prompt("a")]);
+}
+
+#[test]
+fn working_lists_only_unexited_non_idle_sessions() {
+    let (mut r, a, _) = registry_with_fake(AgentKind::ClaudeCode); // Hooks{idle:false} → working
+    let _b = insert_second(&mut r, AgentKind::Shell); // Always idle
+    let c = insert_second(&mut r, AgentKind::ClaudeCode);
+    r.on_exit(&c, 0);
+    assert_eq!(
+        r.working(Instant::now())
+            .iter()
+            .map(|s| s.id.clone())
+            .collect::<Vec<_>>(),
+        vec![a]
+    );
 }
