@@ -4,7 +4,7 @@
 use std::path::{Path, PathBuf};
 
 use super::context_docs::{text_cache_path, ContextDoc, ContextDocKind};
-use crate::domain::LinkPolicy;
+use crate::domain::{Container, LinkPolicy};
 
 pub const LINK_POLICY_TEXT: &str = "Read linked projects freely for references. Modify a linked project only when the task's intent or plan calls for it, and list any such edit in plan.md under that project's heading.";
 pub const READ_ONLY_POLICY_TEXT: &str = "This workspace's linking policy is Read only: read linked projects freely for references, but do not modify them. File tools are blocked there and shell commands are checked.";
@@ -21,6 +21,8 @@ pub struct LinkedProject {
 /// Everything the workspace contributes to a task's prompts.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LinkContext {
+    /// The workspace, as the container its references belong to.
+    pub workspace: Container,
     pub policy: LinkPolicy,
     pub linked: Vec<LinkedProject>,
     pub workspace_docs: Vec<ContextDoc>,
@@ -65,10 +67,11 @@ pub fn linked_projects_fragment(ctx: &LinkContext) -> String {
     out
 }
 
-/// One reference as a prompt line, without its list marker.
-pub fn reference_line(doc: &ContextDoc, app_data: &Path) -> String {
-    let cached = || match (doc.fetched_at, text_cache_path(app_data, &doc.id)) {
-        (Some(_), Ok(p)) => format!(" — text: `{}`", p.display()),
+/// One reference of `container` as a prompt line, without its list marker. A cached text is named only when its
+/// file is there (a cache from before per-container folders reads as not fetched until fetched again).
+pub fn reference_line(doc: &ContextDoc, container: &Container, app_data: &Path) -> String {
+    let cached = || match (doc.fetched_at, text_cache_path(app_data, container, &doc.id)) {
+        (Some(_), Ok(p)) if p.is_file() => format!(" — text: `{}`", p.display()),
         _ => " — not fetched yet".to_owned(),
     };
     match doc.kind {
@@ -79,19 +82,24 @@ pub fn reference_line(doc: &ContextDoc, app_data: &Path) -> String {
     }
 }
 
-pub fn references_fragment(heading: &str, docs: &[ContextDoc], app_data: &Path) -> String {
+pub fn references_fragment(heading: &str, container: &Container, docs: &[ContextDoc], app_data: &Path) -> String {
     if docs.is_empty() {
         return String::new();
     }
     let lines: Vec<String> = docs
         .iter()
-        .map(|d| format!("- {}", reference_line(d, app_data)))
+        .map(|d| format!("- {}", reference_line(d, container, app_data)))
         .collect();
     format!("## {heading}\n\n{}", lines.join("\n"))
 }
 
-pub fn prompt_fragments(project_docs: &[ContextDoc], link: Option<&LinkContext>, app_data: &Path) -> PromptFragments {
-    let project_context = references_fragment("Project references", project_docs, app_data);
+pub fn prompt_fragments(
+    project: &Container,
+    project_docs: &[ContextDoc],
+    link: Option<&LinkContext>,
+    app_data: &Path,
+) -> PromptFragments {
+    let project_context = references_fragment("Project references", project, project_docs, app_data);
     let Some(link) = link else {
         return PromptFragments {
             project_context,
@@ -102,7 +110,7 @@ pub fn prompt_fragments(project_docs: &[ContextDoc], link: Option<&LinkContext>,
     let linked_projects = linked_projects_fragment(link);
     let parts: Vec<String> = [
         linked_projects.clone(),
-        references_fragment("Workspace references", &link.workspace_docs, app_data),
+        references_fragment("Workspace references", &link.workspace, &link.workspace_docs, app_data),
         link.workspace_instructions
             .clone()
             .unwrap_or_default()
@@ -139,6 +147,9 @@ mod tests {
     }
     fn one_link() -> LinkContext {
         LinkContext {
+            workspace: Container::Workspace {
+                id: crate::ids::WorkspaceId::parse("ws-1").unwrap(),
+            },
             policy: LinkPolicy::ReadAndModifyOnRequest,
             workspace_docs: vec![],
             workspace_instructions: None,
@@ -154,6 +165,9 @@ mod tests {
     #[test]
     fn linked_fragment_lists_each_project_with_root_and_brief() {
         let ctx = LinkContext {
+            workspace: Container::Workspace {
+                id: crate::ids::WorkspaceId::parse("ws-1").unwrap(),
+            },
             policy: LinkPolicy::ReadAndModifyOnRequest,
             workspace_docs: vec![],
             workspace_instructions: None,
@@ -200,25 +214,52 @@ mod tests {
             doc("doc-3", ContextDocKind::Url, "https://x.y/spec", None),
             doc("doc-4", ContextDocKind::Folder, "/w/web/adr", None),
         ];
-        let s = references_fragment("Project references", &docs, Path::new("/app"));
+        let app = tempfile::tempdir().unwrap();
+        let project = Container::Project {
+            id: crate::ids::ProjectId::parse("p-1").unwrap(),
+        };
+        let cache = text_cache_path(app.path(), &project, "doc-2").unwrap();
+        std::fs::create_dir_all(cache.parent().unwrap()).unwrap();
+        std::fs::write(&cache, "Pay text").unwrap();
+        let s = references_fragment("Project references", &project, &docs, app.path());
         assert!(s.starts_with("## Project references\n\n- file: `/w/web/docs/arch.md`\n"));
-        assert!(s.contains("- confluence: \"Pay\" https://acme.atlassian.net/wiki/spaces/ENG/pages/123/Pay — text: `/app/context/doc-2.md`"));
+        assert!(s.contains(&format!(
+            "- confluence: \"Pay\" https://acme.atlassian.net/wiki/spaces/ENG/pages/123/Pay — text: `{}`",
+            cache.display()
+        )));
         assert!(s.contains("- url: https://x.y/spec — not fetched yet"));
         assert!(s.contains("- folder: `/w/web/adr/`"));
-        assert_eq!(references_fragment("Workspace references", &[], Path::new("/app")), "");
+        assert_eq!(
+            references_fragment("Workspace references", &project, &[], Path::new("/app")),
+            ""
+        );
     }
 
     #[test]
     fn prompt_fragments_compose_in_order() {
         let mut ctx = one_link();
         ctx.workspace_instructions = Some("Run both test suites.".into());
-        let f = prompt_fragments(&[], Some(&ctx), Path::new("/app"));
+        let f = prompt_fragments(
+            &Container::Project {
+                id: crate::ids::ProjectId::parse("p-1").unwrap(),
+            },
+            &[],
+            Some(&ctx),
+            Path::new("/app"),
+        );
         let w = f.workspace_fragment.unwrap();
         assert!(
             w.starts_with("## Linked projects") && w.ends_with("Run both test suites.") && f.project_context.is_empty()
         );
-        assert!(prompt_fragments(&[], None, Path::new("/app"))
-            .workspace_fragment
-            .is_none());
+        assert!(prompt_fragments(
+            &Container::Project {
+                id: crate::ids::ProjectId::parse("p-1").unwrap()
+            },
+            &[],
+            None,
+            Path::new("/app")
+        )
+        .workspace_fragment
+        .is_none());
     }
 }

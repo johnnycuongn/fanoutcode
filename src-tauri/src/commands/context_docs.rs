@@ -1,5 +1,5 @@
 //! Context doc commands (Plan 10): the references listed per project or workspace, and fetching a URL's or a
-//! Confluence page's text into `<app_data>/context/<doc-id>.md`.
+//! Confluence page's text into `<app_data>/context/<container>/<doc-id>.md`.
 
 use tauri::{AppHandle, State};
 use teamcode_core::domain::Container;
@@ -77,7 +77,26 @@ pub async fn context_docs_fetch(
     if owner != container {
         return Err(Error::Invalid("Unknown reference id.".into()));
     }
-    let cache = text_cache_path(&state.data_dir, &doc.id)?;
+    let cache = text_cache_path(&state.data_dir, &container, &doc.id)?;
+    // a file or folder may be read only inside the container's projects (or at the exact path confirmed)
+    let roots: Vec<std::path::PathBuf> = {
+        let conn = state.db.lock().expect("db lock");
+        match &container {
+            Container::Project { id } => db::projects::get(&conn, id)?.map(|p| p.root).into_iter().collect(),
+            Container::Workspace { id } => {
+                let ws = state.workspaces.get(id);
+                let mut roots = Vec::new();
+                if let Ok(ws) = ws {
+                    for m in ws.projects {
+                        if let Some(p) = db::projects::get(&conn, &m.project_id)? {
+                            roots.push(p.root);
+                        }
+                    }
+                }
+                roots
+            }
+        }
+    };
     let site = if doc.kind == ContextDocKind::Confluence {
         let scope = match &container {
             Container::Project { id } => Scope {
@@ -102,7 +121,7 @@ pub async fn context_docs_fetch(
         (Some(s), Some(t)) => Some((s, t.expose())),
         _ => None,
     };
-    let text = fetch_text(&doc, atlassian, &NetGuard::system()).await?;
+    let text = fetch_text(&doc, &roots, atlassian, &NetGuard::system()).await?;
     write_atomic(&cache, text.as_bytes())?;
     state.context_docs.set_fetched(&doc.id, chrono::Utc::now())?;
     announce(&app, container);

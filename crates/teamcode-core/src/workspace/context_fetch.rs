@@ -42,12 +42,40 @@ fn folder_listing(root: &std::path::Path) -> Result<String> {
 /// read with the linked Atlassian site. The token is sent only to that site's own host. Every network hop passes
 /// `url_guard` (never local or link-local; private networks only for a trusted doc) and is pinned to the checked
 /// address.
+///
+/// A file or folder is read only when the doc is trusted (added in the app, or confirmed in an import preview) and
+/// its path still resolves inside one of `allowed_roots` (the container's project roots) or to exactly the path
+/// that was confirmed; a symlink retargeted elsewhere is refused.
 pub async fn fetch_text(
     doc: &ContextDoc,
+    allowed_roots: &[std::path::PathBuf],
     atlassian: Option<(&crate::jira::client::JiraSite, &str)>,
     guard: &NetGuard<'_>,
 ) -> Result<String> {
-    fetch_text_capped(doc, atlassian, guard, MAX_TEXT_BYTES).await
+    fetch_text_capped(doc, allowed_roots, atlassian, guard, MAX_TEXT_BYTES).await
+}
+
+/// The path to read for a file or folder doc, or why not.
+fn readable_path(doc: &ContextDoc, allowed_roots: &[std::path::PathBuf]) -> Result<std::path::PathBuf> {
+    if !doc.trusted {
+        return Err(Error::Precondition(format!(
+            "{} came from a workspace file and is outside its projects; confirm it before Team Code reads it.",
+            doc.target
+        )));
+    }
+    let canonical = std::fs::canonicalize(&doc.target)
+        .map_err(|_| Error::Precondition(format!("{} no longer exists.", doc.target)))?;
+    let inside = allowed_roots
+        .iter()
+        .any(|r| canonical.starts_with(std::fs::canonicalize(r).unwrap_or_else(|_| r.clone())));
+    if !inside && canonical != std::path::Path::new(&doc.target) {
+        return Err(Error::Precondition(format!(
+            "{} now resolves to {}, outside the workspace's projects; add it again to read it.",
+            doc.target,
+            canonical.display()
+        )));
+    }
+    Ok(canonical)
 }
 
 /// `bytes` as text, cut at `cap` (on a character boundary) with `TRUNCATED_NOTE` when longer.
@@ -67,6 +95,7 @@ fn capped_text(mut bytes: Vec<u8>, cap: usize) -> String {
 /// As `fetch_text` with an explicit byte cap.
 pub(crate) async fn fetch_text_capped(
     doc: &ContextDoc,
+    allowed_roots: &[std::path::PathBuf],
     atlassian: Option<(&crate::jira::client::JiraSite, &str)>,
     guard: &NetGuard<'_>,
     cap: usize,
@@ -76,12 +105,12 @@ pub(crate) async fn fetch_text_capped(
         ContextDocKind::File => {
             use std::io::Read;
             let mut bytes = Vec::new();
-            std::fs::File::open(&doc.target)?
+            std::fs::File::open(readable_path(doc, allowed_roots)?)?
                 .take(cap as u64 + 1)
                 .read_to_end(&mut bytes)?;
             Ok(capped_text(bytes, cap))
         }
-        ContextDocKind::Folder => folder_listing(std::path::Path::new(&doc.target)),
+        ContextDocKind::Folder => folder_listing(&readable_path(doc, allowed_roots)?),
         ContextDocKind::Url => {
             let mut resp = guarded_get(&doc.target, doc.trusted, guard).await?;
             if !resp.status().is_success() {
@@ -181,6 +210,11 @@ mod tests {
         url::Url::parse(uri).unwrap().port().unwrap()
     }
 
+    fn trusted(mut d: ContextDoc) -> ContextDoc {
+        d.trusted = true;
+        d
+    }
+
     fn doc(id: &str, kind: ContextDocKind, target: &str, fetched: Option<chrono::DateTime<chrono::Utc>>) -> ContextDoc {
         ContextDoc {
             id: id.into(),
@@ -201,16 +235,18 @@ mod tests {
         std::fs::create_dir(dir.path().join("sub")).unwrap();
         std::fs::write(dir.path().join("sub/b.md"), "b").unwrap();
         std::fs::write(dir.path().join(".hidden"), "h").unwrap();
+        let roots = vec![dir.path().to_path_buf()];
         let r = local(0);
         let http = mock_guard(&r);
         assert_eq!(
             fetch_text(
-                &doc(
+                &trusted(doc(
                     "doc-1",
                     ContextDocKind::File,
                     dir.path().join("a.md").to_str().unwrap(),
                     None
-                ),
+                )),
+                &roots,
                 None,
                 &http
             )
@@ -220,7 +256,8 @@ mod tests {
         );
         assert_eq!(
             fetch_text(
-                &doc("doc-2", ContextDocKind::Folder, dir.path().to_str().unwrap(), None),
+                &trusted(doc("doc-2", ContextDocKind::Folder, dir.path().to_str().unwrap(), None)),
+                &roots,
                 None,
                 &http
             )
@@ -235,12 +272,12 @@ mod tests {
             None,
         );
         assert!(
-            matches!(fetch_text(&conf, None, &http).await, Err(Error::Precondition(m)) if m.contains("link Jira first"))
+            matches!(fetch_text(&conf, &[], None, &http).await, Err(Error::Precondition(m)) if m.contains("link Jira first"))
         );
         let other = crate::jira::test_support::site("https://other.atlassian.net");
         assert!(
             matches!(
-                fetch_text(&conf, Some((&other, "tok")), &http).await,
+                fetch_text(&conf, &[], Some((&other, "tok")), &http).await,
                 Err(Error::Precondition(_))
             ),
             "the token goes only to its own site"
@@ -275,6 +312,7 @@ mod tests {
                     &format!("http://mock.test:{port}/spec"),
                     None
                 ),
+                &[],
                 None,
                 &http
             )
@@ -290,6 +328,7 @@ mod tests {
                     &format!("http://mock.test:{port}/raw"),
                     None
                 ),
+                &[],
                 None,
                 &http
             )
@@ -336,6 +375,7 @@ mod tests {
         let r = local(port_of(&url));
         let text = fetch_text_capped(
             &doc("doc-6", ContextDocKind::Url, &url, None),
+            &[],
             None,
             &mock_guard(&r),
             4096,
@@ -364,7 +404,7 @@ mod tests {
             None,
         );
         assert!(matches!(
-            fetch_text_capped(&d, None, &mock_guard(&r), 4096).await,
+            fetch_text_capped(&d, &[], None, &mock_guard(&r), 4096).await,
             Err(Error::Precondition(m)) if m.contains("larger than")
         ));
     }
@@ -375,7 +415,8 @@ mod tests {
         let p = dir.path().join("big.txt");
         std::fs::write(&p, "é".repeat(5000)).unwrap(); // 10 000 bytes, two per character
         let text = fetch_text_capped(
-            &doc("doc-8", ContextDocKind::File, p.to_str().unwrap(), None),
+            &trusted(doc("doc-8", ContextDocKind::File, p.to_str().unwrap(), None)),
+            &[dir.path().to_path_buf()],
             None,
             &NetGuard::system(),
             4095,
@@ -411,13 +452,13 @@ mod tests {
             let mut d = doc("doc-9", ContextDocKind::Url, url, None);
             d.trusted = true;
             assert!(
-                matches!(fetch_text(&d, None, &guard).await, Err(Error::Precondition(m)) if m.contains("local")),
+                matches!(fetch_text(&d, &[], None, &guard).await, Err(Error::Precondition(m)) if m.contains("local")),
                 "{url}"
             );
         }
         let untrusted = doc("doc-9", ContextDocKind::Url, "http://wiki.corp/page", None);
         assert!(
-            matches!(fetch_text(&untrusted, None, &guard).await, Err(Error::Precondition(m)) if m.contains("confirm"))
+            matches!(fetch_text(&untrusted, &[], None, &guard).await, Err(Error::Precondition(m)) if m.contains("confirm"))
         );
         let wiki = url::Url::parse("http://wiki.corp/page").unwrap();
         let (host, addr) = crate::workspace::url_guard::validate_hop(&wiki, true, &guard).unwrap();
@@ -454,7 +495,44 @@ mod tests {
         );
         d.trusted = true;
         assert!(
-            matches!(fetch_text(&d, None, &mock_guard(&r)).await, Err(Error::Precondition(m)) if m.contains("local"))
+            matches!(fetch_text(&d, &[], None, &mock_guard(&r)).await, Err(Error::Precondition(m)) if m.contains("local"))
         );
+    }
+
+    #[tokio::test]
+    async fn file_references_need_trust_and_must_stay_inside_the_projects() {
+        let root = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let secret = outside.path().join("id_rsa");
+        std::fs::write(&secret, "PRIVATE KEY").unwrap();
+        std::fs::write(root.path().join("notes.md"), "notes").unwrap();
+        let roots = vec![root.path().to_path_buf()];
+        let g = NetGuard::system();
+        let canon = |p: &std::path::Path| std::fs::canonicalize(p).unwrap().to_string_lossy().into_owned();
+        // imported from a file and not confirmed: refused
+        let imported = doc("doc-1", ContextDocKind::File, &canon(&secret), None);
+        assert!(
+            matches!(fetch_text(&imported, &roots, None, &g).await, Err(Error::Precondition(m)) if m.contains("confirm"))
+        );
+        // confirmed (trusted) at its canonical path: read
+        assert_eq!(
+            fetch_text(&trusted(imported), &roots, None, &g).await.unwrap(),
+            "PRIVATE KEY"
+        );
+        // a symlink inside a root that points outside: refused even when trusted
+        let link = root.path().join("innocent.md");
+        std::os::unix::fs::symlink(&secret, &link).unwrap();
+        let linked = trusted(doc("doc-2", ContextDocKind::File, link.to_str().unwrap(), None));
+        assert!(
+            matches!(fetch_text(&linked, &roots, None, &g).await, Err(Error::Precondition(m)) if m.contains("outside"))
+        );
+        // a normal doc inside a root: read
+        let inside = trusted(doc(
+            "doc-3",
+            ContextDocKind::File,
+            &canon(&root.path().join("notes.md")),
+            None,
+        ));
+        assert_eq!(fetch_text(&inside, &roots, None, &g).await.unwrap(), "notes");
     }
 }

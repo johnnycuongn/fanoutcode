@@ -73,10 +73,11 @@ pub(crate) fn import(
         let docs: Vec<_> = file
             .context_docs
             .iter()
-            .map(|d| {
+            .enumerate()
+            .map(|(i, d)| {
                 let mut d = d.clone();
-                d.trusted = match trust {
-                    super::import::DocTrust::Confirmed => true,
+                d.trusted = match &trust {
+                    super::import::DocTrust::Confirmed(flags) => flags.get(i).copied().unwrap_or(false),
                     super::import::DocTrust::Existing => existing.iter().any(|m| {
                         m.trusted
                             && m.kind == d.kind
@@ -229,7 +230,7 @@ mod tests {
             app_config: cfg.path(),
         };
         let p = preview_open(s, path, &env)?;
-        confirm_open(s, &p.token, &env)
+        confirm_open(s, &p.token, false, &env)
     }
 
     #[test]

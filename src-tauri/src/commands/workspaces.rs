@@ -83,11 +83,19 @@ pub fn workspaces_preview_open(state: State<'_, AppState>, path: PathBuf) -> Res
     with_env(&state, |env| import::preview_open(&state.workspaces, &file, env))
 }
 
-/// Imports exactly what the preview with this token showed.
+/// Imports exactly what the preview with this token showed. `allow_outside_docs` also trusts the file and folder
+/// references the preview marked as outside the workspace's projects.
 #[tauri::command]
 #[specta::specta]
-pub fn workspaces_confirm_open(app: AppHandle, state: State<'_, AppState>, token: String) -> Result<Workspace> {
-    let ws = with_env(&state, |env| import::confirm_open(&state.workspaces, &token, env))?;
+pub fn workspaces_confirm_open(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    token: String,
+    allow_outside_docs: bool,
+) -> Result<Workspace> {
+    let ws = with_env(&state, |env| {
+        import::confirm_open(&state.workspaces, &token, allow_outside_docs, env)
+    })?;
     changed(&app, ws)
 }
 

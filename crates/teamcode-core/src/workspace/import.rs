@@ -20,10 +20,11 @@ use crate::domain::{LinkPolicy, Workspace, WorkspaceId};
 use crate::{Error, Result};
 
 /// Which imported references become trusted.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum DocTrust {
-    /// Shown in a preview the developer confirmed.
-    Confirmed,
+    /// Shown in a preview the developer confirmed: one flag per reference (a file outside the projects only when
+    /// the developer also allowed those).
+    Confirmed(Vec<bool>),
     /// Unchanged from the record: each keeps the trust of the matching stored doc.
     Existing,
 }
@@ -57,7 +58,12 @@ pub struct ImportDoc {
     pub page_id: Option<String>,
     /// The host a URL or Confluence reference would be fetched from.
     pub host: Option<String>,
+    /// A file or folder outside every project the file names: read only when the developer allows these.
+    pub outside_projects: bool,
 }
+
+/// The warning shown beside such a reference.
+pub const OUTSIDE_PROJECTS: &str = "Outside the workspace's projects";
 
 /// What opening the file would bring in, shown before anything is written.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
@@ -81,6 +87,8 @@ pub struct WorkspaceImportPreview {
 
 /// A preview waiting for its confirm: the file exactly as read and its roots as they resolved then.
 pub(crate) struct PendingImport {
+    /// Per reference: a file or folder outside the file's projects.
+    outside: Vec<bool>,
     path: PathBuf,
     file: WorkspaceFile,
     roots: Vec<PathBuf>,
@@ -117,12 +125,26 @@ fn resolve_roots(file: &WorkspaceFile, path: &Path) -> Vec<PathBuf> {
 /// What opening `path` would bring in. Writes nothing to the database; keeps the buffer for `confirm_open`.
 pub fn preview_open(store: &WorkspaceStore, path: &Path, env: &OpenEnv) -> Result<WorkspaceImportPreview> {
     let path = canonical(path);
-    let (file, mut problems) = read_file(&path)?;
+    let (mut file, mut problems) = read_file(&path)?;
     let roots = resolve_roots(&file, &path);
+    // file and folder references are canonicalised now; the canonical path is what is shown, stored and allowed
+    let mut outside = Vec::new();
+    for d in &mut file.context_docs {
+        let is_path = matches!(d.kind, ContextDocKind::File | ContextDocKind::Folder);
+        if is_path {
+            d.target = canonical(Path::new(&d.target)).to_string_lossy().into_owned();
+        }
+        outside.push(is_path && !roots.iter().any(|r| Path::new(&d.target).starts_with(r)));
+    }
     let trusted = match record_at(store, &path)? {
         Some(record) => adds_nothing(store, &record, &file, &path)?,
         None => false,
     };
+    for (d, out) in file.context_docs.iter().zip(&outside) {
+        if *out {
+            problems.push(format!("{}: {OUTSIDE_PROJECTS}.", d.target));
+        }
+    }
     let mut blocked = false;
     let mut shown = Vec::new();
     {
@@ -153,11 +175,13 @@ pub fn preview_open(store: &WorkspaceStore, path: &Path, env: &OpenEnv) -> Resul
         docs: file
             .context_docs
             .iter()
-            .map(|d| ImportDoc {
+            .zip(&outside)
+            .map(|(d, out)| ImportDoc {
                 kind: d.kind,
                 target: d.target.clone(),
                 label: d.label.clone(),
                 page_id: d.page_id.clone(),
+                outside_projects: *out,
                 host: url::Url::parse(&d.target)
                     .ok()
                     .filter(|_| matches!(d.kind, ContextDocKind::Url | ContextDocKind::Confluence))
@@ -174,6 +198,7 @@ pub fn preview_open(store: &WorkspaceStore, path: &Path, env: &OpenEnv) -> Resul
     pending.insert(
         token,
         PendingImport {
+            outside: outside.clone(),
             path,
             file,
             roots,
@@ -188,7 +213,9 @@ pub fn preview_open(store: &WorkspaceStore, path: &Path, env: &OpenEnv) -> Resul
 /// another record elsewhere is imported under a fresh id (written into the file on its next save) and inherits
 /// nothing from that record. Refused when the token is unknown or expired, the preview was blocked, or a root now
 /// resolves to a different folder.
-pub fn confirm_open(store: &WorkspaceStore, token: &str, env: &OpenEnv) -> Result<Workspace> {
+/// `allow_outside_docs` trusts the file and folder references outside the projects too (the preview marks them);
+/// otherwise they are imported untrusted and never read.
+pub fn confirm_open(store: &WorkspaceStore, token: &str, allow_outside_docs: bool, env: &OpenEnv) -> Result<Workspace> {
     let review_again = || Error::Precondition("This review expired; open the workspace file again.".into());
     let pending = store.pending_imports().remove(token).ok_or_else(review_again)?;
     if pending.at.elapsed() >= PREVIEW_TTL {
@@ -209,6 +236,7 @@ pub fn confirm_open(store: &WorkspaceStore, token: &str, env: &OpenEnv) -> Resul
         None => (pending.file.id.clone(), false),
     };
     // every reference was listed in the preview the developer confirmed
+    let trust = pending.outside.iter().map(|out| !out || allow_outside_docs).collect();
     super::open::import(
         store,
         &pending.path,
@@ -216,7 +244,7 @@ pub fn confirm_open(store: &WorkspaceStore, token: &str, env: &OpenEnv) -> Resul
         &now,
         &target,
         rewritten,
-        DocTrust::Confirmed,
+        DocTrust::Confirmed(trust),
     )
 }
 
@@ -316,8 +344,11 @@ mod tests {
             (1, false, true)
         );
         assert!(s.list().unwrap().is_empty(), "nothing is written before confirm");
-        assert!(matches!(confirm_open(&s, "0000", &env), Err(Error::Precondition(_))));
-        assert_eq!(confirm_open(&s, &p.token, &env).unwrap().id.as_str(), "ws-c1");
+        assert!(matches!(
+            confirm_open(&s, "0000", false, &env),
+            Err(Error::Precondition(_))
+        ));
+        assert_eq!(confirm_open(&s, &p.token, false, &env).unwrap().id.as_str(), "ws-c1");
     }
 
     #[test]
@@ -344,7 +375,7 @@ mod tests {
             let p = preview_open(&s, &path, &env).unwrap();
             assert!(p.blocked && p.problems.len() == 1, "{bad}: {:?}", p.problems);
             assert!(
-                matches!(confirm_open(&s, &p.token, &env), Err(Error::Precondition(_))),
+                matches!(confirm_open(&s, &p.token, false, &env), Err(Error::Precondition(_))),
                 "{bad}"
             );
         }
@@ -396,11 +427,11 @@ mod tests {
             ),
         )
         .unwrap();
-        let ws = confirm_open(&s, &p.token, &env).unwrap();
+        let ws = confirm_open(&s, &p.token, false, &env).unwrap();
         assert_eq!(ws.projects.len(), 1);
         assert!(s.agents(&ws.id).unwrap().is_empty());
         assert!(
-            matches!(confirm_open(&s, &p.token, &env), Err(Error::Precondition(_))),
+            matches!(confirm_open(&s, &p.token, false, &env), Err(Error::Precondition(_))),
             "a token is single use"
         );
     }
@@ -418,7 +449,10 @@ mod tests {
         assert!(!p.blocked);
         std::fs::remove_file(&link).unwrap();
         std::os::unix::fs::symlink(&fx.web.root, &link).unwrap();
-        assert!(matches!(confirm_open(&s, &p.token, &env), Err(Error::Precondition(_))));
+        assert!(matches!(
+            confirm_open(&s, &p.token, false, &env),
+            Err(Error::Precondition(_))
+        ));
         assert!(s.list().unwrap().is_empty());
     }
 
@@ -433,7 +467,7 @@ mod tests {
         std::fs::write(&path, file_with(doc("Spec"), &roots)).unwrap();
         let p = preview_open(&s, &path, &env).unwrap();
         assert_eq!(p.docs[0].label, "Spec");
-        confirm_open(&s, &p.token, &env).unwrap();
+        confirm_open(&s, &p.token, false, &env).unwrap();
         assert!(
             !preview_open(&s, &path, &env).unwrap().needs_confirmation,
             "unchanged: no dialog"
@@ -462,10 +496,45 @@ mod tests {
         );
         let p = preview_open(&s, &path, &env).unwrap();
         assert_eq!(p.docs[0].host.as_deref(), Some("wiki.corp"));
-        let ws = confirm_open(&s, &p.token, &env).unwrap();
+        let ws = confirm_open(&s, &p.token, false, &env).unwrap();
         let stored =
             crate::workspace::context_docs::list_rows(&s.db().lock().unwrap(), &Container::Workspace { id: ws.id })
                 .unwrap();
         assert!(stored[0].trusted);
+    }
+
+    #[test]
+    fn file_references_outside_the_projects_stay_untrusted_unless_allowed() {
+        let (fx, s, home, cfg) = setup();
+        let env = env_of(&home, &cfg);
+        let secret_dir = tempfile::tempdir().unwrap();
+        let secret = secret_dir.path().join("id_rsa");
+        std::fs::write(&secret, "k").unwrap();
+        let inside = fx.api.root.join("README.md");
+        std::fs::write(&inside, "r").unwrap();
+        let d = |id: &str, target: &std::path::Path| json!({"id": id, "kind": "File", "target": target, "label": "x", "page_id": null, "fetched_at": null, "order": 0});
+        let docs = json!({"context_docs": [d("doc-1", &secret), d("doc-2", &inside)]});
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("Shared.teamcode-workspace.json");
+        std::fs::write(&path, file_with(docs, &[("api", fx.api.root.to_str().unwrap())])).unwrap();
+        let p = preview_open(&s, &path, &env).unwrap();
+        assert_eq!(
+            p.docs.iter().map(|d| d.outside_projects).collect::<Vec<_>>(),
+            [true, false]
+        );
+        assert!(p.problems.iter().any(|m| m.contains(OUTSIDE_PROJECTS)) && !p.blocked);
+        let ws = confirm_open(&s, &p.token, false, &env).unwrap();
+        let stored = crate::workspace::context_docs::list_rows(
+            &s.db().lock().unwrap(),
+            &Container::Workspace { id: ws.id.clone() },
+        )
+        .unwrap();
+        assert_eq!(stored.iter().map(|d| d.trusted).collect::<Vec<_>>(), [false, true]);
+        let p = preview_open(&s, &path, &env).unwrap();
+        let ws = confirm_open(&s, &p.token, true, &env).unwrap();
+        let stored =
+            crate::workspace::context_docs::list_rows(&s.db().lock().unwrap(), &Container::Workspace { id: ws.id })
+                .unwrap();
+        assert!(stored.iter().all(|d| d.trusted));
     }
 }

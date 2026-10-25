@@ -708,11 +708,12 @@ async workspacesPreviewOpen(path: string) : Promise<Result<WorkspaceImportPrevie
 }
 },
 /**
- * Imports exactly what the preview with this token showed.
+ * Imports exactly what the preview with this token showed. `allow_outside_docs` also trusts the file and folder
+ * references the preview marked as outside the workspace's projects.
  */
-async workspacesConfirmOpen(token: string) : Promise<Result<Workspace, string>> {
+async workspacesConfirmOpen(token: string, allowOutsideDocs: boolean) : Promise<Result<Workspace, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("workspaces_confirm_open", { token }) };
+    return { status: "ok", data: await TAURI_INVOKE("workspaces_confirm_open", { token, allowOutsideDocs }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -1054,7 +1055,11 @@ export type ImportDoc = { kind: ContextDocKind; target: string; label: string; p
 /**
  * The host a URL or Confluence reference would be fetched from.
  */
-host: string | null }
+host: string | null; 
+/**
+ * A file or folder outside every project the file names: read only when the developer allows these.
+ */
+outside_projects: boolean }
 /**
  * One project root the file names.
  */

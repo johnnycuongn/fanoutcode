@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use rusqlite::Connection;
 
 use super::briefs::cached_brief;
-use super::context_docs::{context_dir, list_rows, ContextDocKind};
+use super::context_docs::{context_dir, list_rows};
 use super::fragments::{reference_line, LinkContext, LinkedProject};
 use super::guard::prepare_guard;
 use super::link::{bind_links, link_status, links_for, load_links, same_root, save_links, LinkStatus};
@@ -134,23 +134,20 @@ pub fn launch_extras(conn: &Connection, task: &Task, app_data: &Path, exe: &Path
     let protected = protected_for(conn, task)?;
     let deny = deny_rules(&protected)?;
     let guard = prepare_guard(app_data, exe, &task.id, &protected, home)?;
+    // only the home project's cache and, when bound to one, the workspace's: never another project's
     let mut containers = vec![Container::Project {
         id: task.project_id.clone(),
     }];
-    if let Some(id) = &task.workspace_id {
+    if let Some(id) = task.workspace_id.as_ref().filter(|_| task.links_bound_at.is_some()) {
         containers.push(Container::Workspace { id: id.clone() });
     }
-    let mut cached = false;
+    let mut add_dirs = Vec::new();
     for c in &containers {
-        cached |= list_rows(conn, c)?
-            .iter()
-            .any(|d| matches!(d.kind, ContextDocKind::Url | ContextDocKind::Confluence) && d.fetched_at.is_some());
+        let dir = context_dir(app_data, c)?;
+        if dir.is_dir() {
+            add_dirs.push(dir);
+        }
     }
-    let add_dirs = if cached {
-        vec![context_dir(app_data)]
-    } else {
-        Vec::new()
-    };
     Ok(LaunchExtras { deny, guard, add_dirs })
 }
 
@@ -177,6 +174,7 @@ pub fn link_context(conn: &Connection, task: &Task, app_data: &Path) -> Result<O
         });
     }
     Ok(Some(LinkContext {
+        workspace: Container::Workspace { id: ws.id.clone() },
         policy: ws.policy,
         linked,
         workspace_docs: list_rows(conn, &Container::Workspace { id: ws.id.clone() })?,
@@ -188,15 +186,13 @@ pub fn link_context(conn: &Connection, task: &Task, app_data: &Path) -> Result<O
 /// (when Plan 05's brief store has none) the cached brief, the Project and Workspace references, and the stage
 /// instructions from the workspace file.
 pub fn fill_prompt_ctx(conn: &Connection, task: &Task, ctx: &mut PromptCtx, app_data: &Path) -> Result<()> {
-    ctx.project_context = list_rows(
-        conn,
-        &Container::Project {
-            id: task.project_id.clone(),
-        },
-    )?
-    .iter()
-    .map(|d| reference_line(d, app_data))
-    .collect();
+    let project = Container::Project {
+        id: task.project_id.clone(),
+    };
+    ctx.project_context = list_rows(conn, &project)?
+        .iter()
+        .map(|d| reference_line(d, &project, app_data))
+        .collect();
     let Some(link) = link_context(conn, task, app_data)? else {
         return Ok(());
     };
@@ -212,7 +208,7 @@ pub fn fill_prompt_ctx(conn: &Connection, task: &Task, ctx: &mut PromptCtx, app_
     ctx.workspace_context = link
         .workspace_docs
         .iter()
-        .map(|d| reference_line(d, app_data))
+        .map(|d| reference_line(d, &link.workspace, app_data))
         .collect();
     if let Some(id) = &task.workspace_id {
         ctx.workspace_fragments = rows::map_column(conn, id, "fragments_json")?;
@@ -235,6 +231,7 @@ mod tests {
     use super::*;
     use crate::domain::{LinkPolicy, Stage};
     use crate::pipeline::ctx::{build_prompt_ctx, build_stage_prompts};
+    use crate::workspace::context_docs::ContextDocKind;
     use crate::workspace::store::WorkspaceStore;
     use crate::workspace::test_support::{fixture, Fixture};
 
@@ -318,5 +315,30 @@ mod tests {
         assert!(prompts.plan.contains("url: https://x.y/spec — not fetched yet"));
         assert!(prompts.plan.contains("(protected: read only)"));
         let _ = Stage::Plan;
+    }
+
+    #[test]
+    fn a_task_gets_only_its_own_projects_and_workspaces_cache() {
+        let (fx, _s, ws, t) = setup();
+        bind_if_first_start(&fx.db.lock().unwrap(), fx.app_data.path(), &t.id, None).unwrap();
+        for c in [
+            Container::Project { id: fx.api.id.clone() },
+            Container::Project { id: fx.web.id.clone() },
+            Container::Workspace { id: ws.id.clone() },
+        ] {
+            std::fs::create_dir_all(context_dir(fx.app_data.path(), &c).unwrap()).unwrap();
+        }
+        let task = db::tasks::require(&fx.db.lock().unwrap(), &t.id).unwrap(); // home: web
+        let extras = launch_extras(
+            &fx.db.lock().unwrap(),
+            &task,
+            fx.app_data.path(),
+            Path::new("/x"),
+            Path::new("/h"),
+        )
+        .unwrap();
+        let api_cache = context_dir(fx.app_data.path(), &Container::Project { id: fx.api.id.clone() }).unwrap();
+        assert!(extras.add_dirs.iter().all(|d| !d.starts_with(&api_cache)));
+        assert_eq!(extras.add_dirs.len(), 2, "web's own cache and the workspace's");
     }
 }

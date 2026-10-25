@@ -34,17 +34,22 @@ pub struct ContextDoc {
     pub trusted: bool,
 }
 
-/// `<app_data>/context`, where fetched reference text is cached (and added to `--add-dir`).
-pub fn context_dir(app_data: &std::path::Path) -> std::path::PathBuf {
-    app_data.join("context")
+/// `<app_data>/context/project-<id>` or `<app_data>/context/workspace-<id>`: one container's fetched reference
+/// text, added to `--add-dir` only for that container's tasks. The id is re-validated before it becomes a path.
+pub fn context_dir(app_data: &std::path::Path, container: &Container) -> Result<std::path::PathBuf> {
+    let name = match container {
+        Container::Project { id } => format!("project-{}", crate::ids::ProjectId::parse(id.as_str())?),
+        Container::Workspace { id } => format!("workspace-{}", crate::ids::WorkspaceId::parse(id.as_str())?),
+    };
+    Ok(app_data.join("context").join(name))
 }
 
-/// `<app_data>/context/<doc-id>.md`; the id must be a valid `doc-…` id.
-pub fn text_cache_path(app_data: &std::path::Path, doc_id: &str) -> Result<std::path::PathBuf> {
+/// `<container's context dir>/<doc-id>.md`; the id must be a valid `doc-…` id.
+pub fn text_cache_path(app_data: &std::path::Path, container: &Container, doc_id: &str) -> Result<std::path::PathBuf> {
     if !(crate::ids::valid_id(doc_id) && doc_id.starts_with("doc-")) {
         return Err(crate::Error::Invalid("Unknown reference id.".into()));
     }
-    Ok(context_dir(app_data).join(format!("{doc_id}.md")))
+    Ok(context_dir(app_data, container)?.join(format!("{doc_id}.md")))
 }
 
 /// `(scope_kind, scope_id)` of a container in the `context_docs` table.
@@ -388,10 +393,12 @@ mod tests {
     #[test]
     fn text_cache_path_validates_id() {
         assert_eq!(
-            text_cache_path(Path::new("/app"), "doc-ab12").unwrap(),
-            PathBuf::from("/app/context/doc-ab12.md")
+            text_cache_path(Path::new("/app"), &ws1(), "doc-ab12").unwrap(),
+            PathBuf::from("/app/context/workspace-ws-1/doc-ab12.md")
         );
-        assert!(text_cache_path(Path::new("/app"), "../x").is_err());
+        assert!(text_cache_path(Path::new("/app"), &ws1(), "../x").is_err());
+        let unparsed: Container = serde_json::from_value(serde_json::json!({"type": "Project", "id": "../x"})).unwrap();
+        assert!(context_dir(Path::new("/app"), &unparsed).is_err());
     }
 
     #[test]
