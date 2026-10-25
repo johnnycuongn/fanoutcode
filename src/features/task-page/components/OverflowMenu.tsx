@@ -1,4 +1,5 @@
-// The header's "…" menu: rename, the forward step, fresh session, stop, back a stage, worktree, Jira, archive.
+// The header's "…" menu: rename, the forward step, bring the base in (a Done worktree task, Plan 11 §6.3), fresh
+// session, stop, back a stage, worktree, Jira, archive.
 import { MoreHorizontal } from "lucide-react";
 import type { ReactElement } from "react";
 import { IconButton, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui";
@@ -13,6 +14,7 @@ export interface OverflowMenuProps {
   onStopAgent(): void;
   onLinkIssue(): void;
   onToggleWorktree?(): void;
+  onIntegrate?(): void;
 }
 
 export function OverflowMenu({
@@ -23,10 +25,12 @@ export function OverflowMenu({
   onStopAgent,
   onLinkIssue,
   onToggleWorktree,
+  onIntegrate,
 }: OverflowMenuProps): ReactElement {
   const forward = task.archived ? null : forwardActionFor(task.stage, { mayCommit });
   const previous = PREVIOUS_STAGE[task.stage];
   const started = task.primary_session !== null;
+  const canIntegrate = !task.archived && task.stage === "Done" && task.worktree_path !== null && onIntegrate;
   return (
     <Menu>
       <MenuTrigger asChild>
@@ -37,6 +41,7 @@ export function OverflowMenu({
           Rename…
         </MenuItem>
         {forward && <MenuItem onSelect={() => onAction(forward.action)}>{forward.label}</MenuItem>}
+        {canIntegrate && <MenuItem onSelect={onIntegrate}>Bring {task.base_branch ?? "base"} in</MenuItem>}
         {freshSessionAllowed(task.stage) && (
           <MenuItem onSelect={() => onAction({ type: "StartFresh" })}>Start fresh session</MenuItem>
         )}

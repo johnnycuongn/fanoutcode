@@ -4,6 +4,7 @@ import { toast } from "@/components/ui";
 import type { ActionOutcome, ResolvedSettings, Scope, StageAction, Task, TaskEvent, TaskId } from "@/lib/bindings";
 import { errorMessage, live } from "@/lib/ipcResult";
 import { createStore } from "@/lib/stores/createStore";
+import type { DockTab } from "@/features/dock";
 import { isWorking, sameState } from "./agentState";
 import { primaryActionFor } from "./primaryAction";
 import { tasksSource, type TaskSource } from "./taskSource";
@@ -117,7 +118,7 @@ export function createTaskPageStore(ipc: TaskPageIpc, tasks: TaskSource = tasksS
     store,
     open,
     act,
-    async runPrimary(taskId: TaskId, focusTerminal: () => void): Promise<void> {
+    async runPrimary(taskId: TaskId, focusTerminal: () => void, openDockTab?: (tab: DockTab) => void): Promise<void> {
       const task = tasks.get(taskId);
       if (!task) return;
       const s = store.get();
@@ -126,6 +127,7 @@ export function createTaskPageStore(ipc: TaskPageIpc, tasks: TaskSource = tasksS
         queued: taskId in s.queued,
       });
       if (primary.intent.kind === "focus-terminal") focusTerminal();
+      else if (primary.intent.kind === "dock-tab") openDockTab?.(primary.intent.tab);
       else if (primary.intent.kind === "action" && !primary.disabled) await act(taskId, primary.intent.action);
     },
     async rename(taskId: TaskId, title: string): Promise<void> {
@@ -146,6 +148,14 @@ export function createTaskPageStore(ipc: TaskPageIpc, tasks: TaskSource = tasksS
       }
     },
     startFresh: (taskId: TaskId) => act(taskId, { type: "StartFresh" }),
+    /** Plan 11 §6.3: inject the integrate prompt; a Precondition (no base yet, not a Done worktree task) shows here. */
+    async integrate(taskId: TaskId): Promise<void> {
+      try {
+        await ipc.overlapIntegrate(taskId);
+      } catch (e) {
+        fail(taskId, e);
+      }
+    },
     /** Starts or resumes the primary session (idempotent); a new id that no task-changed brought is fetched. */
     async startSession(taskId: TaskId): Promise<void> {
       try {
@@ -167,5 +177,14 @@ export function createTaskPageStore(ipc: TaskPageIpc, tasks: TaskSource = tasksS
 export type TaskPageStore = ReturnType<typeof createTaskPageStore>;
 
 export const taskPageStore = createTaskPageStore(
-  live("tasksGet", "tasksAction", "tasksRename", "sessionsStop", "sessionsOpen", "costSummary", "settingsGet"),
+  live(
+    "tasksGet",
+    "tasksAction",
+    "tasksRename",
+    "sessionsStop",
+    "sessionsOpen",
+    "costSummary",
+    "settingsGet",
+    "overlapIntegrate",
+  ),
 );

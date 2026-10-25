@@ -10,4 +10,8 @@ export {
 } from "./store";
 export { OverlapTab } from "./components/OverlapTab";
 export type { OverlapTabProps } from "./components/OverlapTab";
+export { IntegratePane, mergeNeedsYou } from "./components/IntegratePane";
+export type { IntegratePaneProps } from "./components/IntegratePane";
+export { BaseBranchDialog } from "./components/BaseBranchDialog";
+export type { BaseBranchDialogProps } from "./components/BaseBranchDialog";
 export type { OverlapState, OverlapCounts } from "./types";
