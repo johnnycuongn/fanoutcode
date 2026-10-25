@@ -37,11 +37,10 @@ export function stepCost(agent: AgentRecord, costs: AgentCost[]): number | null 
   return c ? c.costUsd / agent.steps.length : null;
 }
 
-function pushTo<K, V>(map: Map<K, V[]>, key: K, value: V): void {
-  const list = map.get(key);
-  if (list) {
-    if (!list.includes(value)) list.push(value);
-  } else map.set(key, [value]);
+function pushTo<K, V>(map: Map<K, Set<V>>, key: K, value: V): void {
+  const set = map.get(key);
+  if (set) set.add(value);
+  else map.set(key, new Set([value]));
 }
 
 export function deriveSteps(args: {
@@ -54,10 +53,10 @@ export function deriveSteps(args: {
   costs: AgentCost[];
 }): StepNodeData[] {
   const { planSteps, agents, edits, files, toolCalls, done, costs } = args;
-  const listing = new Map<number, AgentRecord[]>();
+  const listing = new Map<number, Set<AgentRecord>>();
   for (const a of agents) for (const n of a.steps) pushTo(listing, n, a);
-  const editAgents = new Map<number, string[]>();
-  const editedPaths = new Map<number, string[]>();
+  const editAgents = new Map<number, Set<string>>();
+  const editedPaths = new Map<number, Set<string>>();
   for (const e of edits) {
     if (e.step === null) continue;
     pushTo(editAgents, e.step, e.agentId);
@@ -71,7 +70,7 @@ export function deriveSteps(args: {
 
   return planSteps.map((p) => {
     const n = p.number;
-    const mine = listing.get(n) ?? [];
+    const mine = [...(listing.get(n) ?? [])];
     const status = p.done || done.has(n) ? "done" : mine.length > 0 || editAgents.has(n) ? "active" : "upcoming";
     const owners: string[] = [];
     for (const r of [...mine.map((a) => a.role), ...p.owners]) if (!owners.includes(r)) owners.push(r);
@@ -82,7 +81,7 @@ export function deriveSteps(args: {
       if (c && (!call || c.preSeq > call.preSeq)) call = c;
     }
 
-    const touchedPaths = editedPaths.get(n) ?? [];
+    const touchedPaths = [...(editedPaths.get(n) ?? [])];
     const touched = p.files.filter((f) => touchedPaths.some((path) => path === f || path.endsWith("/" + f))).length;
     const progress = status === "done" ? 1 : p.files.length === 0 ? null : touched / p.files.length;
 
