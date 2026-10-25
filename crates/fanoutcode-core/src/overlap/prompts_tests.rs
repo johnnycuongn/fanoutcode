@@ -241,3 +241,15 @@ in src/a.ts were discarded. Re-read those files before your next edit."
 src/a.ts were stashed. Re-read those files before your next edit."
     );
 }
+
+#[test]
+fn command_free_names_the_command_and_the_tasks() {
+    assert_eq!(
+        command_free(&s(&["Login"]), "git stash"),
+        "Fanout Code: Login's files are now committed; you may run `git stash` again."
+    );
+    assert_eq!(
+        command_free(&s(&["Login", "Billing"]), "git add -A"),
+        "Fanout Code: Login's and Billing's files are now committed; you may run `git add -A` again."
+    );
+}

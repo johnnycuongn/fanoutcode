@@ -168,6 +168,15 @@ were {what}. Re-read those files before your next edit.",
     )
 }
 
+/// The message to a session whose held command is free to run: every task it touched has let go of the files.
+pub fn command_free(other_titles: &[String], command: &str) -> String {
+    let whose: Vec<String> = other_titles.iter().map(|t| format!("{t}'s")).collect();
+    format!(
+        "Fanout Code: {} files are now committed; you may run `{command}` again.",
+        whose.join(" and ")
+    )
+}
+
 /// The once-per-file note to a worktree session editing a file in another task's footprint (§6.2).
 pub fn soft_note(other_title: &str, path: &str, branch: &str) -> String {
     format!(

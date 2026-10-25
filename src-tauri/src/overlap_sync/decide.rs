@@ -11,8 +11,9 @@ use fanoutcode_core::domain::{Task, TaskId};
 use fanoutcode_core::hooks::event_log_path;
 use fanoutcode_core::memory::{IndexEntry, TaskFolder, TimelineKind};
 use fanoutcode_core::overlap::claims::{ClaimsFile, ANOTHER_SESSION};
-use fanoutcode_core::overlap::decide::{covered_pending, decided_line, outcome, released_holds};
-use fanoutcode_core::overlap::prompts::go_ahead;
+use fanoutcode_core::overlap::decide::{
+    command_go_ahead_due, command_rows, covered_pending, decided_line, outcome, release_prompts, released_holds,
+};
 use fanoutcode_core::overlap::{grants, notes, store, Decision, OverlapRow, PendingDecision, Relation};
 use fanoutcode_core::pipeline::{self, Effect};
 use fanoutcode_core::{db, Error, Result};
@@ -127,6 +128,11 @@ pub async fn decide(
         let key = (task_id, repo.as_path(), path, row.other_task.as_ref());
         if out.hold {
             store::set_held(&conn, key.0, key.1, key.2, key.3, true)?;
+            // a held command holds its other stops on the same task too
+            let rows = store::pending(&conn, task_id)?;
+            for r in command_rows(&rows, &row) {
+                store::set_held(&conn, task_id, &r.repo_root, &r.path, r.other_task.as_ref(), true)?;
+            }
         } else {
             store::set_relation(&conn, key.0, key.1, key.2, key.3, out.relation, Some(now))?;
             store::set_pending(&conn, key.0, key.1, key.2, key.3, None)?;
@@ -166,7 +172,14 @@ pub async fn decide(
     }
     repin(app, &state, task_id)?;
     emit_overlap_changed(app, &state, task_id)?;
-    if let Some(p) = out.my_prompt.clone() {
+    // a command that touches several tasks' files is told to run only once the last of them is answered
+    let due = match &row.pending {
+        Some(PendingDecision::Command { command, .. }) => {
+            command_go_ahead_due(&store::pending(&state.db.lock().expect("db lock"), task_id)?, command)
+        }
+        _ => true,
+    };
+    if let (true, Some(p)) = (due, out.my_prompt.clone()) {
         inject(app, &state, task_id, p)?;
     }
     if let (Some(o), Some(p)) = (&other_task, out.other_prompt.clone()) {
@@ -216,7 +229,6 @@ pub fn release_holds(app: &AppHandle, state: &AppState, task_id: &TaskId, file: 
         return Ok(());
     }
     let now = Utc::now();
-    let mut prompts = Vec::new();
     for (r, title) in &freed {
         timeline(
             app,
@@ -225,9 +237,13 @@ pub fn release_holds(app: &AppHandle, state: &AppState, task_id: &TaskId, file: 
             format!("{} is free: {title} let go of it", r.path),
             now,
         )?;
-        prompts.push(go_ahead(Decision::Hold, title, &r.path));
     }
+    let remaining = store::pending(&state.db.lock().expect("db lock"), task_id)?;
+    let prompts = release_prompts(&freed, &remaining);
     repin(app, state, task_id)?;
     emit_overlap_changed(app, state, task_id)?;
+    if prompts.is_empty() {
+        return Ok(());
+    }
     inject(app, state, task_id, prompts.join("\n\n"))
 }
