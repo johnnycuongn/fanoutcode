@@ -101,3 +101,118 @@ fn deny_reason_names_root_and_rule() {
     let r = deny_reason(Path::new("/w/api"), &GuardRule::Git("commit"));
     assert!(r.starts_with("Team Code: /w/api is read-only in this workspace") && r.contains("git commit"));
 }
+
+mod protocol {
+    use super::super::*;
+    use crate::domain::TaskId;
+    use crate::Error;
+    use serde_json::json;
+    use std::path::{Path, PathBuf};
+
+    fn tid(s: &str) -> TaskId {
+        serde_json::from_value(json!(s)).unwrap() // unvalidated, as an id from elsewhere would arrive
+    }
+    fn hook_json(cmd: &str, cwd: &str) -> Vec<u8> {
+        serde_json::to_vec(
+            &json!({"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":cmd},"cwd":cwd}),
+        )
+        .unwrap()
+    }
+    fn roots(dir: &Path) -> PathBuf {
+        write_roots_file(dir, &tid("t-1"), &[PathBuf::from("/w/api")], Path::new("/Users/j")).unwrap()
+    }
+
+    #[test]
+    fn run_guard_prints_deny_json_for_blocked_command() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut out = Vec::new();
+        assert_eq!(
+            run_guard(
+                &mut hook_json("rm -rf /w/api/x", "/w/web").as_slice(),
+                &mut out,
+                &roots(dir.path())
+            ),
+            0
+        );
+        let v: serde_json::Value = serde_json::from_slice(&out).unwrap();
+        assert_eq!(v["hookSpecificOutput"]["hookEventName"], "PreToolUse");
+        assert_eq!(v["hookSpecificOutput"]["permissionDecision"], "deny");
+        assert!(v["hookSpecificOutput"]["permissionDecisionReason"]
+            .as_str()
+            .unwrap()
+            .contains("/w/api"));
+    }
+
+    #[test]
+    fn run_guard_prints_nothing_when_allowed_or_not_bash() {
+        let dir = tempfile::tempdir().unwrap();
+        let r = roots(dir.path());
+        let mut out = Vec::new();
+        run_guard(&mut hook_json("ls /w/api", "/w/web").as_slice(), &mut out, &r);
+        assert!(out.is_empty());
+        let other =
+            serde_json::to_vec(&json!({"tool_name":"Edit","tool_input":{"file_path":"/w/api/x"},"cwd":"/w/web"}))
+                .unwrap();
+        let mut out = Vec::new();
+        run_guard(&mut other.as_slice(), &mut out, &r);
+        assert!(out.is_empty());
+    }
+
+    #[test]
+    fn run_guard_fails_open_on_bad_input_or_missing_roots() {
+        let mut out = Vec::new();
+        assert_eq!(
+            run_guard(&mut b"not json".as_slice(), &mut out, Path::new("/nonexistent.json")),
+            0
+        );
+        assert!(out.is_empty());
+    }
+
+    #[test]
+    fn write_roots_file_validates_task_id() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(matches!(
+            write_roots_file(dir.path(), &tid("../evil"), &[], Path::new("/h")),
+            Err(Error::Invalid(_))
+        ));
+    }
+
+    #[test]
+    fn guard_hook_spec_targets_bash_pre_tool_use_and_quotes_paths() {
+        let s = guard_hook_spec(
+            Path::new("/Applications/Team Code.app/Contents/MacOS/teamcode"),
+            Path::new("/app/guards/t-1.guard.json"),
+        );
+        assert_eq!(
+            s.command,
+            "'/Applications/Team Code.app/Contents/MacOS/teamcode' guard '/app/guards/t-1.guard.json'"
+        );
+        assert_eq!(
+            (s.event.as_str(), s.matcher.as_deref(), s.timeout_s),
+            ("PreToolUse", Some("Bash"), Some(5))
+        );
+        assert!(guard_hook_spec(Path::new("/x/it's"), Path::new("/r"))
+            .command
+            .starts_with("'/x/it'\\''s'"));
+    }
+
+    #[test]
+    fn prepare_guard_is_none_without_protected_roots() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(
+            prepare_guard(dir.path(), Path::new("/x/teamcode"), &tid("t-1"), &[], Path::new("/h"))
+                .unwrap()
+                .is_none()
+        );
+        assert!(prepare_guard(
+            dir.path(),
+            Path::new("/x/teamcode"),
+            &tid("t-1"),
+            &[PathBuf::from("/w/api")],
+            Path::new("/h")
+        )
+        .unwrap()
+        .is_some());
+        assert!(dir.path().join("guards/t-1.guard.json").exists());
+    }
+}
