@@ -10,9 +10,11 @@ pub mod inject;
 pub mod launch;
 pub mod registry;
 pub mod scrollback;
+pub mod stop;
 
 pub use batch::Batcher;
 pub use driver::{ExitFn, GracefulExit, OutputFn, OwnedDriver, Pty, PtySpawner, SessionDriver, SpawnSpec, STOP_GRACE};
 pub use flow::FlowControl;
 pub use launch::LaunchSpec;
 pub use scrollback::{Scrollback, ScrollbackBuffer};
+pub use stop::{Clock, SystemClock, STOP_POLL};

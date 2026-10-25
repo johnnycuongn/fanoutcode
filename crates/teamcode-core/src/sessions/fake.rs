@@ -4,9 +4,10 @@
 
 use std::cell::Cell;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::sessions::driver::{ExitFn, OutputFn, Pty, PtySpawner, SpawnSpec};
+use crate::sessions::stop::Clock;
 use crate::Error;
 
 thread_local! {
@@ -137,5 +138,43 @@ impl PtySpawner for FakeSpawner {
         });
         self.ptys.lock().expect("ptys lock").push(handle);
         Ok(Box::new(pty))
+    }
+}
+
+/// A clock whose `sleep` advances instantly. Creating one resets this thread's fake time to zero, and `FakePty`
+/// reads that time for `exit_after`.
+#[derive(Clone)]
+pub struct FakeClock {
+    start: Instant,
+    now: Arc<Mutex<Instant>>,
+}
+
+impl Default for FakeClock {
+    fn default() -> Self {
+        FAKE_ELAPSED.with(|c| c.set(Duration::ZERO));
+        let start = Instant::now();
+        Self {
+            start,
+            now: Arc::new(Mutex::new(start)),
+        }
+    }
+}
+
+impl FakeClock {
+    pub fn elapsed(&self) -> Duration {
+        *self.now.lock().expect("clock lock") - self.start
+    }
+}
+
+impl Clock for FakeClock {
+    fn now(&self) -> Instant {
+        *self.now.lock().expect("clock lock")
+    }
+
+    fn sleep(&self, d: Duration) {
+        let mut now = self.now.lock().expect("clock lock");
+        *now += d;
+        let elapsed = *now - self.start;
+        FAKE_ELAPSED.with(|c| c.set(elapsed));
     }
 }
