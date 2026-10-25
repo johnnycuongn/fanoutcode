@@ -4,6 +4,7 @@
 
 pub mod briefs;
 pub mod context_docs;
+pub mod convert;
 pub mod file;
 pub mod fragments;
 pub mod guard;
