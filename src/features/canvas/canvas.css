@@ -1,0 +1,24 @@
+/* Team canvas edges (§11.3): a working agent's edges carry a flowing dash; reduced motion stops it. No colour
+   literals: edges take currentColor from their token class (text-accent, text-mute). */
+.edge-touches path.react-flow__edge-path,
+.edge-depends path.react-flow__edge-path {
+  stroke: currentColor;
+  stroke-width: 1.5;
+}
+.edge-depends path.react-flow__edge-path {
+  stroke-dasharray: 2 4;
+}
+.edge-flowing path.react-flow__edge-path {
+  stroke-dasharray: 6 4;
+  animation: canvas-dash 1s linear infinite;
+}
+@keyframes canvas-dash {
+  to {
+    stroke-dashoffset: -20;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .edge-flowing path.react-flow__edge-path {
+    animation: none;
+  }
+}

@@ -1,5 +1,6 @@
 // The window's root: the shell for a project or workspace window, otherwise the start screen (or onboarding on
-// first run). Dev builds also serve the primitives gallery at `#/dev/primitives`.
+// first run). Dev builds also serve the primitives gallery at `#/dev/primitives` and the canvas playground at
+// `#/dev/canvas`.
 import { lazy, Suspense, useEffect, useState, type ReactElement } from "react";
 import { UiProvider } from "@/components/ui";
 import { commands, type WindowInfo } from "@/lib/bindings";
@@ -11,12 +12,20 @@ const Onboarding = lazy(() => import("@/features/start-screen").then((m) => ({ d
 
 // Dev builds only: `#/dev/primitives` shows the primitives gallery. The dead branch in production lets Rollup drop it.
 const PrimitivesGallery = import.meta.env.DEV ? lazy(() => import("./dev/primitives")) : null;
+const CanvasPlayground = import.meta.env.DEV ? lazy(() => import("./dev/canvas/CanvasPlayground")) : null;
 
 export function isDevPrimitivesRoute(): boolean {
   return import.meta.env.DEV && window.location.hash.startsWith("#/dev/primitives");
 }
 
 export default function App(): ReactElement {
+  if (CanvasPlayground && import.meta.env.DEV && window.location.hash.startsWith("#/dev/canvas")) {
+    return (
+      <Suspense fallback={null}>
+        <CanvasPlayground />
+      </Suspense>
+    );
+  }
   if (PrimitivesGallery && isDevPrimitivesRoute()) {
     return (
       <Suspense fallback={null}>
