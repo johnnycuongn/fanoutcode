@@ -17,9 +17,23 @@ function str(v: JsonValue | undefined): string {
   return typeof v === "string" ? v : "";
 }
 
-/** True for a `Write`, whose new content is diffed against the current file. */
+/** True for a `Write`, whose new content is diffed against the current file, and an `Edit`, whose old string is
+ * placed in it ("lines a–b"). */
 export function needsCurrentFile(p: PendingDecision | null): boolean {
-  return p?.type === "Edit" && p.tool === "Write";
+  return p?.type === "Edit" && (p.tool === "Write" || p.tool === "Edit");
+}
+
+/** Where an `Edit`'s old string falls in the current file, as "lines a–b" (1-based, "line a" for one line); `null`
+ * for anything else, or when the file does not hold the old string. */
+export function editLines(p: PendingDecision | null, currentFile: string | null): string | null {
+  if (p?.type !== "Edit" || p.tool !== "Edit" || currentFile === null) return null;
+  const old = str(obj(p.input)?.old_string);
+  const at = old === "" ? -1 : currentFile.indexOf(old);
+  if (at < 0) return null;
+  const lineOf = (i: number) => currentFile.slice(0, i).split("\n").length;
+  const from = lineOf(at);
+  const to = lineOf(at + old.replace(/\n$/, "").length);
+  return from === to ? `line ${from}` : `lines ${from}–${to}`;
 }
 
 export function willWrite(p: PendingDecision | null, currentFile: string | null): WillWrite | null {

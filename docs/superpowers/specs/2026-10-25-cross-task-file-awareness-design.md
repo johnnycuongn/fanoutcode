@@ -159,8 +159,8 @@ content, diffed against the current file); and the four answers:
    <other>'s uncommitted changes in it may go; rewrite it as your task needs"*), so for an `Edit` whose `old_string`
    no longer matches, the session re-reads and writes the file. Red text; no confirmation dialog beyond the Continue
    button, since the diff is on screen. **(call)**
-4. **Hold** — no grant; the task stays needs-you with the chip *Holding for <other>*. When the claim is released (the
-   other task commits the file) the task is notified and the prompt below is sent with "the file is now free".
+4. **Hold** — no grant; the task stays needs-you with the chip *Holding for <other>*. When the file is clean (the
+   other task commits it; §5.6) the task is notified and the prompt below is sent with "the file is now free".
 
 Continue writes the grant, records an `IndexEntry` in the task's timeline (`Overlap decided: on top of Login in
 src/auth/session.ts`), returns the task to `Working`, and injects into its session:
@@ -197,8 +197,14 @@ hand-back opens with the command shown in place of the pending write. Rules, bes
   `git restore .` when any claim exists.
 - `git stash` (any form but `list`/`show`), `git reset --hard`, `git clean` when any claim exists.
 
-The hand-back's answers for a command are **Proceed** (grant `AllFiles` on each task named, then inject "go ahead") and
-**Hold**. Commits that name only the task's own files are never caught. A task's commit through the app's own Commit
+The hand-back's answers for a command are **Proceed** and **Hold**. Proceed grants a single-use
+`Command { repo, command }` on each task named, never `AllFiles` (an edit grant would switch the guard off), then
+injects "go ahead"; the claim-check hook spends the grant, under the grants file's OS lock, before the command runs, so
+the next run of the same command is checked again. A command that touches two tasks' files waits for both answers. The
+decision shows the other task's files the command touches and whether it commits them or discards them, and the other
+task is told the same. A Hold, on a command or an edit, is released only once the file is clean in `git status` (the
+other task committed it, or no uncommitted changes are left); a claimant that merely drops out of the claims file (a
+lost session, an archived task) releases nothing. Commits that name only the task's own files are never caught. A task's commit through the app's own Commit
 button already stages only the task's files (§6.6) and is unaffected.
 
 ### 5.7 Lag and races

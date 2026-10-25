@@ -13,7 +13,7 @@ use super::claims::ClaimsFile;
 use super::footprint::FootprintRow;
 use super::{OverlapRow, Relation};
 use crate::changes::AttributedFile;
-use crate::domain::{Task, TaskId};
+use crate::domain::{Stage, Task, TaskId};
 use crate::git::StatusEntry;
 
 /// A task as `overlaps_for` sees it: its attributed change set, its footprint, the branch its tree is on, and the
@@ -83,7 +83,8 @@ fn key(row: &OverlapRow) -> Key {
 /// - `Committed` for a stored `Claimed` or `Committed` row whose claim went because the other task's file is clean
 ///   in `status_by_repo` (a repo without a status there keeps the stored row: it is not known yet).
 ///
-/// Stored `GrantedOnTop`, `TakenOver` and `TakenOverBy` rows are kept as they are, and so is any stored row with an open decision
+/// Stored `GrantedOnTop`, `TakenOver` and `TakenOverBy` rows are kept as they are until `settled` says they are over,
+/// and so is any stored row with an open decision
 /// (the shell answers it once the claim is released). A recomputed row keeps the stored decision, hold, notes and
 /// `decided_at`; its `updated_at` moves to `now` only when its relation changes. Sorted by repo, path, other task.
 pub fn overlaps_for(
@@ -131,6 +132,10 @@ pub fn overlaps_for(
         if out.contains_key(k) && !decided {
             continue;
         }
+        if decided && row.pending.is_none() && settled(row, me, others, claims, status_by_repo) {
+            // the decision has nothing left to say: whatever the recompute found (a fresh claim, a plan) stands
+            continue;
+        }
         let kept = match row.relation {
             Relation::GrantedOnTop | Relation::TakenOver | Relation::TakenOverBy => Some(row.relation),
             Relation::Claimed | Relation::Committed => released(row, others, status_by_repo),
@@ -171,6 +176,44 @@ pub fn overlaps_for(
             }
         })
         .collect()
+}
+
+/// Whether a decided row (`GrantedOnTop`, `TakenOver`, `TakenOverBy`) is over and can go:
+/// - `GrantedOnTop`, once the claims file of its tree is known and neither task claims the path (both committed or
+///   let go of it);
+/// - `TakenOver` and `TakenOverBy`, once the tree's status is known and the path is clean (committed), and the task
+///   that lost the file (the other task of a `TakenOver` row, this one of a `TakenOverBy` row) is Done or gone:
+///   until then its Done detection still reads the row (`store::taken_over_paths_for`).
+fn settled(
+    row: &OverlapRow,
+    me: &OtherTask<'_>,
+    others: &[OtherTask<'_>],
+    claims: &[ClaimsFile],
+    status_by_repo: &[(PathBuf, Vec<StatusEntry>)],
+) -> bool {
+    match row.relation {
+        Relation::GrantedOnTop => claims.iter().find(|f| f.repo_root == row.repo_root).is_some_and(|f| {
+            !f.claims
+                .iter()
+                .any(|c| c.path == row.path && (c.task_id == row.other_task || c.task_id.as_ref() == Some(&me.task.id)))
+        }),
+        Relation::TakenOver | Relation::TakenOverBy => {
+            let clean = status_by_repo
+                .iter()
+                .find(|(r, _)| *r == row.repo_root)
+                .is_some_and(|(_, s)| !s.iter().any(|e| e.path == row.path));
+            let loser = if row.relation == Relation::TakenOver {
+                others
+                    .iter()
+                    .find(|o| Some(&o.task.id) == row.other_task.as_ref())
+                    .map(|o| o.task)
+            } else {
+                Some(me.task)
+            };
+            clean && loser.is_none_or(|t| t.stage == Stage::Done || t.archived)
+        }
+        _ => false,
+    }
 }
 
 /// A stored `Claimed`/`Committed` row whose claim is gone: `Committed` once the other task's attributed file is

@@ -1089,11 +1089,12 @@ async overlapDecide(taskId: TaskId, repo: string, path: string, otherTask: TaskI
 }
 },
 /**
- * What the session was about to do when it stopped on `path` of `repo`: the edit's tool input, or the command.
+ * What the session was about to do when it stopped on `path` of `repo` against `other_task` (`None`: another
+ * session): the edit's tool input, or the command.
  */
-async overlapPendingInput(taskId: TaskId, repo: string, path: string) : Promise<Result<PendingDecision | null, string>> {
+async overlapPendingInput(taskId: TaskId, repo: string, path: string, otherTask: TaskId | null) : Promise<Result<PendingDecision | null, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("overlap_pending_input", { taskId, repo, path }) };
+    return { status: "ok", data: await TAURI_INVOKE("overlap_pending_input", { taskId, repo, path, otherTask }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };

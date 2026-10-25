@@ -11,6 +11,7 @@ pub mod git_rules;
 pub mod grants;
 pub mod integrate;
 pub mod notes;
+pub mod observed;
 pub mod others;
 pub mod prompts;
 pub mod store;

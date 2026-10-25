@@ -10,6 +10,7 @@ use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, OptionalExtension, Row};
 
 use super::{OverlapRow, PendingDecision, Relation};
+use crate::changes::AttributedFile;
 use crate::db::{enum_from, enum_str, parse_time, ts};
 use crate::domain::TaskId;
 use crate::Result;
@@ -252,6 +253,42 @@ pub fn taken_over_paths(conn: &Connection, task: &TaskId, repo: &Path) -> Result
         |r| r.get::<_, String>(0),
     )?;
     Ok(rows.collect::<rusqlite::Result<_>>()?)
+}
+
+/// The `taken_over_paths` of `task` in `repo` that still left its change set: a path counts again once `task`
+/// attributed it after the `Replace` (`attributed` holds an entry of it newer than the row's `decided_at`), because
+/// the loser edited the file once more and must commit it like any other. A row without `decided_at` is treated as
+/// decided at the epoch, so any attribution brings the path back.
+pub fn taken_over_paths_for(
+    conn: &Connection,
+    task: &TaskId,
+    repo: &Path,
+    attributed: &[AttributedFile],
+) -> Result<Vec<String>> {
+    let mut stmt = conn.prepare(
+        "SELECT path, MAX(COALESCE(decided_at, '')) FROM task_overlaps
+         WHERE other_task = ?1 AND repo_root = ?2 AND relation = ?3 GROUP BY path ORDER BY path",
+    )?;
+    let rows = stmt.query_map(
+        params![task.as_str(), repo.to_string_lossy(), enum_str(&Relation::TakenOver)?],
+        |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),
+    )?;
+    let mut out = Vec::new();
+    for row in rows {
+        let (path, decided) = row?;
+        let decided = if decided.is_empty() {
+            DateTime::<Utc>::UNIX_EPOCH
+        } else {
+            parse_time(&decided)?
+        };
+        let edited_since = attributed
+            .iter()
+            .any(|f| f.repo_root == repo && f.path == path && f.added_at > decided);
+        if !edited_since {
+            out.push(path);
+        }
+    }
+    Ok(out)
 }
 
 /// Marks the note about one overlap as sent: `outgoing` to this task's session, else to the other task's.

@@ -15,7 +15,7 @@ use fanoutcode_core::pipeline::Effect;
 use fanoutcode_core::{db, Result};
 use tauri::AppHandle;
 
-use super::{emit_overlap_changed, rebuild_around, RECENT_EDITS};
+use super::{emit_overlap_changed, orphan_files, rebuild_around, RECENT_EDITS};
 use crate::hook_feed::set_state;
 use crate::observe::{self, log_err};
 use crate::session_service;
@@ -77,8 +77,8 @@ pub fn apply_derived(app: &AppHandle, state: &AppState, id: &TaskId, next: Agent
 }
 
 /// A `ClaimDenied` line of the task's own log: opens its pending decisions (`denial::denial_rows`) and pins it. The
-/// repo must be one of the task's, the path inside it, and a named other task must exist and be active; anything
-/// else is ignored.
+/// repo must be one of the task's and the path inside it; a named other task that is archived or unknown is recorded
+/// as *another session*, and a line naming the task itself is ignored.
 pub fn on_claim_denied(app: &AppHandle, state: &AppState, ev: &TaskEvent) -> Result<()> {
     let HookEvent::ClaimDenied {
         repo,
@@ -98,11 +98,13 @@ pub fn on_claim_denied(app: &AppHandle, state: &AppState, ev: &TaskEvent) -> Res
     if let Some(p) = path {
         changes::checked_path(&repo, p)?;
     }
+    // an archived or unknown other task is *another session*: its changes are still what stopped the session, and
+    // a stopped session must always have a decision to wait on
     let other = match other_task {
-        Some(o) => match db::tasks::get(&state.db.lock().expect("db lock"), o)? {
-            Some(t) if !t.archived && t.id != *id => Some(t.id),
-            _ => return Ok(()),
-        },
+        Some(o) if o == id => return Ok(()),
+        Some(o) => db::tasks::get(&state.db.lock().expect("db lock"), o)?
+            .filter(|t| !t.archived)
+            .map(|t| t.id),
         None => None,
     };
     let claims = claims::read_claims(&claims::claims_path(&state.data_dir, &repo));
@@ -185,7 +187,8 @@ pub fn note_edit_call(app: &AppHandle, state: &AppState, id: &TaskId, call: Edit
 }
 
 /// Start fresh session or Archive: the task's open decisions, its pin and its grants go, so the new session is not
-/// born needs-you (Review Focus 5); an archived task's note inbox goes too and its claims leave the claims files.
+/// born needs-you (Review Focus 5); an archived task's note inbox goes too and its claims leave the claims files,
+/// its dirty files in shared repos staying claimed as *another session* (`orphan_files`).
 pub fn clear_task(app: &AppHandle, state: &AppState, task: &Task) -> Result<()> {
     store::clear_pending(&state.db.lock().expect("db lock"), &task.id)?;
     state.pinned.lock().expect("pinned lock").remove(&task.id);
@@ -204,6 +207,10 @@ pub fn clear_task(app: &AppHandle, state: &AppState, task: &Task) -> Result<()> 
             .remove(&task.id);
         let (app, task) = (app.clone(), task.clone());
         tauri::async_runtime::spawn(async move {
+            log_err(
+                "keeping an archived task's dirty files claimed",
+                orphan_files(&app, &task).await,
+            );
             log_err("rebuilding after an archive", rebuild_around(&app, &task).await);
         });
     }

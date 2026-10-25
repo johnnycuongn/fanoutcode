@@ -2,9 +2,9 @@ use serde_json::json;
 
 use super::*;
 use crate::domain::TaskId;
+use crate::git::FileStatus;
 use crate::hooks::parse::parse_line;
 use crate::hooks::HookEvent;
-use crate::overlap::claims::Claim;
 use crate::overlap::prompts::command_free;
 use crate::overlap::CommandKind;
 
@@ -253,34 +253,73 @@ fn an_all_files_grant_answers_the_other_open_decisions_on_that_task() {
     assert_eq!(covered, vec!["src/b.ts"]);
 }
 
+fn dirty(paths: &[&str]) -> Vec<StatusEntry> {
+    paths
+        .iter()
+        .map(|p| StatusEntry {
+            path: (*p).into(),
+            status: FileStatus::Modified,
+            orig_path: None,
+        })
+        .collect()
+}
+
+fn released<'a>(rows: &'a [OverlapRow], repo: &str, status: &[StatusEntry]) -> Vec<(&'a str, Release)> {
+    // t-b2 attributed src/a.ts; nothing else is any task's
+    released_holds(rows, Path::new(repo), status, |r| {
+        r.other_task.as_ref().map(TaskId::as_str) == Some("t-b2") && r.path == "src/a.ts"
+    })
+    .into_iter()
+    .map(|(r, why)| (r.path.as_str(), why))
+    .collect()
+}
+
 #[test]
-fn a_hold_is_released_once_its_claim_leaves_the_claims_file() {
+fn a_hold_is_released_once_the_path_is_clean() {
     let rows = [
         row("src/a.ts", Some("t-b2"), edit(), true),
         row("src/b.ts", Some("t-b2"), edit(), true),
         row("src/c.ts", Some("t-b2"), edit(), false),
         row("src/d.ts", None, edit(), true),
     ];
-    let claim = |path: &str, task: Option<&str>| Claim {
-        path: path.into(),
-        task_id: task.map(id),
-        title: "Login".into(),
-        stage: None,
-        state: None,
-        last_edit: now(),
-    };
-    let file = ClaimsFile {
-        repo_root: "/r".into(),
-        written_at: now(),
-        claims: vec![claim("src/b.ts", Some("t-b2")), claim("src/a.ts", Some("t-c3"))],
-    };
-    let freed: Vec<&str> = released_holds(&rows, &file).iter().map(|r| r.path.as_str()).collect();
-    assert_eq!(freed, vec!["src/a.ts", "src/d.ts"]);
-    let elsewhere = ClaimsFile {
-        repo_root: "/other".into(),
-        ..file
-    };
-    assert!(released_holds(&rows, &elsewhere).is_empty());
+    // src/b.ts is still dirty; src/c.ts is not held
+    assert_eq!(
+        released(&rows, "/r", &dirty(&["src/b.ts", "src/c.ts"])),
+        vec![("src/a.ts", Release::Committed), ("src/d.ts", Release::Clean)]
+    );
+    assert!(released(&rows, "/other", &[]).is_empty());
+}
+
+#[test]
+fn hold_is_not_released_while_the_path_is_dirty() {
+    // the claim left the claims file (the claimant vanished from the list: its session was lost on a
+    // relaunch, or the claims lag), but the changes are still on disk
+    let rows = [
+        row("src/a.ts", Some("t-b2"), edit(), true),
+        row("src/d.ts", None, edit(), true),
+    ];
+    assert!(released(&rows, "/r", &dirty(&["src/a.ts", "src/d.ts"])).is_empty());
+}
+
+#[test]
+fn archived_task_files_still_hold_a_hold() {
+    // t-b2 was archived with src/a.ts dirty: it claims nothing any more, yet its changes are on disk
+    let rows = [row("src/a.ts", Some("t-b2"), edit(), true)];
+    assert!(released(&rows, "/r", &dirty(&["src/a.ts"])).is_empty());
+    // once the file is clean the hold is over
+    assert_eq!(released(&rows, "/r", &[]), vec![("src/a.ts", Release::Committed)]);
+}
+
+#[test]
+fn release_lines_say_what_happened() {
+    assert_eq!(
+        release_line(Release::Committed, "src/a.ts", "Login"),
+        "src/a.ts is free: Login committed it"
+    );
+    assert_eq!(
+        release_line(Release::Clean, "src/a.ts", "another session"),
+        "src/a.ts is free: it has no uncommitted changes now"
+    );
 }
 
 #[test]

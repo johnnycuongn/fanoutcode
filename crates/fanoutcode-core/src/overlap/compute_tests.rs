@@ -3,10 +3,11 @@ use serde_json::json;
 
 use super::*;
 use crate::changes::{ChangeSource, MAIN_AGENT};
+use crate::domain::Stage;
 use crate::git::FileStatus;
 use crate::overlap::claims::{build_claims, TaskFiles};
 use crate::overlap::footprint::FootprintSource;
-use crate::overlap::PendingDecision;
+use crate::overlap::{CommandKind, PendingDecision};
 use crate::test_support::task_fixture;
 
 const HOME: &str = "/app";
@@ -378,4 +379,109 @@ fn shares_tree_rules() {
     assert!(shares_tree(&wt_linked, &api_task, api));
     let api_wt = task("t-f8", Some("/api/.worktrees/h"));
     assert!(!shares_tree(&wt_linked, &api_wt, api));
+}
+
+#[test]
+fn a_granted_row_goes_once_neither_task_claims_the_path() {
+    let (me, login) = (task("t-a1", None), task("t-b2", None));
+    let my_files = [file(HOME, "src/a.ts")];
+    let login_files = [file(HOME, "src/a.ts")];
+    let granted = OverlapRow {
+        decided_at: Some(at("2026-10-25T09:30:00Z")),
+        ..row(&me, Some(&login), "src/a.ts", Relation::GrantedOnTop)
+    };
+    let run = |claimants: &[(&Task, &[AttributedFile])], status: Vec<StatusEntry>, with_claims: bool| {
+        let tasks: Vec<TaskFiles<'_>> = claimants
+            .iter()
+            .map(|(task, files)| TaskFiles { task, files })
+            .collect();
+        let claims = build_claims(Path::new(HOME), &tasks, &status, now());
+        overlaps_for(
+            &view(&me, &my_files, &[]),
+            &[view(&login, &login_files, &[])],
+            if with_claims {
+                std::slice::from_ref(&claims)
+            } else {
+                &[]
+            },
+            &[(HOME.into(), status.clone())],
+            std::slice::from_ref(&granted),
+            now(),
+        )
+    };
+    // only my own edits on top are still uncommitted: the grant still matters
+    assert_eq!(
+        run(&[(&me, &my_files)], dirty(&["src/a.ts"]), true),
+        vec![granted.clone()]
+    );
+    // both committed: neither claims it, the row goes
+    assert!(run(&[(&me, &my_files), (&login, &login_files)], dirty(&[]), true).is_empty());
+    // no claims file read for the repo yet: kept
+    assert_eq!(run(&[], dirty(&[]), false), vec![granted.clone()]);
+    // an open decision keeps it
+    let pending = OverlapRow {
+        pending: Some(PendingDecision::Command {
+            command: "git add -A".into(),
+            kind: CommandKind::Commits,
+            paths: vec!["src/a.ts".into()],
+        }),
+        ..granted.clone()
+    };
+    let claims = build_claims(Path::new(HOME), &[], &[], now());
+    let kept = overlaps_for(
+        &view(&me, &my_files, &[]),
+        &[view(&login, &login_files, &[])],
+        &[claims],
+        &[(HOME.into(), vec![])],
+        std::slice::from_ref(&pending),
+        now(),
+    );
+    assert_eq!(kept, vec![pending]);
+}
+
+#[test]
+fn a_taken_over_row_goes_once_the_path_is_committed_and_clean() {
+    let me = task("t-a1", None);
+    let mut login = task("t-b2", None);
+    login.stage = Stage::Done;
+    let my_files = [file(HOME, "src/a.ts")];
+    let taken = OverlapRow {
+        decided_at: Some(at("2026-10-25T09:30:00Z")),
+        ..row(&me, Some(&login), "src/a.ts", Relation::TakenOver)
+    };
+    let run = |me: &Task, other: &Task, stored: &OverlapRow, status: Vec<StatusEntry>| {
+        overlaps_for(
+            &view(me, &my_files, &[]),
+            &[view(other, &[], &[])],
+            &[],
+            &[(HOME.into(), status)],
+            std::slice::from_ref(stored),
+            now(),
+        )
+    };
+    // still dirty: kept
+    assert_eq!(run(&me, &login, &taken, dirty(&["src/a.ts"])), vec![taken.clone()]);
+    // committed and clean, and the task that lost it is Done: the Replace is settled, the row goes
+    assert!(run(&me, &login, &taken, dirty(&[])).is_empty());
+    // the task that lost it is not Done yet: its Done check still reads the row
+    let mut busy = login.clone();
+    busy.stage = Stage::Commit;
+    assert_eq!(run(&me, &busy, &taken, dirty(&[])), vec![taken.clone()]);
+    // status unknown: kept
+    let unknown = overlaps_for(
+        &view(&me, &my_files, &[]),
+        &[view(&login, &[], &[])],
+        &[],
+        &[],
+        std::slice::from_ref(&taken),
+        now(),
+    );
+    assert_eq!(unknown, vec![taken.clone()]);
+    // the mirror row on the side that lost it goes the same way, once that side is Done
+    let lost = OverlapRow {
+        decided_at: Some(at("2026-10-25T09:30:00Z")),
+        ..row(&login, Some(&me), "src/a.ts", Relation::TakenOverBy)
+    };
+    assert!(run(&login, &me, &lost, dirty(&[])).is_empty());
+    assert_eq!(run(&busy, &me, &lost, dirty(&[])), vec![lost.clone()]);
 }

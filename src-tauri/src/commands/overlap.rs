@@ -37,7 +37,8 @@ pub async fn overlap_decide(
     overlap_sync::decide(&app, &id, &repo, &path, other.as_ref(), decision).await
 }
 
-/// What the session was about to do when it stopped on `path` of `repo`: the edit's tool input, or the command.
+/// What the session was about to do when it stopped on `path` of `repo` against `other_task` (`None`: another
+/// session): the edit's tool input, or the command.
 #[tauri::command]
 #[specta::specta]
 pub fn overlap_pending_input(
@@ -45,14 +46,16 @@ pub fn overlap_pending_input(
     task_id: TaskId,
     repo: PathBuf,
     path: String,
+    other_task: Option<TaskId>,
 ) -> Result<Option<PendingDecision>> {
     let id = TaskId::parse(task_id.as_str())?;
+    let other = other_task.map(|o| TaskId::parse(o.as_str())).transpose()?;
     let (task, home) = observe::task_and_home(&state, &id)?;
     let repo = observe::checked_repo(&observe::repos(&task, &home), &repo)?;
     changes::checked_path(&repo, &path)?;
     let rows = store::pending(&state.db.lock().expect("db lock"), &id)?;
     Ok(rows
         .into_iter()
-        .find(|r| r.repo_root == repo && r.path == path)
+        .find(|r| r.repo_root == repo && r.path == path && r.other_task == other)
         .and_then(|r| r.pending))
 }

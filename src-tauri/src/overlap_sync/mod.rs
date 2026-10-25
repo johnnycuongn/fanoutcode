@@ -18,6 +18,7 @@ use fanoutcode_core::overlap::claims::{self, ClaimsFile, TaskFiles};
 use fanoutcode_core::overlap::compute::{self, OtherTask};
 use fanoutcode_core::overlap::denial::EditCall;
 use fanoutcode_core::overlap::footprint::{self, FootprintRow};
+use fanoutcode_core::overlap::observed;
 use fanoutcode_core::overlap::{grants, store};
 use fanoutcode_core::{db, Result};
 use tauri::{AppHandle, Manager};
@@ -42,7 +43,9 @@ pub(super) const RECENT_EDITS: usize = 16;
 pub struct OverlapCache {
     /// Each task's latest edit tool calls, newest last.
     pub(super) recent_edits: Mutex<HashMap<TaskId, VecDeque<EditCall>>>,
-    /// Per repo, the dirty files seen while several hookless sessions worked there: claims of *another session*.
+    /// Per repo, the dirty files no task owns (seen while several hookless sessions worked there, or left by an
+    /// archived task): claims of *another session*, mirrored to `<app_data>/claims/<repo_key>.observed.json` on every
+    /// change (`save_observed`) and read back by `start`.
     pub(super) unattributed: Mutex<HashMap<PathBuf, Vec<AttributedFile>>>,
     /// Per shared repo, the status `observe_hookless` saw last.
     pub(super) last_status: Mutex<HashMap<PathBuf, Vec<StatusEntry>>>,
@@ -130,20 +133,63 @@ pub async fn rebuild_claims(app: &AppHandle, repo: &Path) -> Result<()> {
         })
         .collect();
     let mut file = claims::build_claims(repo, &tasks, &status, Utc::now());
-    let observed = {
+    let (seen, changed) = {
         let mut all = state.overlap.unattributed.lock().expect("unattributed lock");
         let list = all.entry(repo.to_owned()).or_default();
+        let before = list.len();
         list.retain(|f| status.iter().any(|e| e.path == f.path));
-        list.clone()
+        (list.clone(), list.len() != before)
     };
-    claims::add_unattributed(&mut file, &observed, &status);
+    if changed {
+        save_observed(&state, repo, &seen)?;
+    }
+    claims::add_unattributed(&mut file, &seen, &status);
     claims::write_claims(&state.data_dir, &file)?;
     for a in &owners {
         log_err("pruning a task's grants", prune_grants(&state, a, &file));
+    }
+    // a hold is over only once its file is clean (whoever claims it), never because a claim left the file
+    let attributed = |r: &fanoutcode_core::overlap::OverlapRow| {
+        owners.iter().zip(&files).any(|(a, f)| {
+            Some(&a.task.id) == r.other_task.as_ref() && f.iter().any(|x| x.repo_root == repo && x.path == r.path)
+        })
+    };
+    for a in &owners {
         log_err(
             "releasing held decisions",
-            release_holds(app, &state, &a.task.id, &file),
+            release_holds(app, &state, &a.task.id, repo, &status, attributed),
         );
+    }
+    Ok(())
+}
+
+/// Writes `repo`'s list of *another session*'s files to disk, so a relaunch still knows them.
+pub(super) fn save_observed(state: &AppState, repo: &Path, list: &[AttributedFile]) -> Result<()> {
+    observed::write_observed(&state.data_dir, repo, list)
+}
+
+/// An archived task's dirty files in the repos other active tasks still work in become claims of *another
+/// session*: its changes are still on disk, so they keep stopping other sessions and keep holds held until clean.
+pub(super) async fn orphan_files(app: &AppHandle, task: &Task) -> Result<()> {
+    let state = app.state::<AppState>();
+    let (_, home) = observe::task_and_home(&state, &task.id)?;
+    let repos = changes::repos_of(task, &home);
+    let all = active(&state)?;
+    let files = observe::with_attributor(&state, &task.id, &repos, |x| x.files().to_vec())?;
+    for repo in repos.iter().filter(|r| all.iter().any(|a| a.repos.contains(r))) {
+        if !git::is_repo(repo).await {
+            continue;
+        }
+        let status = git::status(repo).await?;
+        let left = observed::orphaned(repo, &files, &status);
+        let list = {
+            let mut all = state.overlap.unattributed.lock().expect("unattributed lock");
+            let list = all.entry(repo.clone()).or_default();
+            observed::merge(list, left).then(|| list.clone())
+        };
+        if let Some(list) = list {
+            save_observed(&state, repo, &list)?;
+        }
     }
     Ok(())
 }
@@ -262,8 +308,8 @@ pub async fn rebuild_around(app: &AppHandle, task: &Task) -> Result<()> {
     Ok(())
 }
 
-/// At launch: every repo's claims file from the stored attributions and a fresh status (a stale file never survives
-/// a restart), every task's overlaps, and the pin of every task with an open decision.
+/// At launch: every repo's claims file from the stored attributions, the saved files of *another session* and a
+/// fresh status (a stale file never survives a restart), every task's overlaps, and the pin of every task with an open decision.
 pub fn start(app: &AppHandle) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
@@ -275,6 +321,12 @@ pub fn start(app: &AppHandle) {
         for r in all.iter().flat_map(|a| &a.repos) {
             if !repos.contains(r) {
                 repos.push(r.clone());
+            }
+        }
+        {
+            let mut seen = state.overlap.unattributed.lock().expect("unattributed lock");
+            for r in &repos {
+                seen.insert(r.clone(), observed::read_observed(&state.data_dir, r));
             }
         }
         for r in &repos {

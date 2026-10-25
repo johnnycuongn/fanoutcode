@@ -1,12 +1,13 @@
 //! The developer's answer to a pending decision (§5.4, §5.5, §5.6), as pure functions: what `overlap_decide` writes
 //! (the grant, the relation, the timeline lines, the prompts), which other open decisions the new grant answers too,
-//! which held decisions a rebuilt claims file releases, and the `OverlapDecided` log line.
+//! which held decisions a clean file releases, and the `OverlapDecided` log line.
 
 use std::path::Path;
 
 use chrono::{DateTime, Utc};
 
-use super::claims::ClaimsFile;
+use crate::git::StatusEntry;
+
 use super::grants::{Grant, GrantScope, GrantsFile};
 use super::prompts::{command_free, go_ahead, go_ahead_command, told, told_command};
 use super::{Decision, OverlapRow, PendingDecision, Relation};
@@ -141,16 +142,34 @@ pub fn covered_pending<'a>(rows: &'a [OverlapRow], grants: &GrantsFile, except: 
         .collect()
 }
 
-/// The held decisions of `rows` in `file`'s repo whose claim is gone from it: the other task committed (or let go
-/// of) the file, so the developer's Hold is over (§5.4, answer 4).
-pub fn released_holds<'a>(rows: &'a [OverlapRow], file: &ClaimsFile) -> Vec<&'a OverlapRow> {
+/// Why a held decision was released: the other task's attributed file is clean (it committed it), or a file no task
+/// attributed (another session's, or one whose owner let go of it) is clean.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Release {
+    Committed,
+    Clean,
+}
+
+/// The held decisions of `rows` in `repo` that are over (§5.4, answer 4): only those whose path `status` (the
+/// repo's fresh `git status`) shows clean. A claimant missing from the claims file never releases a hold by itself:
+/// its claims may have been lost on a relaunch, or it was archived with the changes still on disk. `attributed`
+/// says whether the row's other task attributes the path, which makes the release `Committed` rather than `Clean`.
+pub fn released_holds<'a>(
+    rows: &'a [OverlapRow],
+    repo: &Path,
+    status: &[StatusEntry],
+    attributed: impl Fn(&OverlapRow) -> bool,
+) -> Vec<(&'a OverlapRow, Release)> {
     rows.iter()
-        .filter(|r| r.pending.is_some() && r.held && r.repo_root == file.repo_root)
-        .filter(|r| {
-            !file
-                .claims
-                .iter()
-                .any(|c| c.path == r.path && c.task_id == r.other_task)
+        .filter(|r| r.pending.is_some() && r.held && r.repo_root == repo)
+        .filter(|r| !status.iter().any(|e| e.path == r.path))
+        .map(|r| {
+            let why = if r.other_task.is_some() && attributed(r) {
+                Release::Committed
+            } else {
+                Release::Clean
+            };
+            (r, why)
         })
         .collect()
 }
@@ -207,6 +226,14 @@ pub fn release_prompts(freed: &[(OverlapRow, String)], remaining: &[OverlapRow])
         out.push(command_free(&titles, command));
     }
     out
+}
+
+/// The timeline line for a released hold, worded for what happened.
+pub fn release_line(why: Release, path: &str, other_title: &str) -> String {
+    match why {
+        Release::Committed => format!("{path} is free: {other_title} committed it"),
+        Release::Clean => format!("{path} is free: it has no uncommitted changes now"),
+    }
 }
 
 /// The `OverlapDecided` event-log line (§5.4) for one task's log: `other` is the task on the other side from that
