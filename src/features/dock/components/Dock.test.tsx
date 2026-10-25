@@ -1,9 +1,10 @@
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, expect, test, vi } from "vitest";
 vi.mock("@/lib/bindings", async () => (await import("@/test/mockBindings")).mockBindings());
 import { commands } from "@/test/mockBindings";
 import type { OverlapRow } from "@/lib/bindings";
 import { overlapStore } from "@/features/overlap";
+import { requestDockTab, shellStore } from "@/features/shell";
 import { makeSettings, makeTask } from "@/test/taskPageFixtures";
 import { createDockStore } from "../store";
 import { mem } from "../testing/fakes";
@@ -109,4 +110,31 @@ test("a merge that needs you shows Overlap even with no overlap rows", async () 
   });
   render(<Dock task={merging} settings={makeSettings()} open teamSlot={null} store={d} />);
   expect(await screen.findByRole("tab", { name: /Overlap/ })).toBeTruthy();
+});
+
+test("Open in Changes switches an open dock from Overlap to Changes, once", async () => {
+  commands.overlapList.mockResolvedValue({ status: "ok", data: [overlapRow({ relation: "GrantedOnTop" })] });
+  commands.gitChanges.mockResolvedValue({ status: "ok", data: [] });
+  const d = createDockStore(mem());
+  d.selectTab("Build", "overlap");
+  render(<Dock task={makeTask({ stage: "Build" })} settings={makeSettings()} open teamSlot={null} store={d} />);
+  await screen.findByRole("tab", { name: /Overlap/ });
+  expect(screen.getByRole("tab", { name: /Overlap/ })).toHaveAttribute("data-state", "active");
+  fireEvent.click(await screen.findByRole("button", { name: "Open in Changes" }));
+  await waitFor(() => expect(screen.getByRole("tab", { name: /Changes/ })).toHaveAttribute("data-state", "active"));
+  expect(shellStore.get().pendingDockTab).toBeNull();
+  expect(d.store.get().tabByStage.Build).toBe("changes");
+});
+
+test("a closed dock, or another task's request, leaves the request for the task page", () => {
+  const d = createDockStore(mem());
+  const { rerender } = render(
+    <Dock task={makeTask({ stage: "Build" })} settings={makeSettings()} open={false} teamSlot={null} store={d} />,
+  );
+  act(() => requestDockTab("task-1", "changes"));
+  expect(shellStore.get().pendingDockTab).toEqual({ taskId: "task-1", tab: "changes" });
+  act(() => requestDockTab("task-9", "changes"));
+  rerender(<Dock task={makeTask({ stage: "Build" })} settings={makeSettings()} open teamSlot={null} store={d} />);
+  expect(shellStore.get().pendingDockTab).toEqual({ taskId: "task-9", tab: "changes" });
+  act(() => shellStore.set({ pendingDockTab: null }));
 });

@@ -5,6 +5,7 @@ import { EmptyState, Panel, Tabs, TabsContent } from "@/components/ui";
 import type { Project, Task } from "@/lib/bindings";
 import { ChangesTab, changesStore, repoName } from "@/features/changes";
 import { mergeNeedsYou, OverlapTab, overlapStore, refreshOverlaps } from "@/features/overlap";
+import { consumeDockTab, shellStore } from "@/features/shell";
 import type { TaskSettings } from "@/features/task-page";
 import { dockStore, type DockStore } from "../store";
 import { GROWN_HEIGHT, resolveTab, visibleTabs } from "../tabRules";
@@ -63,6 +64,19 @@ function useOverlapOpener(taskId: string, pending: number): [DockTab | null, () 
   return [seen.forced ? "overlap" : null, clear];
 }
 
+/**
+ * A tab asked for this task (Open in Changes) while the dock is already open: select it and take the request, so the
+ * task page's mount-time consume finds nothing. A closed dock leaves the request for the task page to open it.
+ */
+function useRequestedTab(taskId: string, open: boolean, select: (tab: DockTab) => void): void {
+  const asked = shellStore.useSelector((s) => (s.pendingDockTab?.taskId === taskId ? s.pendingDockTab.tab : null));
+  useEffect(() => {
+    if (!open || !asked) return;
+    const tab = consumeDockTab(taskId);
+    if (tab) select(tab);
+  });
+}
+
 export function Dock(p: DockProps): ReactElement | null {
   const { task, settings, open, store = dockStore } = p;
   const remembered = store.store.useSelector((s) => s.tabByStage[task.stage]);
@@ -73,6 +87,10 @@ export function Dock(p: DockProps): ReactElement | null {
   );
   const overlaps = overlapStore.useSelector((s) => s.counts[task.id] ?? NO_OVERLAPS);
   const [forced, clearForced] = useOverlapOpener(task.id, overlaps.pending);
+  useRequestedTab(task.id, open, (next) => {
+    clearForced();
+    store.selectTab(task.stage, next);
+  });
   useEffect(() => {
     if (!open) return;
     void changesStore.refresh(task.id);

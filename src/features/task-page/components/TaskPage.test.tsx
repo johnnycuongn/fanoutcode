@@ -51,6 +51,7 @@ vi.mock("../taskSource", async () => ({ tasksSource: (await import("../testing/f
 
 import { dockStore } from "@/features/dock";
 import { overlapStore } from "@/features/overlap";
+import { requestDockTab, shellStore } from "@/features/shell";
 import { setupUser } from "@/test/ui";
 import { specStore } from "@/features/spec-editor";
 import { taskPageStore } from "../store";
@@ -183,4 +184,17 @@ test("Decide opens the dock on the Overlap tab", async () => {
   await act(() => ref.current!.primaryAction());
   expect(await screen.findByRole("tab", { name: /Overlap/, selected: true })).toBeTruthy();
   fakeCommands.overlapList.mockResolvedValue({ status: "ok", data: [] });
+});
+
+test("a dock tab asked for before the page opens is shown once, by the page or its dock", async () => {
+  requestDockTab("task-1", "changes");
+  await open(makeTask({ stage: "Plan" }));
+  expect(await screen.findByRole("tab", { name: /Changes/, selected: true })).toBeTruthy();
+  expect(shellStore.get().pendingDockTab).toBeNull();
+});
+test("a closed dock opens on the asked-for tab when the page mounts", async () => {
+  requestDockTab("task-1", "changes");
+  await open(makeTask({ stage: "Spec", primary_session: null }));
+  expect(await screen.findByRole("tab", { name: /Changes/, selected: true })).toBeTruthy();
+  expect(shellStore.get().pendingDockTab).toBeNull();
 });
