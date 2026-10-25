@@ -57,20 +57,14 @@ pub fn deny_rules(protected: &[PathBuf]) -> Result<Vec<String>> {
     Ok(out)
 }
 
-/// `permissions.deny` rules for single files (`Edit(//<path>)`), in both their written and canonical forms (the
-/// canonical form of the parent folder, since the file may not exist yet).
-pub fn deny_file_rules(files: &[PathBuf]) -> Result<Vec<String>> {
+/// `permissions.deny` rules for every file in `dir` whose name starts with `prefix` (`Edit(//<dir>/<prefix>*)`), in
+/// both the folder's written and canonical forms.
+pub fn deny_prefix_rules(dir: &std::path::Path, prefix: &str) -> Result<Vec<String>> {
     let mut out = Vec::new();
-    for file in files {
-        let canonical = match (file.parent(), file.file_name()) {
-            (Some(dir), Some(name)) => canonical_root(dir).join(name),
-            _ => file.clone(),
-        };
-        for form in [canonical_root_text(file)?, canonical_root_text(&canonical)?] {
-            let rule = format!("Edit(//{})", form.trim_start_matches('/'));
-            if !out.contains(&rule) {
-                out.push(rule);
-            }
+    for form in [canonical_root_text(dir)?, canonical_root_text(&canonical_root(dir))?] {
+        let rule = format!("Edit(//{}/{prefix}*)", form.trim_start_matches('/'));
+        if !out.contains(&rule) {
+            out.push(rule);
         }
     }
     Ok(out)

@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 
 use super::claims::Claim;
 use super::pathspec::{has_include, named};
-use crate::workspace::guard::rules::{clean, strip_prefixes};
+use crate::workspace::guard::rules::{clean, strip_prefixes, via_xargs};
 use crate::workspace::guard::shell_words::segments;
 
 /// Why a command was caught.
@@ -134,14 +134,31 @@ fn staged_paths(claimed: &[&Claim]) -> Vec<String> {
 /// The subcommands whose pathspecs `--pathspec-from-file` can carry.
 const TAKES_PATHSPECS: &[&str] = &["commit", "add", "checkout", "restore", "rm", "reset", "stash"];
 
-/// One `git <sub> <args>` run in `dir`, inside `repo`.
-fn git_rule(sub: &str, args: &[String], dir: &Path, repo: &Path, claimed: &[&Claim]) -> Option<(GitRule, Vec<String>)> {
-    // paths read from a file (or stdin) cannot be seen: every claim counts
+/// A word holding a variable or a substitution: what it names cannot be read.
+fn unread(word: &&str) -> bool {
+    word.contains('$') || word.contains('`')
+}
+
+/// Every claim, as the hit of a command the guard cannot read.
+fn unparsed(claimed: &[&Claim]) -> Option<(GitRule, Vec<String>)> {
+    Some((GitRule::Unparsed, sorted(all_paths(claimed))))
+}
+
+/// One `git <sub> <args>` run in `dir`, inside `repo`. `blind`: some arguments come from a substitution or `xargs`.
+fn git_rule(
+    sub: &str,
+    args: &[String],
+    dir: &Path,
+    repo: &Path,
+    claimed: &[&Claim],
+    blind: bool,
+) -> Option<(GitRule, Vec<String>)> {
+    // paths read from a file (or stdin), a substitution or `xargs` cannot be seen: every claim counts
     let from_file = args
         .iter()
         .any(|a| a.starts_with("--pathspec-from-file") || a == "--pathspec-file-nul");
-    if from_file && TAKES_PATHSPECS.contains(&sub) {
-        return Some((GitRule::Unparsed, sorted(all_paths(claimed))));
+    if (from_file || blind) && TAKES_PATHSPECS.contains(&sub) {
+        return unparsed(claimed);
     }
     let (rule, paths) = match sub {
         "commit" => {
@@ -163,6 +180,9 @@ fn git_rule(sub: &str, args: &[String], dir: &Path, repo: &Path, claimed: &[&Cla
                 ],
             );
             let specs: Vec<&str> = a.positionals.iter().chain(&a.after_dashes).copied().collect();
+            if specs.iter().any(unread) {
+                return unparsed(claimed);
+            }
             // `-i` adds the named paths to what is staged; `-p` / `--interactive` pick hunks on top of the index
             let with_index = has(&a, 'i', "--include") || has(&a, 'p', "--patch") || a.flags.contains(&"--interactive");
             if has(&a, 'a', "--all") {
@@ -180,6 +200,9 @@ fn git_rule(sub: &str, args: &[String], dir: &Path, repo: &Path, claimed: &[&Cla
         "add" => {
             let a = split_args(args, "", &[]);
             let specs: Vec<&str> = a.positionals.iter().chain(&a.after_dashes).copied().collect();
+            if specs.iter().any(unread) {
+                return unparsed(claimed);
+            }
             let names_root = specs
                 .iter()
                 .any(|s| rel_in(repo, &resolve(s, dir)).as_deref() == Some(""));
@@ -199,6 +222,9 @@ fn git_rule(sub: &str, args: &[String], dir: &Path, repo: &Path, claimed: &[&Cla
             } else {
                 &a.after_dashes
             };
+            if specs.iter().any(unread) {
+                return unparsed(claimed);
+            }
             if has(&a, 'f', "--force") {
                 (GitRule::CheckoutForce, all_paths(claimed))
             } else {
@@ -215,6 +241,9 @@ fn git_rule(sub: &str, args: &[String], dir: &Path, repo: &Path, claimed: &[&Cla
         "rm" => {
             let a = split_args(args, "", &[]);
             let specs: Vec<&str> = a.positionals.iter().chain(&a.after_dashes).copied().collect();
+            if specs.iter().any(unread) {
+                return unparsed(claimed);
+            }
             (GitRule::Remove, named(&specs, dir, repo, claimed))
         }
         "restore" => {
@@ -224,6 +253,9 @@ fn git_rule(sub: &str, args: &[String], dir: &Path, repo: &Path, claimed: &[&Cla
                 return None;
             }
             let specs: Vec<&str> = a.positionals.iter().chain(&a.after_dashes).copied().collect();
+            if specs.iter().any(unread) {
+                return unparsed(claimed);
+            }
             (GitRule::RestorePath, named(&specs, dir, repo, claimed))
         }
         // the stash stack is shared by every task in the repo: `pop` and `apply` may take another task's stash,
@@ -310,12 +342,14 @@ fn evaluate_in(
             continue;
         }
         let mut dir = cwd.clone();
+        let mut dir_unread = false;
         let mut i = 0;
         while let Some(w) = rest.get(i).filter(|w| w.starts_with('-')) {
             i += 1;
             match w.as_str() {
                 "-C" => {
                     if let Some(d) = rest.get(i) {
+                        dir_unread |= unread(&d.as_str());
                         dir = resolve(d, &dir);
                     }
                     i += 1;
@@ -325,10 +359,15 @@ fn evaluate_in(
             }
         }
         let Some(sub) = rest.get(i) else { continue };
+        // `-C $DIR`: it may be this repo
+        if dir_unread && (TAKES_PATHSPECS.contains(&sub.as_str()) || matches!(sub.as_str(), "clean" | "switch")) {
+            return unparsed(claimed);
+        }
         if rel_in(repo, &dir).is_none() {
             continue;
         }
-        if let Some(hit) = git_rule(sub, &rest[i + 1..], &dir, repo, claimed) {
+        let blind = seg.substituted || via_xargs(&seg.words);
+        if let Some(hit) = git_rule(sub, &rest[i + 1..], &dir, repo, claimed, blind) {
             return Some(hit);
         }
     }

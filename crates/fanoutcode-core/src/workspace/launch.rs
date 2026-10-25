@@ -12,7 +12,7 @@ use super::context_docs::{context_dir, list_rows};
 use super::fragments::{reference_lines, LinkContext, LinkedProject};
 use super::guard::prepare_guard;
 use super::link::{bind_links, canonical_root, link_status, links_for, load_links, same_root, save_links, LinkStatus};
-use super::policy::{deny_file_rules, deny_rules, protected_roots};
+use super::policy::{deny_prefix_rules, deny_rules, protected_roots};
 use super::rows;
 use super::store::member_projects;
 use crate::changes::repos::repos_of;
@@ -147,13 +147,10 @@ pub fn overlap_dirs(app_data: &Path) -> Vec<PathBuf> {
         .collect()
 }
 
-/// The app's database and its SQLite sidecars: no agent may edit them or write them from the shell either.
-pub fn app_db_files(app_data: &Path) -> Vec<PathBuf> {
-    ["fanoutcode.db", "fanoutcode.db-wal", "fanoutcode.db-shm"]
-        .iter()
-        .map(|f| app_data.join(f))
-        .collect()
-}
+/// The file-name prefix of the app's database and every SQLite sidecar or copy of it (`-wal`, `-shm`, `-journal`,
+/// `.bak`, …) in the app data folder: no agent may edit them or write them from the shell. The rest of app data is
+/// left alone, since tasks' memory folders may live there (`MemoryLocation::AppStorage`).
+pub const DB_FILES_PREFIX: &str = crate::workspace::guard::DB_PREFIX;
 
 /// The claim-check hook over the claims files of the task's repos (its worktree or home root, then its links).
 fn claim_check_hook(
@@ -204,25 +201,19 @@ pub fn launch_extras(
         std::fs::create_dir_all(d)?;
     }
     let mut deny = deny_rules(&protected)?;
-    let db_files = app_db_files(app_data);
-    for rule in deny_rules(&app_files)?.into_iter().chain(deny_file_rules(&db_files)?) {
+    for rule in deny_rules(&app_files)?
+        .into_iter()
+        .chain(deny_prefix_rules(app_data, DB_FILES_PREFIX)?)
+    {
         if !deny.contains(&rule) {
             deny.push(rule);
         }
     }
     // the guard compares paths as written, so it gets both forms of each folder, as the deny rules do
     let mut guarded: Vec<PathBuf> = Vec::new();
-    let db_forms = db_files.iter().map(|f| match (f.parent(), f.file_name()) {
-        (Some(dir), Some(name)) => (f.clone(), canonical_root(dir).join(name)),
-        _ => (f.clone(), f.clone()),
-    });
-    let pairs: Vec<(PathBuf, PathBuf)> = app_files
-        .iter()
-        .map(|d| (d.clone(), canonical_root(d)))
-        .chain(db_forms)
-        .collect();
-    for (written, canonical) in pairs {
-        for form in [written, canonical] {
+    // the database files are matched by name in the app data folder the roots file names (`guard::DB_PREFIX`)
+    for d in &app_files {
+        for form in [d.clone(), canonical_root(d)] {
             if !guarded.contains(&form) {
                 guarded.push(form);
             }

@@ -4,12 +4,14 @@
 
 use std::path::{Path, PathBuf};
 
+mod opaque;
 mod protocol;
 pub(crate) mod rules;
 pub(crate) mod shell_words;
 mod writers;
 
 pub use protocol::{guard_hook_spec, prepare_guard, run_guard, write_roots_file};
+pub use rules::DB_PREFIX;
 
 /// What the hook is asked about.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -28,6 +30,10 @@ pub enum GuardRule {
     Git(&'static str),
     PackageInstall(&'static str),
     FindDelete,
+    /// A writer, redirection or unpacker given a path the guard cannot read (`$VAR`, `$(…)`, backticks, `xargs`).
+    Unresolved(&'static str),
+    /// A command naming the app data folder that does more than read it.
+    NamesAppData,
 }
 
 impl std::fmt::Display for GuardRule {
@@ -40,6 +46,8 @@ impl std::fmt::Display for GuardRule {
             GuardRule::Git(sub) => write!(f, "git {sub}"),
             GuardRule::PackageInstall(tool) => write!(f, "{tool} package change"),
             GuardRule::FindDelete => f.write_str("find -delete/-exec"),
+            GuardRule::Unresolved(p) => write!(f, "{p} with a path it cannot read: $VAR, $(…), backticks or xargs"),
+            GuardRule::NamesAppData => f.write_str("a command naming the app data folder that does more than read it"),
         }
     }
 }
@@ -63,6 +71,26 @@ pub fn deny_reason(root: &Path, rule: &GuardRule) -> String {
 }
 
 pub fn evaluate(input: &GuardInput, protected: &[PathBuf], home_dir: &Path) -> GuardDecision {
+    evaluate_with_app_data(input, protected, home_dir, None)
+}
+
+/// `evaluate`, also denying any command that names `app_data` (its written or canonical form) and does more than
+/// read it.
+pub fn evaluate_with_app_data(
+    input: &GuardInput,
+    protected: &[PathBuf],
+    home_dir: &Path,
+    app_data: Option<&Path>,
+) -> GuardDecision {
+    let mut forms: Vec<PathBuf> = Vec::new();
+    if let Some(a) = app_data.map(rules::clean).filter(|a| a.parent().is_some()) {
+        if let Ok(c) = std::fs::canonicalize(&a) {
+            if c != a {
+                forms.push(c);
+            }
+        }
+        forms.insert(0, a);
+    }
     let ctx = rules::Ctx {
         roots: protected
             .iter()
@@ -70,9 +98,13 @@ pub fn evaluate(input: &GuardInput, protected: &[PathBuf], home_dir: &Path) -> G
             .filter(|r| r.parent().is_some())
             .collect(),
         home: home_dir,
+        app_data: forms,
     };
     rules::evaluate_in(&ctx, &input.command, &mut rules::clean(&input.cwd), 0)
 }
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod fail_closed_tests;

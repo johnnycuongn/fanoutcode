@@ -434,3 +434,42 @@ fn exclude_only_add_all_from_a_subfolder_names_claims_outside_it() {
         Some((GitRule::AddPath, vec!["src/x/y.ts".into()]))
     );
 }
+
+#[test]
+fn a_pathspec_the_guard_cannot_read_is_unparsed() {
+    for c in [
+        "git add $FILES",
+        "git add \"${DIR}/x\"",
+        "git checkout -- $(git ls-files -m)",
+        "git restore `cat list`",
+        "git rm -- $OLD",
+        "git commit -m x -- $PATHS",
+        "git -C $REPO add -A",
+        "git ls-files -m | xargs git add",
+        "find . -name '*.ts' | xargs git checkout --",
+        "xargs git rm < gone.txt",
+        "printf '%s\\n' a b | xargs -I{} git restore {}",
+    ] {
+        assert_eq!(eval(c, "/r", &claims()), Some((GitRule::Unparsed, all())), "{c}");
+    }
+    // a variable only in a message, or a quoted substitution in it, reads fine
+    assert_eq!(
+        eval("git commit -m \"$(cat msg)\"", "/r", &claims()).map(|(r, _)| r),
+        None,
+        "nothing staged, so nothing to stop"
+    );
+    assert_eq!(eval("git commit -m \"wip $X\" -- lib", "/r", &claims()), None);
+    assert_eq!(eval("git log $REV", "/r", &claims()), None);
+}
+
+#[test]
+fn shell_keywords_before_git_are_skipped() {
+    for c in [
+        "if true; then git add -A; fi",
+        "while false; do :; done; { git stash; }",
+        "! git reset --hard",
+        "exec git clean -fd",
+    ] {
+        assert!(eval(c, "/r", &claims()).is_some(), "{c}");
+    }
+}

@@ -199,6 +199,10 @@ hand-back opens with the command shown in place of the pending write. Rules, bes
 - `git checkout -- <path>`, `git checkout <path>`, `git restore <path>` for a claimed path; `git checkout .`,
   `git restore .` when any claim exists.
 - `git stash` (any form but `list`/`show`), `git reset --hard`, `git clean` when any claim exists.
+- Where the guard cannot read the paths, it stops the command as if it touched every claim: a pathspec (or a
+  `git -C` folder) holding `$VAR`, `${…}`, `$(…)` or a backtick, an unquoted substitution in the command, or `xargs`
+  before `git add`, `rm`, `checkout` or `restore`. Shell keywords (`then`, `do`, `{`, `!`, `exec`, …) before `git`
+  are skipped.
 
 The hand-back's answers for a command are **Proceed** and **Hold**. Proceed grants a single-use
 `Command { repo, command, paths }` on each task named (`paths`: that task's files the command touched when the

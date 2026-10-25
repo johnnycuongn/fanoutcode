@@ -2,11 +2,16 @@
 
 use std::path::{Component, Path, PathBuf};
 
+use super::opaque;
 use super::shell_words::{segments, Segment};
 use super::writers::{self, WRITERS};
 use super::{deny_reason, GuardDecision, GuardRule};
 
 const WRAPPERS: &[&str] = &["sudo", "env", "command", "nohup", "time", "nice", "xargs"];
+/// Shell keywords and grouping words that may stand before a command's program name.
+const KEYWORDS: &[&str] = &[
+    "{", "}", "if", "then", "elif", "else", "while", "until", "do", "!", "exec",
+];
 const SHELLS: &[&str] = &["sh", "bash", "zsh", "dash"];
 const GIT_WRITES: &[&str] = &[
     "add",
@@ -77,6 +82,8 @@ const PACKAGE_WRITES: &[(&str, &[&str])] = &[
     ("bundle", &["add", "install", "update"]),
 ];
 const MAX_DEPTH: u8 = 8;
+/// The file-name prefix of the app's database and every sidecar of it.
+pub const DB_PREFIX: &str = "fanoutcode.db";
 
 /// Lexical clean-up: `.` dropped, `..` pops, trailing slash gone.
 pub(crate) fn clean(p: &Path) -> PathBuf {
@@ -124,19 +131,29 @@ fn fold(p: &Path) -> PathBuf {
 pub(super) struct Ctx<'a> {
     pub(super) roots: Vec<PathBuf>,
     pub(super) home: &'a Path,
+    /// The app data folder, written and canonical (empty when the guard does not know it): any command naming it
+    /// is denied unless it only reads (`opaque::app_data_rule`).
+    pub(super) app_data: Vec<PathBuf>,
 }
 
 impl Ctx<'_> {
-    /// `word` as a path: `~` expanded, relative ones joined to `cwd`. Not cleaned: `..` after a symlink means what
-    /// the shell makes of it, which `forms` works out when comparing.
+    /// `word` with a leading `~`, `$HOME` or `${HOME}` replaced by the guard's home folder.
+    pub(super) fn expand_home(&self, word: &str) -> String {
+        let home = self.home.display().to_string();
+        for var in ["${HOME}", "$HOME", "~"] {
+            if let Some(rest) = word.strip_prefix(var) {
+                if rest.is_empty() || rest.starts_with('/') {
+                    return format!("{home}{rest}");
+                }
+            }
+        }
+        word.to_owned()
+    }
+
+    /// `word` as a path: `~`, `$HOME` and `${HOME}` expanded, relative ones joined to `cwd`. Not cleaned: `..`
+    /// after a symlink means what the shell makes of it, which `forms` works out when comparing.
     pub(super) fn resolve(&self, word: &str, cwd: &Path) -> PathBuf {
-        let expanded = if word == "~" {
-            self.home.to_owned()
-        } else if let Some(rest) = word.strip_prefix("~/") {
-            self.home.join(rest)
-        } else {
-            PathBuf::from(word)
-        };
+        let expanded = PathBuf::from(self.expand_home(word));
         if expanded.is_absolute() {
             expanded
         } else {
@@ -144,25 +161,43 @@ impl Ctx<'_> {
         }
     }
 
-    /// The protected root `path` lies in, if any (either of its `forms`).
-    pub(super) fn root_of(&self, path: &Path) -> Option<&PathBuf> {
+    /// The app data folder when `path` (either of its `forms`) is one of its `fanoutcode.db*` files: the database
+    /// and every SQLite sidecar or copy of it (`-wal`, `-shm`, `-journal`, `.bak`).
+    fn db_file(&self, path: &Path) -> Option<&PathBuf> {
         forms(path).iter().find_map(|p| {
-            let p = fold(p);
-            self.roots.iter().find(|r| p.starts_with(fold(r)))
+            let (dir, name) = (p.parent()?, p.file_name()?.to_string_lossy());
+            let starts = fold(Path::new(name.as_ref())).to_string_lossy().starts_with(DB_PREFIX);
+            starts
+                .then(|| self.app_data.iter().find(|a| fold(a) == fold(dir)))
+                .flatten()
         })
+    }
+
+    /// The protected root `path` lies in, if any (either of its `forms`), or the app data folder for a database file.
+    pub(super) fn root_of(&self, path: &Path) -> Option<&PathBuf> {
+        forms(path)
+            .iter()
+            .find_map(|p| {
+                let p = fold(p);
+                self.roots.iter().find(|r| p.starts_with(fold(r)))
+            })
+            .or_else(|| self.db_file(path))
     }
 
     /// The protected root a write, move or delete of `path` reaches: one `path` lies in, or one inside `path` (moving
     /// or removing a folder takes everything under it). Compared through both `forms`. A path beside a root, or a
     /// read, never counts.
     pub(super) fn target_root(&self, path: &Path) -> Option<&PathBuf> {
-        forms(path).iter().find_map(|p| {
-            let p = fold(p);
-            self.roots.iter().find(|r| {
-                let r = fold(r);
-                p.starts_with(&r) || r.starts_with(&p)
+        forms(path)
+            .iter()
+            .find_map(|p| {
+                let p = fold(p);
+                self.roots.iter().find(|r| {
+                    let r = fold(r);
+                    p.starts_with(&r) || r.starts_with(&p)
+                })
             })
-        })
+            .or_else(|| self.db_file(path))
     }
 
     /// The root a word names (as a path, or as the value of `--opt=value`), resolved against `cwd`.
@@ -209,12 +244,13 @@ fn is_assignment(w: &str) -> bool {
     }
 }
 
-/// Drops leading `VAR=val` words and wrappers (with their flags) before the program name.
+/// Drops leading `VAR=val` words, shell keywords (`then`, `do`, `{`, `!`, `exec`, …) and wrappers (with their flags)
+/// before the program name.
 pub(crate) fn strip_prefixes(words: &[String]) -> &[String] {
     let mut w = words;
     loop {
         match w.first().map(String::as_str) {
-            Some(first) if is_assignment(first) => w = &w[1..],
+            Some(first) if is_assignment(first) || KEYWORDS.contains(&first) => w = &w[1..],
             Some(first) if WRAPPERS.contains(&first) => {
                 w = &w[1..];
                 while let Some(flag) = w.first().filter(|f| f.starts_with('-')) {
@@ -230,7 +266,13 @@ pub(crate) fn strip_prefixes(words: &[String]) -> &[String] {
     }
 }
 
-fn program_name(word: &str) -> &str {
+/// Whether `xargs` stands before the program: its arguments then come from input the guard cannot read.
+pub(crate) fn via_xargs(words: &[String]) -> bool {
+    let rest = strip_prefixes(words);
+    words[..words.len() - rest.len()].iter().any(|w| w == "xargs")
+}
+
+pub(super) fn program_name(word: &str) -> &str {
     word.rsplit('/').next().unwrap_or(word)
 }
 
@@ -275,12 +317,20 @@ fn segment(ctx: &Ctx, seg: &Segment, cwd: &mut PathBuf, depth: u8) -> GuardDecis
         if let Some(root) = ctx.target_root(&ctx.resolve(t, cwd)) {
             return deny(root.clone(), GuardRule::Redirect);
         }
+        if opaque::unresolved(ctx, t) {
+            return opaque::deny_unresolved(ctx, "output redirection");
+        }
+    }
+    if let Some(d) = opaque::app_data_rule(ctx, seg, cwd) {
+        return d;
     }
     let words = strip_prefixes(&seg.words);
     let Some((first, args)) = words.split_first() else {
         return GuardDecision::Allow;
     };
     let program = program_name(first);
+    // arguments from a substitution or from `xargs` input: the guard cannot see what a writer gets
+    let blind = seg.substituted || via_xargs(&seg.words);
     if SHELLS.contains(&program) {
         if let Some(i) = args
             .iter()
@@ -300,21 +350,30 @@ fn segment(ctx: &Ctx, seg: &Segment, cwd: &mut PathBuf, depth: u8) -> GuardDecis
             GuardDecision::Allow
         }
         "sed" | "perl" if in_place(args) => {
-            let rule = if program == "sed" {
-                GuardRule::SedInPlace
+            let (rule, name) = if program == "sed" {
+                (GuardRule::SedInPlace, "sed -i")
             } else {
-                GuardRule::PerlInPlace
+                (GuardRule::PerlInPlace, "perl -i")
             };
+            if blind || opaque::files_unresolved(ctx, args) {
+                return opaque::deny_unresolved(ctx, name);
+            }
             ctx.references(args, cwd)
                 .map_or(GuardDecision::Allow, |r| deny(r, rule))
         }
         "git" => git(ctx, args, cwd),
+        "tar" | "bsdtar" | "gtar" | "unzip" if blind || opaque::any_unresolved(ctx, args) => {
+            opaque::deny_unresolved(ctx, if program == "unzip" { "unzip" } else { "tar" })
+        }
         "tar" | "bsdtar" | "gtar" => writers::tar(ctx, args, cwd),
         "unzip" => writers::unzip(ctx, args, cwd),
+        "find" if (blind || opaque::any_unresolved(ctx, args)) && find_writes(args) => {
+            opaque::deny_unresolved(ctx, "find -delete/-exec")
+        }
         "find" => find(ctx, args, cwd),
         _ => {
             if let Some(&name) = WRITERS.iter().find(|w| **w == program) {
-                return writers::writer(ctx, name, args, cwd);
+                return writers::writer(ctx, name, args, cwd, blind);
             }
             if let Some((tool, subs)) = PACKAGE_WRITES.iter().find(|(t, _)| *t == program) {
                 let sub = positionals(args)
@@ -333,17 +392,20 @@ fn segment(ctx: &Ctx, seg: &Segment, cwd: &mut PathBuf, depth: u8) -> GuardDecis
 
 fn git(ctx: &Ctx, args: &[String], cwd: &Path) -> GuardDecision {
     let mut dir = cwd.to_owned();
+    let mut dir_unresolved = false;
     let mut i = 0;
     while i < args.len() {
         let a = args[i].as_str();
         if a == "-C" {
             if let Some(p) = args.get(i + 1) {
+                dir_unresolved |= opaque::unresolved(ctx, p);
                 dir = ctx.resolve(p, &dir);
             }
             i += 2;
         } else if a == "-c" {
             i += 2;
         } else if let Some(v) = a.strip_prefix("--git-dir=").or_else(|| a.strip_prefix("--work-tree=")) {
+            dir_unresolved |= opaque::unresolved(ctx, v);
             dir = ctx.resolve(v, &dir);
             i += 1;
         } else if a.starts_with('-') {
@@ -375,16 +437,19 @@ fn git(ctx: &Ctx, args: &[String], cwd: &Path) -> GuardDecision {
             _ => None,
         });
     match (named, ctx.root_of(&dir)) {
+        (Some(name), _) if dir_unresolved => opaque::deny_unresolved(ctx, name),
         (Some(name), Some(root)) => deny(root.clone(), GuardRule::Git(name)),
         _ => GuardDecision::Allow,
     }
 }
 
-fn find(ctx: &Ctx, args: &[String], cwd: &Path) -> GuardDecision {
-    if !args
-        .iter()
+fn find_writes(args: &[String]) -> bool {
+    args.iter()
         .any(|a| matches!(a.as_str(), "-delete" | "-exec" | "-execdir" | "-ok" | "-okdir"))
-    {
+}
+
+fn find(ctx: &Ctx, args: &[String], cwd: &Path) -> GuardDecision {
+    if !find_writes(args) {
         return GuardDecision::Allow;
     }
     let paths: Vec<&String> = args

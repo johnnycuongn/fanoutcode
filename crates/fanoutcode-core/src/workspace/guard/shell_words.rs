@@ -9,6 +9,9 @@ pub(crate) struct Segment {
     pub words: Vec<String>,
     /// Targets of writing redirections (`>`, `>>`, `>|`, `&>`, `&>>`, `N>`), in order.
     pub write_targets: Vec<String>,
+    /// An unquoted `$(` or backtick opened inside this command: some of its words come from a substitution the
+    /// guard cannot read.
+    pub substituted: bool,
 }
 
 #[derive(PartialEq, Eq)]
@@ -27,6 +30,8 @@ struct Lexer {
     /// The word so far is only unquoted digits (a file descriptor before `>`).
     digits_only: bool,
     pending: Pending,
+    /// Inside an unquoted backtick substitution (the next backtick closes it).
+    in_backtick: bool,
 }
 
 impl Lexer {
@@ -38,6 +43,7 @@ impl Lexer {
             in_word: false,
             digits_only: true,
             pending: Pending::None,
+            in_backtick: false,
         }
     }
 
@@ -61,6 +67,12 @@ impl Lexer {
         }
         self.in_word = false;
         self.digits_only = true;
+    }
+
+    /// An unquoted substitution opens here: the command it sits in is marked before its segment ends.
+    fn open_substitution(&mut self) {
+        self.current.substituted = true;
+        self.end_segment();
     }
 
     fn end_segment(&mut self) {
@@ -113,9 +125,17 @@ pub(crate) fn segments(command: &str) -> Vec<Segment> {
                 }
             }
             ' ' | '\t' => lx.end_word(),
-            ';' | '\n' | '(' | ')' | '`' => lx.end_segment(),
-            '$' if next == Some('(') => {
+            '`' if !lx.in_backtick => {
+                lx.in_backtick = true;
+                lx.open_substitution();
+            }
+            '`' => {
+                lx.in_backtick = false;
                 lx.end_segment();
+            }
+            ';' | '\n' | '(' | ')' => lx.end_segment(),
+            '$' if next == Some('(') => {
+                lx.open_substitution();
                 i += 1;
             }
             '|' => {
@@ -194,6 +214,14 @@ mod tests {
         );
         assert_eq!(words("(cd /a; touch x)"), [vec!["cd", "/a"], vec!["touch", "x"]]);
         assert_eq!(words("echo $(rm x)"), [vec!["echo"], vec!["rm", "x"]]);
+    }
+
+    #[test]
+    fn marks_the_command_an_unquoted_substitution_opens_in() {
+        let marked = |cmd: &str| segments(cmd).iter().map(|s| s.substituted).collect::<Vec<_>>();
+        assert_eq!(marked("rm $(cat list)"), [true, false]);
+        assert_eq!(marked("rm `cat list` && ls"), [true, false, false]);
+        assert_eq!(marked("echo \"$(date)\" > x"), [false], "quoted: kept in the word");
     }
 
     #[test]

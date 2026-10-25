@@ -126,30 +126,39 @@ fn guard_denies_writes_to_its_own_roots_file() {
 }
 
 #[test]
-fn the_database_files_are_denied_to_edits_and_guarded() {
+fn every_db_sidecar_is_protected() {
     let (fx, _s, _ws, t) = setup();
     let conn = fx.db.lock().unwrap();
     let task = db::tasks::require(&conn, &t.id).unwrap();
     let data = fx.app_data.path();
     let canonical = std::fs::canonicalize(data).unwrap();
     let extras = launch_extras(&conn, &task, data, Path::new("/x"), Path::new("/h"), true, true).unwrap();
-    for name in ["fanoutcode.db", "fanoutcode.db-wal", "fanoutcode.db-shm"] {
-        for base in [data, canonical.as_path()] {
-            let rule = format!("Edit(/{})", base.join(name).display());
-            assert!(extras.deny.contains(&rule), "{rule} in {:?}", extras.deny);
-        }
+    // one prefix rule per path form covers the database and every sidecar, present or future
+    for base in [data, canonical.as_path()] {
+        let rule = format!("Edit(/{}/fanoutcode.db*)", base.display());
+        assert!(extras.deny.contains(&rule), "{rule} in {:?}", extras.deny);
+    }
+    for name in [
+        "fanoutcode.db",
+        "fanoutcode.db-journal",
+        "fanoutcode.db-wal",
+        "fanoutcode.db-shm",
+        "fanoutcode.db.bak",
+    ] {
         for cmd in [
             format!("rm -f '{}'", data.join(name).display()),
             format!("echo x > '{}'", canonical.join(name).display()),
             format!("cp /tmp/evil.db '{}'", data.join(name).display()),
+            format!("cd '{}' && rm -f {name}", data.display()),
         ] {
             assert!(guard_denies(data, &task.id, &cmd), "{cmd}");
         }
     }
+    let db = data.join("fanoutcode.db");
     assert!(!guard_denies(
         data,
         &task.id,
-        &format!("cp '{}' /tmp/backup.db", data.join("fanoutcode.db").display())
+        &format!("cat '{}' > /tmp/backup.db", db.display())
     ));
 }
 

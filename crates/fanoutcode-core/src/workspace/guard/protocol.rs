@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use super::rules::clean;
-use super::{evaluate, GuardDecision, GuardInput, GuardRule};
+use super::{evaluate_with_app_data, GuardDecision, GuardInput, GuardRule};
 use crate::domain::TaskId;
 use crate::hooks::{sh_single_quote, HookSpec};
 use crate::memory::store::write_atomic;
@@ -21,13 +21,18 @@ struct RootsFile {
     #[serde(default)]
     app_files: Vec<PathBuf>,
     home_dir: PathBuf,
+    /// The app data folder: any command naming it (outside tasks' memory folders) that does more than read is
+    /// denied, and so is a write to any `fanoutcode.db*` file in it.
+    #[serde(default)]
+    app_data: Option<PathBuf>,
 }
 
 /// Why a write to one of the app's own folders is refused.
 pub fn app_files_reason(dir: &Path, rule: &GuardRule) -> String {
     format!(
-        "Fanout Code: {} holds Fanout Code's own records (claims, grants, notes and events between tasks); this shell \
-         command looks like it writes there ({rule}). Never change these files; ask the developer instead.",
+        "Fanout Code: {} holds Fanout Code's own records (its database, claims, grants, notes and events between \
+         tasks); this shell command looks like it writes there ({rule}). Never change these files; ask the developer \
+         instead.",
         dir.display()
     )
 }
@@ -56,6 +61,7 @@ fn fallback_roots(roots_file: &Path) -> Option<RootsFile> {
         protected: Vec::new(),
         app_files,
         home_dir: home,
+        app_data: Some(app_data.to_owned()),
     })
 }
 
@@ -102,16 +108,27 @@ pub fn run_guard(stdin: &mut dyn Read, stdout: &mut dyn Write, roots_file: &Path
     };
     let cwd = input.cwd.unwrap_or_else(|| PathBuf::from("/"));
     let watched: Vec<PathBuf> = roots.protected.iter().chain(&roots.app_files).cloned().collect();
-    let decision = evaluate(
+    let decision = evaluate_with_app_data(
         &GuardInput {
             command: command.to_owned(),
             cwd,
         },
         &watched,
         &roots.home_dir,
+        roots.app_data.as_deref(),
     );
     if let GuardDecision::Deny { root, rule, reason } = decision {
-        let reason = if roots.app_files.iter().any(|a| clean(a) == root) {
+        let app_data = roots
+            .app_data
+            .iter()
+            .flat_map(|a| [clean(a), std::fs::canonicalize(a).unwrap_or(clean(a))]);
+        let reason = if roots
+            .app_files
+            .iter()
+            .map(|a| clean(a))
+            .chain(app_data)
+            .any(|a| a == root)
+        {
             app_files_reason(&root, &rule)
         } else {
             reason
@@ -133,6 +150,7 @@ pub fn write_roots_file(
     protected: &[PathBuf],
     app_files: &[PathBuf],
     home_dir: &Path,
+    app_data: Option<&Path>,
 ) -> Result<PathBuf> {
     let id = TaskId::parse(task_id.as_str())?;
     let path = guards_dir.join(format!("{id}.guard.json"));
@@ -140,6 +158,7 @@ pub fn write_roots_file(
         protected: protected.to_vec(),
         app_files: app_files.to_vec(),
         home_dir: home_dir.to_owned(),
+        app_data: app_data.map(Path::to_owned),
     };
     write_atomic(&path, &serde_json::to_vec_pretty(&body)?)?;
     Ok(path)
@@ -172,6 +191,13 @@ pub fn prepare_guard(
     if protected.is_empty() && app_files.is_empty() {
         return Ok(None);
     }
-    let file = write_roots_file(&app_data.join("guards"), task_id, protected, app_files, home_dir)?;
+    let file = write_roots_file(
+        &app_data.join("guards"),
+        task_id,
+        protected,
+        app_files,
+        home_dir,
+        Some(app_data),
+    )?;
     Ok(Some(guard_hook_spec(exe, &file)))
 }

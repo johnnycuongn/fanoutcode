@@ -6,6 +6,7 @@
 
 use std::path::{Path, PathBuf};
 
+use super::opaque::{deny_unresolved, unresolved};
 use super::rules::{deny, Ctx};
 use super::{GuardDecision, GuardRule};
 
@@ -14,14 +15,13 @@ pub(super) const WRITERS: &[&str] = &[
     "chgrp", "install", "rsync", "patch",
 ];
 
-/// Copies, with the short option letters that take a value: a positional before the destination is a source (a read)
-/// unless it may be an option's value.
-const COPIERS: &[(&str, &str)] = &[
-    ("cp", "tS"),
-    ("ln", "tS"),
-    ("install", "tSgmoBfNTh"),
-    ("rsync", "efBTM@"),
-];
+/// `cp`'s short option letters that take a value: a positional before the destination is a source (a read) unless
+/// it may be an option's value.
+const CP_VALUE_LETTERS: &str = "tS";
+
+/// The copiers that read nothing as exempt: every argument may be written (`ln -s`'s target, `install`'s and
+/// `rsync`'s options and sources included).
+const CHECK_EVERY: &[&str] = &["ln", "install", "rsync"];
 
 /// Where an embedded path may start or end inside a word (sed-style delimiters, quoting and option punctuation).
 const DELIMS: &[char] = &[
@@ -79,25 +79,55 @@ fn takes_next(word: &str, value_letters: &str) -> bool {
     }
 }
 
-/// A file writer: a copy's sources are reads, a move writes both ends, any other also writes the cwd it runs in.
-pub(super) fn writer(ctx: &Ctx, name: &'static str, args: &[String], cwd: &Path) -> GuardDecision {
-    let root = if let Some((_, letters)) = COPIERS.iter().find(|(c, _)| *c == name) {
-        // the sources (plain positionals before the last) are reads; everything else may be written
-        let mut opts = true;
-        let pos: Vec<usize> = args
-            .iter()
-            .enumerate()
-            .filter_map(|(i, a)| {
-                if opts && a == "--" {
-                    opts = false;
-                    return None;
-                }
-                (!opts || !a.starts_with('-')).then_some(i)
-            })
-            .collect();
-        let dest = pos.last().copied();
-        let source = |i: usize| pos.contains(&i) && Some(i) != dest && !(i > 0 && takes_next(&args[i - 1], letters));
-        args_root(ctx, args, cwd, source)
+/// The positional indexes of `args` (plain words, and every word after `--`).
+fn positional_indexes(args: &[String]) -> Vec<usize> {
+    let mut opts = true;
+    args.iter()
+        .enumerate()
+        .filter_map(|(i, a)| {
+            if opts && a == "--" {
+                opts = false;
+                return None;
+            }
+            (!opts || !a.starts_with('-')).then_some(i)
+        })
+        .collect()
+}
+
+/// Whether a copier names its destination folder with `-t` / `--target-directory` (not `rsync`, whose `-t` keeps
+/// times).
+fn has_target_dir(name: &str, args: &[String]) -> bool {
+    name != "rsync"
+        && args.iter().take_while(|a| *a != "--").any(|a| {
+            a.starts_with("--target")
+                || a.strip_prefix('-')
+                    .is_some_and(|s| !s.starts_with('-') && s.contains('t'))
+        })
+}
+
+/// A file writer: `cp`'s sources are reads, `ln`, `install` and `rsync` may write any argument, a move writes both
+/// ends, any other also writes the cwd it runs in. A copier with one positional and no `-t` copies into the cwd.
+/// `blind` (arguments from a substitution or `xargs`) or an argument the guard cannot read, other than a `cp`
+/// source, denies.
+pub(super) fn writer(ctx: &Ctx, name: &'static str, args: &[String], cwd: &Path, blind: bool) -> GuardDecision {
+    if blind {
+        return deny_unresolved(ctx, name);
+    }
+    let pos = positional_indexes(args);
+    let copier = name == "cp" || CHECK_EVERY.contains(&name);
+    let into_cwd = copier && pos.len() == 1 && !has_target_dir(name, args);
+    let read = |i: usize| -> bool {
+        if name != "cp" || !pos.contains(&i) {
+            return false;
+        }
+        let dest = if into_cwd { None } else { pos.last().copied() };
+        Some(i) != dest && !(i > 0 && takes_next(&args[i - 1], CP_VALUE_LETTERS))
+    };
+    if args.iter().enumerate().any(|(i, a)| !read(i) && unresolved(ctx, a)) {
+        return deny_unresolved(ctx, name);
+    }
+    let root = if copier {
+        args_root(ctx, args, cwd, read).or_else(|| into_cwd.then(|| ctx.target_root(cwd).cloned()).flatten())
     } else if name == "mv" {
         // a move writes both ends
         args_root(ctx, args, cwd, |_| false)
@@ -110,7 +140,7 @@ pub(super) fn writer(ctx: &Ctx, name: &'static str, args: &[String], cwd: &Path)
 }
 
 /// The short-option clusters of `args` (the old-style first word of `tar` too) and the long option names.
-fn options(args: &[String], old_style: bool) -> (Vec<&str>, Vec<&str>) {
+pub(super) fn options(args: &[String], old_style: bool) -> (Vec<&str>, Vec<&str>) {
     let (mut short, mut long) = (Vec::new(), Vec::new());
     for (i, a) in args.iter().enumerate() {
         if a == "--" {
@@ -128,7 +158,7 @@ fn options(args: &[String], old_style: bool) -> (Vec<&str>, Vec<&str>) {
 }
 
 /// A long option name that is, or abbreviates, one of `names`.
-fn long_is(long: &[&str], names: &[&str]) -> bool {
+pub(super) fn long_is(long: &[&str], names: &[&str]) -> bool {
     long.iter()
         .any(|l| !l.is_empty() && names.iter().any(|n| n.starts_with(l)))
 }

@@ -97,7 +97,7 @@ fn the_same_tools_aimed_elsewhere_are_allowed() {
         "cp -t/tmp/out x".to_owned(),
         "cp -rt /tmp/out x".to_owned(),
         "cp --target=/tmp/out x".to_owned(),
-        format!("cp {a}/grants/t-1.json /tmp/copy.json"),
+        format!("cat {a}/grants/t-1.json > /tmp/copy.json"),
         "install -t/tmp/out x".to_owned(),
         "ln -st /tmp/out /tmp/target".to_owned(),
         "rsync -a --temp-dir=/tmp/t x/ /tmp/out/".to_owned(),

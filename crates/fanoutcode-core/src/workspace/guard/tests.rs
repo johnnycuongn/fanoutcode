@@ -99,7 +99,15 @@ pub(super) fn app_data_guard() -> (tempfile::TempDir, PathBuf, PathBuf) {
     for f in &files {
         std::fs::create_dir_all(f).unwrap();
     }
-    let roots = write_roots_file(&app.join("guards"), &"t-1".parse_id(), &[], &files, Path::new("/h")).unwrap();
+    let roots = write_roots_file(
+        &app.join("guards"),
+        &"t-1".parse_id(),
+        &[],
+        &files,
+        Path::new("/h"),
+        Some(&app),
+    )
+    .unwrap();
     (dir, app, roots)
 }
 
@@ -187,7 +195,8 @@ fn copying_next_to_app_data_is_allowed() {
         format!("mv x {parent}/app-old"),
         format!("rsync -a x/ {parent}/backup/"),
         format!("tar -xf x.tar -C {parent}/sibling"),
-        format!("cp {}/grants/t-1.json /tmp/copy.json", app.display()),
+        // reading app data out is a `cat`: the text rule denies any other program naming it, `cp` included
+        format!("cat {}/grants/t-1.json > /tmp/copy.json", app.display()),
         format!("tar -tf {}/x.tar", app.display()),
     ] {
         assert!(!guard_says_deny(&roots, &cmd), "{cmd}");
@@ -266,7 +275,15 @@ mod protocol {
         .unwrap()
     }
     fn roots(dir: &Path) -> PathBuf {
-        write_roots_file(dir, &tid("t-1"), &[PathBuf::from("/w/api")], &[], Path::new("/Users/j")).unwrap()
+        write_roots_file(
+            dir,
+            &tid("t-1"),
+            &[PathBuf::from("/w/api")],
+            &[],
+            Path::new("/Users/j"),
+            None,
+        )
+        .unwrap()
     }
 
     #[test]
@@ -312,7 +329,7 @@ mod protocol {
             .iter()
             .map(|d| Path::new("/d").join(d))
             .collect();
-        let r = write_roots_file(dir.path(), &tid("t-1"), &[], &app_files, Path::new("/Users/j")).unwrap();
+        let r = write_roots_file(dir.path(), &tid("t-1"), &[], &app_files, Path::new("/Users/j"), None).unwrap();
         for cmd in [
             "echo x > /d/grants/t-a1.json",
             "rm /d/claims/0123456789abcdef.json",
@@ -393,7 +410,7 @@ mod protocol {
     fn write_roots_file_validates_task_id() {
         let dir = tempfile::tempdir().unwrap();
         assert!(matches!(
-            write_roots_file(dir.path(), &tid("../evil"), &[], &[], Path::new("/h")),
+            write_roots_file(dir.path(), &tid("../evil"), &[], &[], Path::new("/h"), None),
             Err(Error::Invalid(_))
         ));
     }
