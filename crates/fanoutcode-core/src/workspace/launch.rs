@@ -15,11 +15,16 @@ use super::link::{bind_links, link_status, links_for, load_links, same_root, sav
 use super::policy::{deny_rules, protected_roots};
 use super::rows;
 use super::store::member_projects;
+use crate::changes::repos::repos_of;
 use crate::db;
 use crate::domain::{AgentKind, Container, Task, TaskId, Workspace};
-use crate::hooks::HookSpec;
+use crate::hooks::{event_log_path, HookSpec};
 use crate::memory::store::Loaded;
 use crate::memory::TaskFolder;
+use crate::overlap::check::{check_hook_spec, CheckArgs};
+use crate::overlap::claims::claims_path;
+use crate::overlap::grants::grants_path;
+use crate::overlap::notes::notes_path;
 use crate::prompts::PromptCtx;
 use crate::roster::{parse_agent, AgentDef, RosterLevel};
 use crate::Result;
@@ -124,13 +129,59 @@ pub struct LaunchExtras {
     pub guard: Option<HookSpec>,
     /// Beyond the linked roots (which the launch adds itself): the context-doc cache when a reference is cached.
     pub add_dirs: Vec<PathBuf>,
+    /// The claim-check hook (Plan 11 §5.3, §5.6), unless both `ask_before_other_tasks_files` and
+    /// `guard_git_for_other_tasks` are off; Bash only when just the git guard is on.
+    pub claim_check: Option<HookSpec>,
 }
 
-/// Refuses the launch (`Precondition`) when a protected root cannot be expressed as a safe deny rule.
-pub fn launch_extras(conn: &Connection, task: &Task, app_data: &Path, exe: &Path, home: &Path) -> Result<LaunchExtras> {
+/// The claim-check hook over the claims files of the task's repos (its worktree or home root, then its links).
+fn claim_check_hook(
+    conn: &Connection,
+    task: &Task,
+    app_data: &Path,
+    exe: &Path,
+    ask_before: bool,
+    guard_git: bool,
+) -> Result<Option<HookSpec>> {
+    if !ask_before && !guard_git {
+        return Ok(None);
+    }
+    let home_root = db::projects::get(conn, &task.project_id)?.map(|p| p.root);
+    let repos = match &home_root {
+        Some(root) => repos_of(task, root),
+        // no home project on record: only what the task names itself
+        None => task.worktree_path.iter().chain(&task.linked_roots).cloned().collect(),
+    };
+    let args = CheckArgs {
+        task_id: task.id.clone(),
+        claims_paths: repos.iter().map(|r| claims_path(app_data, r)).collect(),
+        grants_path: grants_path(app_data, &task.id),
+        notes_path: notes_path(app_data, &task.id),
+        log_path: event_log_path(app_data, &task.id),
+        guard_git,
+    };
+    let mut spec = check_hook_spec(exe, &args);
+    if !ask_before {
+        spec.matcher = Some("Bash".into());
+    }
+    Ok(Some(spec))
+}
+
+/// Refuses the launch (`Precondition`) when a protected root cannot be expressed as a safe deny rule. `ask_before`
+/// and `guard_git` are the task's resolved `ask_before_other_tasks_files` and `guard_git_for_other_tasks`.
+pub fn launch_extras(
+    conn: &Connection,
+    task: &Task,
+    app_data: &Path,
+    exe: &Path,
+    home: &Path,
+    ask_before: bool,
+    guard_git: bool,
+) -> Result<LaunchExtras> {
     if task.agent_kind != AgentKind::ClaudeCode {
         return Ok(LaunchExtras::default());
     }
+    let claim_check = claim_check_hook(conn, task, app_data, exe, ask_before, guard_git)?;
     let protected = protected_for(conn, task)?;
     let deny = deny_rules(&protected)?;
     let guard = prepare_guard(app_data, exe, &task.id, &protected, home)?;
@@ -148,7 +199,12 @@ pub fn launch_extras(conn: &Connection, task: &Task, app_data: &Path, exe: &Path
             add_dirs.push(dir);
         }
     }
-    Ok(LaunchExtras { deny, guard, add_dirs })
+    Ok(LaunchExtras {
+        deny,
+        guard,
+        add_dirs,
+        claim_check,
+    })
 }
 
 /// The workspace's part of a task's prompts, for `{{linked.projects}}` and the references.
@@ -264,10 +320,28 @@ mod tests {
         bind_if_first_start(&fx.db.lock().unwrap(), fx.app_data.path(), &t.id, None).unwrap();
         let exe = Path::new("/x/fanoutcode");
         let task = db::tasks::require(&fx.db.lock().unwrap(), &t.id).unwrap();
-        let none = launch_extras(&fx.db.lock().unwrap(), &task, fx.app_data.path(), exe, Path::new("/h")).unwrap();
+        let none = launch_extras(
+            &fx.db.lock().unwrap(),
+            &task,
+            fx.app_data.path(),
+            exe,
+            Path::new("/h"),
+            true,
+            true,
+        )
+        .unwrap();
         assert!(none.deny.is_empty() && none.guard.is_none());
         s.set_policy(&ws.id, LinkPolicy::ReadOnly, &[]).unwrap();
-        let ro = launch_extras(&fx.db.lock().unwrap(), &task, fx.app_data.path(), exe, Path::new("/h")).unwrap();
+        let ro = launch_extras(
+            &fx.db.lock().unwrap(),
+            &task,
+            fx.app_data.path(),
+            exe,
+            Path::new("/h"),
+            true,
+            true,
+        )
+        .unwrap();
         assert!(ro.deny.contains(&format!("Edit(/{}/**)", fx.api.root.display())));
         assert!(ro.guard.is_some());
     }
@@ -316,6 +390,59 @@ mod tests {
     }
 
     #[test]
+    fn launch_extras_adds_the_claim_check_hook() {
+        let (fx, _s, _ws, t) = setup();
+        bind_if_first_start(&fx.db.lock().unwrap(), fx.app_data.path(), &t.id, None).unwrap();
+        let task = db::tasks::require(&fx.db.lock().unwrap(), &t.id).unwrap();
+        let exe = Path::new("/x/fanoutcode");
+        let extras = |ask: bool, git: bool| {
+            launch_extras(
+                &fx.db.lock().unwrap(),
+                &task,
+                fx.app_data.path(),
+                exe,
+                Path::new("/h"),
+                ask,
+                git,
+            )
+            .unwrap()
+        };
+        let spec = extras(true, false).claim_check.expect("a claim-check hook");
+        assert!(
+            spec.command.starts_with("'/x/fanoutcode' claim-check 't-1' "),
+            "{}",
+            spec.command
+        );
+        assert_eq!(spec.matcher.as_deref(), Some("Edit|Write|MultiEdit|NotebookEdit|Bash"));
+        assert!(spec.command.contains(" 0 "), "git guard off: {}", spec.command);
+        // the home root's claims file, then the linked root's
+        let data = fx.app_data.path();
+        let tail = format!(
+            " '{}' '{}'",
+            claims_path(data, &fx.web.root).display(),
+            claims_path(data, &fx.api.root).display()
+        );
+        assert!(spec.command.ends_with(&tail), "{}", spec.command);
+        assert!(spec
+            .command
+            .contains(&format!("'{}'", grants_path(data, &task.id).display())));
+        assert!(spec
+            .command
+            .contains(&format!("'{}'", notes_path(data, &task.id).display())));
+        assert!(spec
+            .command
+            .contains(&format!("'{}'", event_log_path(data, &task.id).display())));
+        let git_only = extras(false, true).claim_check.expect("the git guard alone");
+        assert_eq!(git_only.matcher.as_deref(), Some("Bash"));
+        assert!(git_only.command.contains(" 1 "));
+        assert_eq!(extras(false, false).claim_check, None);
+        let mut shell = task.clone();
+        shell.agent_kind = AgentKind::Shell;
+        let none = launch_extras(&fx.db.lock().unwrap(), &shell, data, exe, Path::new("/h"), true, true).unwrap();
+        assert_eq!(none.claim_check, None);
+    }
+
+    #[test]
     fn a_task_gets_only_its_own_projects_and_workspaces_cache() {
         let (fx, _s, ws, t) = setup();
         bind_if_first_start(&fx.db.lock().unwrap(), fx.app_data.path(), &t.id, None).unwrap();
@@ -333,6 +460,8 @@ mod tests {
             fx.app_data.path(),
             Path::new("/x"),
             Path::new("/h"),
+            false,
+            false,
         )
         .unwrap();
         let api_cache = context_dir(fx.app_data.path(), &Container::Project { id: fx.api.id.clone() }).unwrap();

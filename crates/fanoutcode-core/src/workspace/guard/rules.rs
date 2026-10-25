@@ -84,7 +84,7 @@ const PACKAGE_WRITES: &[(&str, &[&str])] = &[
 const MAX_DEPTH: u8 = 8;
 
 /// Lexical clean-up: `.` dropped, `..` pops, trailing slash gone.
-pub(super) fn clean(p: &Path) -> PathBuf {
+pub(crate) fn clean(p: &Path) -> PathBuf {
     let mut out = PathBuf::new();
     for c in p.components() {
         match c {
@@ -170,7 +170,7 @@ fn is_assignment(w: &str) -> bool {
 }
 
 /// Drops leading `VAR=val` words and wrappers (with their flags) before the program name.
-fn strip_prefixes(words: &[String]) -> &[String] {
+pub(crate) fn strip_prefixes(words: &[String]) -> &[String] {
     let mut w = words;
     loop {
         match w.first().map(String::as_str) {

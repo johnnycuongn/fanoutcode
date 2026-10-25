@@ -12,5 +12,15 @@ fn main() {
             std::path::Path::new(roots),
         ));
     }
+    // `fanoutcode claim-check <task-id> <grants> <notes> <log> <0|1> <claims…>`: the PreToolUse hook over other
+    // tasks' uncommitted files (Plan 11); arguments that do not parse allow (fail open)
+    if args.get(1).map(String::as_str) == Some("claim-check") {
+        use fanoutcode_core::overlap::check::{run_check, CheckArgs};
+        let Some(check) = CheckArgs::parse(&args[2..]) else {
+            eprintln!("fanoutcode claim-check: bad arguments; allowing");
+            std::process::exit(0);
+        };
+        std::process::exit(run_check(&mut std::io::stdin(), &mut std::io::stdout(), &check));
+    }
     fanoutcode_lib::run()
 }

@@ -5,7 +5,7 @@
 
 /// One simple command.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub(super) struct Segment {
+pub(crate) struct Segment {
     pub words: Vec<String>,
     /// Targets of writing redirections (`>`, `>>`, `>|`, `&>`, `&>>`, `N>`), in order.
     pub write_targets: Vec<String>,
@@ -74,7 +74,7 @@ impl Lexer {
 }
 
 /// Splits `command` into simple commands.
-pub(super) fn segments(command: &str) -> Vec<Segment> {
+pub(crate) fn segments(command: &str) -> Vec<Segment> {
     let chars: Vec<char> = command.chars().collect();
     let mut lx = Lexer::new();
     let mut i = 0;

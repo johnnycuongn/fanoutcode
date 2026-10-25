@@ -206,8 +206,11 @@ fn task_launch(
             let settings = settings_path(&state.data_dir, &task.id)?;
             let exe = std::env::current_exe()?;
             let home = std::env::var_os("HOME").map_or_else(|| PathBuf::from("/"), PathBuf::from);
-            // protected roots: deny rules and the Bash guard; refuses the launch for a root that can't be protected
-            let extras = workspace_launch::launch_extras(conn, task, &state.data_dir, &exe, &home)?;
+            let (ask_before, guard_git) = overlap_settings(conn, task)?;
+            // protected roots: deny rules and the Bash guard; refuses the launch for a root that can't be protected;
+            // the claim-check hook over the other tasks' claims
+            let extras =
+                workspace_launch::launch_extras(conn, task, &state.data_dir, &exe, &home, ask_before, guard_git)?;
             generated_settings(&state.data_dir, task, &extras).write(&settings)?;
             let agents = roster::resolve(&roster_scope(state, conn, task, project));
             let mut spec = claude_launch(&ClaudeLaunch {
@@ -228,11 +231,24 @@ fn task_launch(
     }
 }
 
-/// Hooks and the status line from Plan 05, the protected-root deny rules and the Bash guard from Plan 10.
+/// The task's `ask_before_other_tasks_files` and `guard_git_for_other_tasks` (Plan 11).
+fn overlap_settings(conn: &rusqlite::Connection, task: &Task) -> Result<(bool, bool)> {
+    use fanoutcode_core::settings::{keys, resolve};
+    let scope = fanoutcode_core::pipeline::ctx::task_scope(task);
+    let values = db::settings::load(conn, &scope)?;
+    Ok((
+        resolve::<keys::AskBeforeOtherTasksFiles>(&values, &scope),
+        resolve::<keys::GuardGitForOtherTasks>(&values, &scope),
+    ))
+}
+
+/// Hooks and the status line from Plan 05, the protected-root deny rules and the Bash guard from Plan 10, the
+/// claim-check hook from Plan 11.
 fn generated_settings(app_data: &Path, task: &Task, extras: &workspace_launch::LaunchExtras) -> GeneratedSettings {
     let user = home_claude_settings().and_then(|text| user_status_line(&text));
     let mut hooks = hook_specs(&task.id, app_data);
     hooks.extend(extras.guard.clone());
+    hooks.extend(extras.claim_check.clone());
     GeneratedSettings {
         hooks,
         status_line: Some(status_line_command(
