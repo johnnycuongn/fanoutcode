@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use super::context_docs::ContextDoc;
 use crate::domain::{LinkPolicy, Project, ProjectColor, Workspace, WorkspaceId};
+use crate::ids::valid_id;
 use crate::{Error, Result};
 
 /// The workspace file's suffix.
@@ -106,7 +107,23 @@ impl WorkspaceFile {
             Some(v) => return Err(Error::Invalid(format!("unsupported teamcode_workspace version {v}"))),
             None => return Err(Error::Invalid("workspace file: missing teamcode_workspace".into())),
         }
-        serde_json::from_value(value).map_err(|e| Error::Invalid(format!("workspace file: {e}")))
+        let file: WorkspaceFile =
+            serde_json::from_value(value).map_err(|e| Error::Invalid(format!("workspace file: {e}")))?;
+        file.check_ids()?;
+        Ok(file)
+    }
+
+    /// serde's transparent `Deserialize` does not validate ids, and the file may be shared or hand-edited, so every
+    /// id that can become a path (the workspace id, each context doc id) is re-checked here.
+    fn check_ids(&self) -> Result<()> {
+        WorkspaceId::parse(self.id.as_str())
+            .map_err(|_| Error::Invalid("workspace file: invalid workspace id".into()))?;
+        for d in &self.context_docs {
+            if !(valid_id(&d.id) && d.id.starts_with("doc-")) {
+                return Err(Error::Invalid("workspace file: invalid context doc id".into()));
+            }
+        }
+        Ok(())
     }
 
     /// Every project's absolute root, in file order; relative paths resolve against the file's folder.
@@ -126,8 +143,10 @@ impl WorkspaceFile {
 }
 
 /// `<app_data>/workspaces/<id>/<name>.teamcode-workspace.json`; the id folder keeps two workspaces of one name
-/// apart. Path separators in the name become dashes.
-pub fn default_file_path(app_data: &Path, id: &WorkspaceId, name: &str) -> PathBuf {
+/// apart. Path separators in the name become dashes. `Error::Invalid` for an id that fails `valid_id` (one that
+/// was deserialised rather than parsed), so no caller can join an unvalidated id into a path.
+pub fn default_file_path(app_data: &Path, id: &WorkspaceId, name: &str) -> Result<PathBuf> {
+    let id = WorkspaceId::parse(id.as_str())?;
     let mut safe: String = name
         .trim()
         .chars()
@@ -142,10 +161,10 @@ pub fn default_file_path(app_data: &Path, id: &WorkspaceId, name: &str) -> PathB
     if safe.is_empty() || safe.starts_with('.') {
         safe = format!("workspace{safe}");
     }
-    app_data
+    Ok(app_data
         .join("workspaces")
         .join(id.as_str())
-        .join(format!("{safe}{FILE_SUFFIX}"))
+        .join(format!("{safe}{FILE_SUFFIX}")))
 }
 
 /// The file lives under app data, so it is written through on every change.
@@ -283,13 +302,53 @@ mod tests {
 
     #[test]
     fn default_file_path_differs_for_same_name_different_ids() {
-        let a = default_file_path(Path::new("/app"), &WorkspaceId::parse("ws-a").unwrap(), "Shop");
-        let b = default_file_path(Path::new("/app"), &WorkspaceId::parse("ws-b").unwrap(), "Shop");
+        let a = default_file_path(Path::new("/app"), &WorkspaceId::parse("ws-a").unwrap(), "Shop").unwrap();
+        let b = default_file_path(Path::new("/app"), &WorkspaceId::parse("ws-b").unwrap(), "Shop").unwrap();
         assert_eq!(a, PathBuf::from("/app/workspaces/ws-a/Shop.teamcode-workspace.json"));
         assert_ne!(a, b);
         assert!(
             is_in_app_data(&a, Path::new("/app"))
                 && !is_in_app_data(Path::new("/w/x.teamcode-workspace.json"), Path::new("/app"))
         );
+    }
+
+    const BAD_IDS: [&str; 4] = ["../evil", "ws-/../../x", "/abs/path", ""];
+
+    #[test]
+    fn parse_rejects_ids_that_could_escape_a_folder() {
+        for bad in BAD_IDS {
+            let json = serde_json::json!({"teamcode_workspace": 1, "id": bad, "name": "x", "projects": [], "policy": "ReadOnly"});
+            assert!(
+                matches!(
+                    WorkspaceFile::parse(json.to_string().as_bytes()),
+                    Err(Error::Invalid(_))
+                ),
+                "workspace id {bad:?}"
+            );
+            let doc = serde_json::json!({"id": bad, "kind": "Url", "target": "https://x.y", "label": "x", "page_id": null, "fetched_at": null, "order": 0});
+            let json = serde_json::json!({"teamcode_workspace": 1, "id": "ws-1", "name": "x", "projects": [], "policy": "ReadOnly", "context_docs": [doc]});
+            assert!(
+                matches!(
+                    WorkspaceFile::parse(json.to_string().as_bytes()),
+                    Err(Error::Invalid(_))
+                ),
+                "doc id {bad:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn default_file_path_refuses_unvalidated_ids() {
+        for bad in BAD_IDS {
+            // serde's transparent Deserialize does not validate, which is how such an id would arrive
+            let id: WorkspaceId = serde_json::from_value(serde_json::json!(bad)).unwrap();
+            assert!(
+                matches!(
+                    default_file_path(Path::new("/app"), &id, "Shop"),
+                    Err(Error::Invalid(_))
+                ),
+                "{bad:?}"
+            );
+        }
     }
 }
