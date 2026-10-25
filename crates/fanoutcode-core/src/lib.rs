@@ -13,6 +13,7 @@ pub mod hooks;
 pub mod ids;
 pub mod jira;
 pub mod memory;
+pub mod overlap;
 pub mod pipeline;
 pub mod prompts;
 pub mod recent;
