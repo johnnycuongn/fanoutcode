@@ -240,7 +240,8 @@ pub fn clear_pending(conn: &Connection, task: &TaskId) -> Result<u32> {
 }
 
 /// The paths of `repo` other tasks took over from `task` (rows where `task` is the *other* side and the relation is
-/// `TakenOver`): they left `task`'s change set, so its Done detection skips them.
+/// `TakenOver`): they left `task`'s change set, so its Done detection skips them. The `TakenOverBy` mirror rows (on the
+/// side that lost the file, naming the replacer as the other task) are not read, so the replacer keeps the path.
 pub fn taken_over_paths(conn: &Connection, task: &TaskId, repo: &Path) -> Result<Vec<String>> {
     let mut stmt = conn.prepare(
         "SELECT DISTINCT path FROM task_overlaps WHERE other_task = ?1 AND repo_root = ?2 AND relation = ?3

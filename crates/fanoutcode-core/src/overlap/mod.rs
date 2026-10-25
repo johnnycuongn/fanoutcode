@@ -32,6 +32,9 @@ pub enum Relation {
     GrantedOnTop,
     /// This task replaced the other task's changes; the path left the other task's change set.
     TakenOver,
+    /// The other task replaced this task's changes; the path left this task's change set (the mirror of `TakenOver`,
+    /// shown as "taken over by" the other task; it never drops a path from either task's Done check).
+    TakenOverBy,
     /// The other task lists it under `## Files` in its plan (worktree mode).
     PlannedBy,
     /// The other task committed its changes to it.
@@ -140,6 +143,7 @@ mod tests {
             Relation::Claimed,
             Relation::GrantedOnTop,
             Relation::TakenOver,
+            Relation::TakenOverBy,
             Relation::PlannedBy,
             Relation::Committed,
         ] {

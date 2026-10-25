@@ -324,6 +324,37 @@ fn keeps_granted_and_taken_over_rows() {
 }
 
 #[test]
+fn overlaps_for_keeps_taken_over_by_rows() {
+    let (me, login) = (task("t-a1", None), task("t-b2", None));
+    // the path left my change set when Login replaced my changes in it, and Login's work there is still dirty
+    let my_files = [file(HOME, "src/b.ts")];
+    let login_files = [file(HOME, "src/a.ts")];
+    let status = dirty(&["src/a.ts"]);
+    let claims = build_claims(
+        Path::new(HOME),
+        &[TaskFiles {
+            task: &login,
+            files: &login_files,
+        }],
+        &status,
+        now(),
+    );
+    let lost = OverlapRow {
+        decided_at: Some(at("2026-10-25T09:30:00Z")),
+        ..row(&me, Some(&login), "src/a.ts", Relation::TakenOverBy)
+    };
+    let rows = overlaps_for(
+        &view(&me, &my_files, &[]),
+        &[view(&login, &login_files, &[])],
+        &[claims],
+        &[(HOME.into(), status)],
+        std::slice::from_ref(&lost),
+        now(),
+    );
+    assert_eq!(rows, vec![lost]);
+}
+
+#[test]
 fn shares_tree_rules() {
     let home = Path::new(HOME);
     let (a, b) = (task("t-a1", None), task("t-b2", None));

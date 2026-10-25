@@ -13,11 +13,13 @@ use super::{Decision, OverlapRow, PendingDecision, Relation};
 
 /// Everything one decision writes. `my_prompt` goes into this task's session, `other_prompt` to the other task's
 /// note inbox; the timeline texts are `TimelineKind::Overlap` details. `taken_over` moves the path from the other
-/// task's change set into this one's; `hold` keeps the decision open with `held` set.
+/// task's change set into this one's; `hold` keeps the decision open with `held` set. `other_relation` is the row the
+/// other task gets for the same path (against this task), so both Overlap tabs show a Replace.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DecisionOutcome {
     pub grant: Option<Grant>,
     pub relation: Relation,
+    pub other_relation: Option<Relation>,
     pub my_prompt: Option<String>,
     pub other_prompt: Option<String>,
     pub my_timeline: String,
@@ -54,6 +56,7 @@ pub fn outcome(
             return DecisionOutcome {
                 grant: grant(GrantScope::AllFiles),
                 relation: Relation::GrantedOnTop,
+                other_relation: None,
                 my_prompt: Some(go_ahead_command(other_title, command)),
                 other_prompt: told_other(Decision::OnTopAll),
                 my_timeline: format!("proceed with `{command}` over {other_title}'s changes"),
@@ -71,6 +74,7 @@ pub fn outcome(
         Decision::OnTopFile => DecisionOutcome {
             grant: grant(file()),
             relation: Relation::GrantedOnTop,
+            other_relation: None,
             my_prompt: Some(go_ahead(decision, other_title, path)),
             other_prompt: told_other(decision),
             my_timeline: format!("on top of {other_title} in {path}"),
@@ -81,6 +85,7 @@ pub fn outcome(
         Decision::OnTopAll => DecisionOutcome {
             grant: grant(GrantScope::AllFiles),
             relation: Relation::GrantedOnTop,
+            other_relation: None,
             my_prompt: Some(go_ahead(decision, other_title, path)),
             other_prompt: told_other(decision),
             my_timeline: format!("on top of {other_title} in every file it touches, from {path}"),
@@ -91,6 +96,7 @@ pub fn outcome(
         Decision::Replace => DecisionOutcome {
             grant: grant(file()),
             relation: Relation::TakenOver,
+            other_relation: row.other_task.as_ref().map(|_| Relation::TakenOverBy),
             my_prompt: Some(go_ahead(decision, other_title, path)),
             other_prompt: told_other(decision),
             my_timeline: format!("replaced {other_title}'s changes in {path}"),
@@ -101,6 +107,7 @@ pub fn outcome(
         Decision::Hold => DecisionOutcome {
             grant: None,
             relation: row.relation,
+            other_relation: None,
             my_prompt: None,
             other_prompt: None,
             my_timeline: format!("holding for {other_title} on {path}"),
@@ -254,6 +261,37 @@ mod tests {
         assert!(out.taken_over);
         assert_eq!(out.other_prompt, Some(told(Decision::Replace, "Checkout", "src/a.ts")));
         assert_eq!(out.other_timeline.as_deref(), Some("Checkout took over src/a.ts"));
+    }
+
+    #[test]
+    fn replace_writes_a_taken_over_by_row_on_the_other_task() {
+        let out = outcome(
+            Decision::Replace,
+            &row("src/a.ts", Some("t-b2"), edit(), false),
+            "Checkout",
+            "Login",
+            now(),
+        );
+        assert_eq!(out.other_relation, Some(Relation::TakenOverBy));
+        // no other task (an unattributed session), no row to mirror; the on-top answers mirror nothing
+        let anon = outcome(
+            Decision::Replace,
+            &row("src/a.ts", None, edit(), false),
+            "Checkout",
+            "x",
+            now(),
+        );
+        assert_eq!(anon.other_relation, None);
+        for d in [Decision::OnTopFile, Decision::OnTopAll, Decision::Hold] {
+            let out = outcome(
+                d,
+                &row("src/a.ts", Some("t-b2"), edit(), false),
+                "Checkout",
+                "Login",
+                now(),
+            );
+            assert_eq!(out.other_relation, None);
+        }
     }
 
     #[test]
