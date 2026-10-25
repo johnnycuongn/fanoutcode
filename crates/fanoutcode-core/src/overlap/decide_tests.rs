@@ -386,17 +386,23 @@ fn a_released_command_hold_sends_one_message_naming_the_command() {
         (
             row("src/a.ts", Some("t-b2"), cmd("git stash"), true),
             "Login".to_owned(),
+            Release::Committed,
         ),
         (
             row("src/b.ts", Some("t-b2"), cmd("git stash"), true),
             "Login".to_owned(),
+            Release::Committed,
         ),
-        (row("src/e.ts", Some("t-b2"), edit(), true), "Login".to_owned()),
+        (
+            row("src/e.ts", Some("t-b2"), edit(), true),
+            "Login".to_owned(),
+            Release::Committed,
+        ),
     ];
     assert_eq!(
         release_prompts(&freed, &[]),
         vec![
-            command_free(&["Login".into()], "git stash"),
+            command_free(&[("Login".into(), Release::Committed)], "git stash"),
             go_ahead(Decision::Hold, "Login", "src/e.ts"),
         ]
     );
@@ -407,9 +413,9 @@ fn a_released_command_hold_sends_one_message_naming_the_command() {
         vec![go_ahead(Decision::Hold, "Login", "src/e.ts")]
     );
     // released later, the last one names its task
-    let last = vec![(open[0].clone(), "Billing".to_owned())];
+    let last = vec![(open[0].clone(), "Billing".to_owned(), Release::Clean)];
     assert_eq!(
         release_prompts(&last, &[]),
-        vec![command_free(&["Billing".into()], "git stash")]
+        vec![command_free(&[("Billing".into(), Release::Clean)], "git stash")]
     );
 }

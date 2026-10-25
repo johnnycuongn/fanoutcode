@@ -97,12 +97,23 @@ fn git_subcommands(command: &str) -> Vec<(String, Vec<String>)> {
     out
 }
 
-/// Whether `command` stashes (any `git stash` but `list` and `show`): its changes leave the working tree but are
-/// kept, so the copy says "stashed" rather than "discarded".
+/// Whether `command` stashes (any `git stash` but `list`, `show`, `pop` and `apply`): its changes leave the working
+/// tree but are kept, so the copy says "stashed" rather than "discarded".
 pub fn is_stash(command: &str) -> bool {
-    git_subcommands(command)
-        .iter()
-        .any(|(sub, args)| sub == "stash" && !matches!(args.first().map(String::as_str), Some("list" | "show")))
+    git_subcommands(command).iter().any(|(sub, args)| {
+        sub == "stash"
+            && !matches!(
+                args.first().map(String::as_str),
+                Some("list" | "show" | "pop" | "apply")
+            )
+    })
+}
+
+/// Whether `command` stages without committing (a `git add`, no `git commit`): the copy then says "staged into its
+/// index" rather than "committed".
+pub fn stages_only(command: &str) -> bool {
+    let subs = git_subcommands(command);
+    subs.iter().any(|(s, _)| s == "add") && !subs.iter().any(|(s, _)| s == "commit")
 }
 
 /// What a stopped `command` would do to the claims of `claimed` in `repo` (§5.6): the kind of the rule

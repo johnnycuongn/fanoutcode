@@ -2,7 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::denial::is_stash;
+use super::decide::Release;
+use super::denial::{is_stash, stages_only};
 use super::{CommandKind, Decision};
 use crate::domain::{AgentState, Stage};
 use crate::pipeline::handback::chip_text;
@@ -157,6 +158,7 @@ uncommitted changes in (the developer approved it). Run it now."
 /// §5.6): what the command did to that session's uncommitted changes in `paths`.
 pub fn told_command(my_title: &str, command: &str, kind: CommandKind, paths: &[String]) -> String {
     let what = match kind {
+        CommandKind::Commits if stages_only(command) => "staged into its index",
         CommandKind::Commits => "committed into its commit",
         CommandKind::Discards if is_stash(command) => "stashed",
         CommandKind::Discards => "discarded",
@@ -168,13 +170,26 @@ were {what}. Re-read those files before your next edit.",
     )
 }
 
-/// The message to a session whose held command is free to run: every task it touched has let go of the files.
-pub fn command_free(other_titles: &[String], command: &str) -> String {
-    let whose: Vec<String> = other_titles.iter().map(|t| format!("{t}'s")).collect();
-    format!(
-        "Fanout Code: {} files are now committed; you may run `{command}` again.",
-        whose.join(" and ")
-    )
+/// The message to a session whose held command is free to run: every task it touched has let go of the files,
+/// each worded for how (`others`: each task's title and why its hold was released). Tasks released the same way
+/// share one clause.
+pub fn command_free(others: &[(String, Release)], command: &str) -> String {
+    let mut clauses: Vec<(Release, Vec<String>)> = Vec::new();
+    for (title, why) in others {
+        let whose = format!("{title}'s");
+        match clauses.iter_mut().find(|(w, _)| w == why) {
+            Some((_, v)) => v.push(whose),
+            None => clauses.push((*why, vec![whose])),
+        }
+    }
+    let text: Vec<String> = clauses
+        .iter()
+        .map(|(why, whose)| match why {
+            Release::Committed => format!("{} files are now committed", whose.join(" and ")),
+            Release::Clean => format!("{} files have no uncommitted changes now", whose.join(" and ")),
+        })
+        .collect();
+    format!("Fanout Code: {}; you may run `{command}` again.", text.join(" and "))
 }
 
 /// The once-per-file note to a worktree session editing a file in another task's footprint (§6.2).

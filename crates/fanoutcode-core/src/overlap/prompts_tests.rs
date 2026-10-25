@@ -243,13 +243,57 @@ src/a.ts were stashed. Re-read those files before your next edit."
 }
 
 #[test]
+fn told_command_for_a_git_add_says_staged_not_committed() {
+    let p = s(&["src/a.ts"]);
+    for c in ["git add -A", "git add src/a.ts", "git -C /r add ."] {
+        assert_eq!(
+            told_command("Checkout", c, CommandKind::Commits, &p),
+            format!(
+                "Fanout Code: task Checkout ran `{c}` with the developer's approval; your uncommitted changes in \
+src/a.ts were staged into its index. Re-read those files before your next edit."
+            )
+        );
+    }
+    // staged and then committed in one go is a commit
+    assert!(
+        told_command("Checkout", "git add -A && git commit -m x", CommandKind::Commits, &p)
+            .contains("were committed into its commit")
+    );
+}
+
+#[test]
 fn command_free_names_the_command_and_the_tasks() {
+    use crate::overlap::decide::Release;
+    let t = |v: &[(&str, Release)]| v.iter().map(|(n, r)| ((*n).to_owned(), *r)).collect::<Vec<_>>();
     assert_eq!(
-        command_free(&s(&["Login"]), "git stash"),
+        command_free(&t(&[("Login", Release::Committed)]), "git stash"),
         "Fanout Code: Login's files are now committed; you may run `git stash` again."
     );
     assert_eq!(
-        command_free(&s(&["Login", "Billing"]), "git add -A"),
+        command_free(
+            &t(&[("Login", Release::Committed), ("Billing", Release::Committed)]),
+            "git add -A"
+        ),
         "Fanout Code: Login's and Billing's files are now committed; you may run `git add -A` again."
+    );
+}
+
+#[test]
+fn command_free_words_committed_and_clean_differently() {
+    use crate::overlap::decide::Release;
+    assert_eq!(
+        command_free(&[("Login".into(), Release::Clean)], "git stash"),
+        "Fanout Code: Login's files have no uncommitted changes now; you may run `git stash` again."
+    );
+    assert_eq!(
+        command_free(
+            &[
+                ("Login".into(), Release::Committed),
+                ("another session".into(), Release::Clean)
+            ],
+            "git stash"
+        ),
+        "Fanout Code: Login's files are now committed and another session's files have no uncommitted changes now; \
+you may run `git stash` again."
     );
 }

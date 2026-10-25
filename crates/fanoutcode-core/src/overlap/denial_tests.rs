@@ -290,11 +290,13 @@ fn is_stash_reads_the_git_subcommand() {
         "git stash",
         "git stash push -u",
         "git -C /r stash",
-        "ls && git stash pop",
+        "ls && git stash drop",
     ] {
         assert!(is_stash(c), "{c}");
     }
     for c in [
+        "git stash pop",
+        "git stash apply stash@{1}",
         "git stash list",
         "git stash show",
         "git commit -m stash",

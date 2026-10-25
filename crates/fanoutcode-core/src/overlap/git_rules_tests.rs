@@ -140,6 +140,10 @@ fn stash_reset_hard_and_clean_are_caught_when_any_claim_exists() {
         assert_eq!(eval(cmd, "/r", &[]), None, "{cmd} with no claim");
     }
     assert_eq!(eval("git stash list", "/r", &claims()), None);
+    // git refuses to overwrite dirty files, so neither discards another task's changes
+    assert_eq!(eval("git stash pop", "/r", &claims()), None);
+    assert_eq!(eval("git stash apply stash@{1}", "/r", &claims()), None);
+    assert_eq!(eval("git stash apply --index", "/r", &claims()), None);
     assert_eq!(eval("git stash show -p", "/r", &claims()), None);
     assert_eq!(eval("git reset src/a.ts", "/r", &claims()), None);
     assert_eq!(eval("git clean -n", "/r", &claims()), None);

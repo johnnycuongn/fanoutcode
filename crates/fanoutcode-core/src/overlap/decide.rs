@@ -266,13 +266,13 @@ pub fn command_go_ahead_due(rows: &[OverlapRow], command: &str) -> bool {
     !rows.iter().any(|r| command_of(r) == Some(command.trim()))
 }
 
-/// What the session is told when held decisions are released (`freed`, each with its other task's title): the
-/// "file is now free" go-ahead per released edit, and for a stopped command one message naming it, once no open
-/// stop of that command remains in `remaining` (the task's rows after the release).
-pub fn release_prompts(freed: &[(OverlapRow, String)], remaining: &[OverlapRow]) -> Vec<String> {
+/// What the session is told when held decisions are released (`freed`, each with its other task's title and why it
+/// was released): the "file is now free" go-ahead per released edit, and for a stopped command one message naming
+/// it, once no open stop of that command remains in `remaining` (the task's rows after the release).
+pub fn release_prompts(freed: &[(OverlapRow, String, Release)], remaining: &[OverlapRow]) -> Vec<String> {
     let mut out = Vec::new();
     let mut done: Vec<&str> = Vec::new();
-    for (r, title) in freed {
+    for (r, title, _) in freed {
         let Some(command) = command_of(r) else {
             out.push(go_ahead(Decision::Hold, title, &r.path));
             continue;
@@ -284,10 +284,10 @@ pub fn release_prompts(freed: &[(OverlapRow, String)], remaining: &[OverlapRow])
         if !command_go_ahead_due(remaining, command) {
             continue;
         }
-        let mut titles: Vec<String> = Vec::new();
-        for (_, t) in freed.iter().filter(|(o, _)| command_of(o) == Some(command)) {
-            if !titles.contains(t) {
-                titles.push(t.clone());
+        let mut titles: Vec<(String, Release)> = Vec::new();
+        for (_, t, why) in freed.iter().filter(|(o, _, _)| command_of(o) == Some(command)) {
+            if !titles.iter().any(|(seen, _)| seen == t) {
+                titles.push((t.clone(), *why));
             }
         }
         out.push(command_free(&titles, command));

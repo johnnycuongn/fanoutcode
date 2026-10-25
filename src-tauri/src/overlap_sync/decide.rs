@@ -260,7 +260,7 @@ pub fn release_holds(
         timeline(app, state, task_id, release_line(*why, &r.path, title), now)?;
     }
     let remaining = store::pending(&state.db.lock().expect("db lock"), task_id)?;
-    let freed: Vec<(OverlapRow, String)> = freed.into_iter().map(|(r, _, title)| (r, title)).collect();
+    let freed: Vec<(OverlapRow, String, Release)> = freed.into_iter().map(|(r, why, title)| (r, title, why)).collect();
     let prompts = release_prompts(&freed, &remaining);
     repin(app, state, task_id)?;
     emit_overlap_changed(app, state, task_id)?;
