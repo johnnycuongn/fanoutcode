@@ -4,6 +4,7 @@
 
 pub mod briefs;
 pub mod context_docs;
+mod context_fetch;
 pub mod convert;
 pub mod file;
 pub mod fragments;

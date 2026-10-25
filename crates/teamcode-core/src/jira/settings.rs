@@ -85,7 +85,10 @@ mod tests {
         );
         let r = resolve_all(&empty, &scope);
         assert_eq!(
-            (r.jira.clone(), serde_json::to_value(&r).unwrap()["jira_transitions"].clone()),
+            (
+                r.jira.clone(),
+                serde_json::to_value(&r).unwrap()["jira_transitions"].clone()
+            ),
             (None, json!({"enabled": false, "on_stage": {}}))
         );
         let mut v = ScopeValues::default();

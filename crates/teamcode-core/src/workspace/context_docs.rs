@@ -114,6 +114,8 @@ pub(crate) fn replace_rows(conn: &Connection, container: &Container, docs: &[Con
     Ok(())
 }
 
+pub use super::context_fetch::fetch_text;
+
 /// The last path component; a URL's host and path; a Confluence page's title from its URL.
 pub fn label_for(kind: &ContextDocKind, target: &str) -> String {
     let last = |t: &str| t.trim_end_matches('/').rsplit('/').next().unwrap_or(t).to_owned();
