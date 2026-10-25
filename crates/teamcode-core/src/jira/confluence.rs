@@ -55,6 +55,16 @@ impl ConfluenceClient {
         })
     }
 
+    /// As `new`, over a given client (one pinned to the site's checked address).
+    pub fn with_http(site: &JiraSite, token: &str, http: reqwest::Client) -> Result<Self> {
+        Ok(Self {
+            http,
+            base: normalise_site(&site.site_url)?,
+            email: site.email.clone(),
+            token: token.to_owned(),
+        })
+    }
+
     pub fn base_url(&self) -> &str {
         &self.base
     }
@@ -67,6 +77,7 @@ impl ConfluenceClient {
             .http
             .get(format!("{}/wiki/api/v2/pages/{page_id}", self.base))
             .query(&[("body-format", "storage")])
+            .header(reqwest::header::ACCEPT, "application/json")
             .basic_auth(&self.email, Some(&self.token))
             .send()
             .await

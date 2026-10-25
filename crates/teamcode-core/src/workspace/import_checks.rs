@@ -49,12 +49,24 @@ pub fn sanitize(mut file: WorkspaceFile, fallback_name: &str) -> (WorkspaceFile,
         ok
     });
     file.context_docs.retain(|d| {
-        let ok = !matches!(d.kind, ContextDocKind::File | ContextDocKind::Folder) || Path::new(&d.target).is_absolute();
-        if !ok {
-            problems.push(format!("Ignored reference {:?}: not an absolute path.", d.target));
+        let why = match d.kind {
+            ContextDocKind::File | ContextDocKind::Folder if !Path::new(&d.target).is_absolute() => {
+                Some("not an absolute path".to_owned())
+            }
+            ContextDocKind::Url | ContextDocKind::Confluence => super::url_guard::check_lexical(&d.target, true)
+                .err()
+                .map(|e| e.to_string()),
+            _ => None,
+        };
+        if let Some(why) = &why {
+            problems.push(format!("Ignored reference {:?}: {why}", d.target));
         }
-        ok
+        why.is_none()
     });
+    // trust is the app's to give (in the preview), never the file's to claim
+    for d in &mut file.context_docs {
+        d.trusted = false;
+    }
     (file, problems)
 }
 

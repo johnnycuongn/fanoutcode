@@ -16,7 +16,9 @@ CREATE TABLE context_docs (
     label TEXT NOT NULL,
     page_id TEXT,
     fetched_at TEXT,
-    ord INTEGER NOT NULL
+    ord INTEGER NOT NULL,
+    -- added in the app or confirmed in an import preview; only trusted docs may be fetched from private networks
+    trusted INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX context_docs_scope ON context_docs (scope_kind, scope_id, ord);
 

@@ -1001,7 +1001,12 @@ export type Container = { type: "Project"; id: ProjectId } | { type: "Workspace"
 /**
  * One reference listed in prompts under "Project references" or "Workspace references".
  */
-export type ContextDoc = { id: string; kind: ContextDocKind; target: string; label: string; page_id: string | null; fetched_at: string | null; order: number }
+export type ContextDoc = { id: string; kind: ContextDocKind; target: string; label: string; page_id: string | null; fetched_at: string | null; order: number; 
+/**
+ * Added by the developer in the app, or confirmed in a workspace import preview. A doc read from a file is
+ * never trusted until confirmed; only a trusted doc may be fetched from a private network.
+ */
+trusted?: boolean }
 /**
  * What a context doc points at. Serialises as `"File"`, `"Folder"`, `"Url"`, `"Confluence"` (A16), the strings
  * stored in `context_docs.kind`.
@@ -1045,7 +1050,11 @@ export type HookEvent = { type: "SessionStart"; session_id: string; transcript_p
 /**
  * One reference the file lists, as the prompts would name it.
  */
-export type ImportDoc = { kind: ContextDocKind; target: string; label: string; page_id: string | null }
+export type ImportDoc = { kind: ContextDocKind; target: string; label: string; page_id: string | null; 
+/**
+ * The host a URL or Confluence reference would be fetched from.
+ */
+host: string | null }
 /**
  * One project root the file names.
  */

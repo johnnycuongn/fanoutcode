@@ -31,6 +31,7 @@ pub(crate) fn import(
     roots: &[PathBuf],
     target: &WorkspaceId,
     rewritten: bool,
+    trust: super::import::DocTrust,
 ) -> Result<Workspace> {
     if !store.exists(target)? {
         store.insert_record(target, &file.name, path, file.policy)?;
@@ -65,11 +66,30 @@ pub(crate) fn import(
         members
     };
     store.replace_from_file(target, file, &members)?;
-    super::context_docs::replace_rows(
-        &store.db().lock().expect("db lock"),
-        &crate::domain::Container::Workspace { id: target.clone() },
-        &file.context_docs,
-    )?;
+    {
+        let conn = store.db().lock().expect("db lock");
+        let container = crate::domain::Container::Workspace { id: target.clone() };
+        let existing = super::context_docs::list_rows(&conn, &container)?;
+        let docs: Vec<_> = file
+            .context_docs
+            .iter()
+            .map(|d| {
+                let mut d = d.clone();
+                d.trusted = match trust {
+                    super::import::DocTrust::Confirmed => true,
+                    super::import::DocTrust::Existing => existing.iter().any(|m| {
+                        m.trusted
+                            && m.kind == d.kind
+                            && m.target == d.target
+                            && m.label == d.label
+                            && m.page_id == d.page_id
+                    }),
+                };
+                d
+            })
+            .collect();
+        super::context_docs::replace_rows(&conn, &container, &docs)?;
+    }
     store.set_file_clean(target, path)?;
     store.after_open(target, path);
     if rewritten {
@@ -138,7 +158,15 @@ pub fn relocate_file(store: &WorkspaceStore, id: &WorkspaceId, new_path: &Path) 
         .iter()
         .map(|r| std::fs::canonicalize(r).unwrap_or_else(|_| r.clone()))
         .collect();
-    import(store, new_path, &file, &roots, id, false)
+    import(
+        store,
+        new_path,
+        &file,
+        &roots,
+        id,
+        false,
+        super::import::DocTrust::Existing,
+    )
 }
 
 /// Moves a member's root to `new_root`, which no other project may already own.

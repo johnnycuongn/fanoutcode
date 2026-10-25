@@ -7,6 +7,7 @@ use teamcode_core::jira::settings::JiraSiteKey;
 use teamcode_core::memory::store::write_atomic;
 use teamcode_core::settings::{resolve, Scope};
 use teamcode_core::workspace::context_docs::{fetch_text, text_cache_path, ContextDoc, ContextDocKind};
+use teamcode_core::workspace::url_guard::NetGuard;
 use teamcode_core::{db, Error, Result};
 
 use super::parse_container;
@@ -101,7 +102,7 @@ pub async fn context_docs_fetch(
         (Some(s), Some(t)) => Some((s, t.expose())),
         _ => None,
     };
-    let text = fetch_text(&doc, atlassian, &state.http).await?;
+    let text = fetch_text(&doc, atlassian, &NetGuard::system()).await?;
     write_atomic(&cache, text.as_bytes())?;
     state.context_docs.set_fetched(&doc.id, chrono::Utc::now())?;
     announce(&app, container);

@@ -19,4 +19,5 @@ pub(crate) mod rows;
 pub mod store;
 #[cfg(test)]
 pub(crate) mod test_support;
+pub mod url_guard;
 pub mod watcher;

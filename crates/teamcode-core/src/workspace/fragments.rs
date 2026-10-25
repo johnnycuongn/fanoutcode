@@ -134,6 +134,7 @@ mod tests {
             page_id: None,
             fetched_at: fetched,
             order: 0,
+            trusted: false,
         }
     }
     fn one_link() -> LinkContext {

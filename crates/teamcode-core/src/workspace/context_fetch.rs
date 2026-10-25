@@ -1,6 +1,7 @@
 //! Fetching a context doc's text on demand (`context_docs_fetch`), cached by the shell at `text_cache_path`.
 
 use super::context_docs::{ContextDoc, ContextDocKind};
+use super::url_guard::{guarded_get, pinned_client, validate_hop, NetGuard};
 use crate::{Error, Result};
 
 /// The most text a fetched reference keeps (prompts point at the cache file, so this only bounds disk use).
@@ -38,13 +39,15 @@ fn folder_listing(root: &std::path::Path) -> Result<String> {
 }
 
 /// The reference's text now: a file's contents, a folder's listing, a URL's body (HTML stripped), a Confluence page
-/// read with the linked Atlassian site. The token is sent only to that site's own host.
+/// read with the linked Atlassian site. The token is sent only to that site's own host. Every network hop passes
+/// `url_guard` (never local or link-local; private networks only for a trusted doc) and is pinned to the checked
+/// address.
 pub async fn fetch_text(
     doc: &ContextDoc,
     atlassian: Option<(&crate::jira::client::JiraSite, &str)>,
-    http: &reqwest::Client,
+    guard: &NetGuard<'_>,
 ) -> Result<String> {
-    fetch_text_capped(doc, atlassian, http, MAX_TEXT_BYTES).await
+    fetch_text_capped(doc, atlassian, guard, MAX_TEXT_BYTES).await
 }
 
 /// `bytes` as text, cut at `cap` (on a character boundary) with `TRUNCATED_NOTE` when longer.
@@ -65,7 +68,7 @@ fn capped_text(mut bytes: Vec<u8>, cap: usize) -> String {
 pub(crate) async fn fetch_text_capped(
     doc: &ContextDoc,
     atlassian: Option<(&crate::jira::client::JiraSite, &str)>,
-    http: &reqwest::Client,
+    guard: &NetGuard<'_>,
     cap: usize,
 ) -> Result<String> {
     use crate::jira::confluence::{html_to_text, page_id_from_url, site_of_url, ConfluenceClient};
@@ -80,16 +83,7 @@ pub(crate) async fn fetch_text_capped(
         }
         ContextDocKind::Folder => folder_listing(std::path::Path::new(&doc.target)),
         ContextDocKind::Url => {
-            let ok = url::Url::parse(&doc.target).is_ok_and(|u| matches!(u.scheme(), "http" | "https"));
-            if !ok {
-                return Err(Error::Invalid("A link must start with http:// or https://".into()));
-            }
-            let mut resp = http
-                .get(&doc.target)
-                .timeout(std::time::Duration::from_secs(15))
-                .send()
-                .await
-                .map_err(|e| Error::Provider(format!("Fetching {}: {}", doc.target, e.without_url())))?;
+            let mut resp = guarded_get(&doc.target, doc.trusted, guard).await?;
             if !resp.status().is_success() {
                 return Err(Error::Provider(format!(
                     "Fetching {}: HTTP {}",
@@ -128,10 +122,13 @@ pub(crate) async fn fetch_text_capped(
             let host = site_of_url(&doc.target).unwrap_or_default();
             let no_site = || Error::Precondition(format!("No Atlassian site linked for {host}; link Jira first"));
             let (site, token) = atlassian.ok_or_else(no_site)?;
-            let client = ConfluenceClient::new(site, token)?;
-            if client.base_url() != host {
+            let base = crate::jira::client::normalise_site(&site.site_url)?;
+            if base != host {
                 return Err(no_site());
             }
+            let base_url = url::Url::parse(&base).map_err(|_| no_site())?;
+            let (pin_host, addr) = validate_hop(&base_url, doc.trusted, guard)?;
+            let client = ConfluenceClient::with_http(site, token, pinned_client(&pin_host, addr)?)?;
             let page_id = doc
                 .page_id
                 .clone()
@@ -148,6 +145,42 @@ mod tests {
     use super::*;
     use crate::Error;
 
+    struct MapResolver(Vec<(&'static str, std::net::IpAddr)>, u16);
+
+    impl crate::workspace::url_guard::Resolve for MapResolver {
+        fn resolve(&self, host: &str, port: u16) -> std::io::Result<Vec<std::net::SocketAddr>> {
+            let p = if self.1 == 0 { port } else { self.1 };
+            Ok(self
+                .0
+                .iter()
+                .filter(|(h, _)| *h == host)
+                .map(|(_, ip)| std::net::SocketAddr::new(*ip, p))
+                .collect())
+        }
+    }
+
+    /// `mock.test` stands for the local mock server (exempt from the loopback refusal); nothing else is.
+    fn mock_guard(r: &MapResolver) -> NetGuard<'_> {
+        NetGuard {
+            resolver: r,
+            exempt_host: Some("mock.test".into()),
+        }
+    }
+
+    fn local(port: u16) -> MapResolver {
+        MapResolver(
+            vec![
+                ("mock.test", "127.0.0.1".parse().unwrap()),
+                ("evil.test", "127.0.0.1".parse().unwrap()),
+            ],
+            port,
+        )
+    }
+
+    fn port_of(uri: &str) -> u16 {
+        url::Url::parse(uri).unwrap().port().unwrap()
+    }
+
     fn doc(id: &str, kind: ContextDocKind, target: &str, fetched: Option<chrono::DateTime<chrono::Utc>>) -> ContextDoc {
         ContextDoc {
             id: id.into(),
@@ -157,6 +190,7 @@ mod tests {
             page_id: None,
             fetched_at: fetched,
             order: 0,
+            trusted: false,
         }
     }
 
@@ -167,7 +201,8 @@ mod tests {
         std::fs::create_dir(dir.path().join("sub")).unwrap();
         std::fs::write(dir.path().join("sub/b.md"), "b").unwrap();
         std::fs::write(dir.path().join(".hidden"), "h").unwrap();
-        let http = reqwest::Client::new();
+        let r = local(0);
+        let http = mock_guard(&r);
         assert_eq!(
             fetch_text(
                 &doc(
@@ -229,10 +264,17 @@ mod tests {
             .respond_with(ResponseTemplate::new(200).set_body_string("a <b>"))
             .mount(&server)
             .await;
-        let http = reqwest::Client::new();
+        let port = port_of(&server.uri());
+        let r = local(port);
+        let http = mock_guard(&r);
         assert_eq!(
             fetch_text(
-                &doc("doc-4", ContextDocKind::Url, &format!("{}/spec", server.uri()), None),
+                &doc(
+                    "doc-4",
+                    ContextDocKind::Url,
+                    &format!("http://mock.test:{port}/spec"),
+                    None
+                ),
                 None,
                 &http
             )
@@ -242,7 +284,12 @@ mod tests {
         );
         assert_eq!(
             fetch_text(
-                &doc("doc-5", ContextDocKind::Url, &format!("{}/raw", server.uri()), None),
+                &doc(
+                    "doc-5",
+                    ContextDocKind::Url,
+                    &format!("http://mock.test:{port}/raw"),
+                    None
+                ),
                 None,
                 &http
             )
@@ -280,16 +327,17 @@ mod tests {
             }
             let _ = sock.write_all(b"0\r\n\r\n").await;
         });
-        (format!("http://{addr}/big"), written)
+        (format!("http://mock.test:{}/big", addr.port()), written)
     }
 
     #[tokio::test]
     async fn a_body_over_the_cap_is_truncated() {
         let (url, _written) = chunked_server(vec![b'x'; 64 * 1024]).await;
+        let r = local(port_of(&url));
         let text = fetch_text_capped(
             &doc("doc-6", ContextDocKind::Url, &url, None),
             None,
-            &reqwest::Client::new(),
+            &mock_guard(&r),
             4096,
         )
         .await
@@ -307,9 +355,16 @@ mod tests {
             .respond_with(ResponseTemplate::new(200).set_body_string("y".repeat(10_000)))
             .mount(&server)
             .await;
-        let d = doc("doc-7", ContextDocKind::Url, &format!("{}/huge", server.uri()), None);
+        let port = port_of(&server.uri());
+        let r = local(port);
+        let d = doc(
+            "doc-7",
+            ContextDocKind::Url,
+            &format!("http://mock.test:{port}/huge"),
+            None,
+        );
         assert!(matches!(
-            fetch_text_capped(&d, None, &reqwest::Client::new(), 4096).await,
+            fetch_text_capped(&d, None, &mock_guard(&r), 4096).await,
             Err(Error::Precondition(m)) if m.contains("larger than")
         ));
     }
@@ -322,12 +377,84 @@ mod tests {
         let text = fetch_text_capped(
             &doc("doc-8", ContextDocKind::File, p.to_str().unwrap(), None),
             None,
-            &reqwest::Client::new(),
+            &NetGuard::system(),
             4095,
         )
         .await
         .unwrap();
         assert!(text.ends_with(TRUNCATED_NOTE) && !text.contains('\u{FFFD}'));
         assert_eq!(text.trim_end_matches(TRUNCATED_NOTE).chars().count(), 2047);
+    }
+
+    #[tokio::test]
+    async fn local_metadata_and_untrusted_private_hosts_are_refused() {
+        let r = MapResolver(
+            vec![
+                ("loop.test", "127.0.0.1".parse().unwrap()),
+                ("meta.test", "169.254.169.254".parse().unwrap()),
+                ("wiki.corp", "10.0.0.5".parse().unwrap()),
+                ("mapped.test", "::ffff:127.0.0.1".parse().unwrap()),
+            ],
+            0,
+        );
+        let guard = NetGuard {
+            resolver: &r,
+            exempt_host: None,
+        };
+        for url in [
+            "http://loop.test/x",
+            "http://meta.test/latest/meta-data",
+            "http://127.0.0.1:9/x",
+            "http://169.254.169.254/",
+            "http://mapped.test/",
+        ] {
+            let mut d = doc("doc-9", ContextDocKind::Url, url, None);
+            d.trusted = true;
+            assert!(
+                matches!(fetch_text(&d, None, &guard).await, Err(Error::Precondition(m)) if m.contains("local")),
+                "{url}"
+            );
+        }
+        let untrusted = doc("doc-9", ContextDocKind::Url, "http://wiki.corp/page", None);
+        assert!(
+            matches!(fetch_text(&untrusted, None, &guard).await, Err(Error::Precondition(m)) if m.contains("confirm"))
+        );
+        let wiki = url::Url::parse("http://wiki.corp/page").unwrap();
+        let (host, addr) = crate::workspace::url_guard::validate_hop(&wiki, true, &guard).unwrap();
+        assert_eq!(
+            (host.as_str(), addr.map(|a| a.ip().to_string())),
+            ("wiki.corp", Some("10.0.0.5".into())),
+            "trusted: allowed and pinned"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_redirect_to_a_local_address_is_refused() {
+        use wiremock::matchers::path;
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+        let server = MockServer::start().await;
+        let port = port_of(&server.uri());
+        Mock::given(path("/go"))
+            .respond_with(
+                ResponseTemplate::new(302)
+                    .insert_header("location", format!("http://evil.test:{port}/secret").as_str()),
+            )
+            .mount(&server)
+            .await;
+        Mock::given(path("/secret"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("secret"))
+            .mount(&server)
+            .await;
+        let r = local(port);
+        let mut d = doc(
+            "doc-9",
+            ContextDocKind::Url,
+            &format!("http://mock.test:{port}/go"),
+            None,
+        );
+        d.trusted = true;
+        assert!(
+            matches!(fetch_text(&d, None, &mock_guard(&r)).await, Err(Error::Precondition(m)) if m.contains("local"))
+        );
     }
 }

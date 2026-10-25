@@ -28,6 +28,10 @@ pub struct ContextDoc {
     pub page_id: Option<String>,
     pub fetched_at: Option<DateTime<Utc>>,
     pub order: u32,
+    /// Added by the developer in the app, or confirmed in a workspace import preview. A doc read from a file is
+    /// never trusted until confirmed; only a trusted doc may be fetched from a private network.
+    #[serde(default)]
+    pub trusted: bool,
 }
 
 /// `<app_data>/context`, where fetched reference text is cached (and added to `--add-dir`).
@@ -55,7 +59,7 @@ pub(crate) fn scope_of(container: &Container) -> (&'static str, &str) {
 pub(crate) fn list_rows(conn: &Connection, container: &Container) -> Result<Vec<ContextDoc>> {
     let (kind, id) = scope_of(container);
     let mut stmt = conn.prepare(
-        "SELECT id, kind, target, label, page_id, fetched_at, ord FROM context_docs
+        "SELECT id, kind, target, label, page_id, fetched_at, ord, trusted FROM context_docs
          WHERE scope_kind = ?1 AND scope_id = ?2 ORDER BY ord, id",
     )?;
     let rows = stmt.query_map([kind, id], |r| {
@@ -67,11 +71,12 @@ pub(crate) fn list_rows(conn: &Connection, container: &Container) -> Result<Vec<
             r.get::<_, Option<String>>(4)?,
             r.get::<_, Option<String>>(5)?,
             r.get::<_, u32>(6)?,
+            r.get::<_, bool>(7)?,
         ))
     })?;
     let mut out = Vec::new();
     for row in rows {
-        let (id, kind, target, label, page_id, fetched_at, order) = row?;
+        let (id, kind, target, label, page_id, fetched_at, order, trusted) = row?;
         out.push(ContextDoc {
             id,
             kind: enum_from(&kind)?,
@@ -80,6 +85,7 @@ pub(crate) fn list_rows(conn: &Connection, container: &Container) -> Result<Vec<
             page_id,
             fetched_at: fetched_at.as_deref().map(parse_time).transpose()?,
             order,
+            trusted,
         });
     }
     Ok(out)
@@ -96,8 +102,8 @@ pub(crate) fn replace_rows(conn: &Connection, container: &Container, docs: &[Con
     )?;
     for (i, d) in docs.iter().enumerate() {
         tx.execute(
-            "INSERT INTO context_docs (id, scope_kind, scope_id, kind, target, label, page_id, fetched_at, ord)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, ?8)",
+            "INSERT INTO context_docs (id, scope_kind, scope_id, kind, target, label, page_id, fetched_at, ord, trusted)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, ?8, ?9)",
             rusqlite::params![
                 crate::ids::new_id("doc"),
                 kind,
@@ -106,7 +112,8 @@ pub(crate) fn replace_rows(conn: &Connection, container: &Container, docs: &[Con
                 d.target,
                 d.label,
                 d.page_id,
-                i as u32
+                i as u32,
+                d.trusted
             ],
         )?;
     }
@@ -177,10 +184,8 @@ impl ContextDocs {
                 }
             }
             ContextDocKind::Url | ContextDocKind::Confluence => {
-                let ok = url::Url::parse(target).is_ok_and(|u| matches!(u.scheme(), "http" | "https"));
-                if !ok {
-                    return Err(Error::Invalid("A link must start with http:// or https://".into()));
-                }
+                // the developer adds it, so a private (intranet) host is fine; local and link-local never are
+                super::url_guard::check_lexical(target, true)?;
                 if kind == ContextDocKind::Confluence {
                     page_id = Some(
                         confluence_page_id(target).ok_or_else(|| Error::Invalid("Not a Confluence page URL".into()))?,
@@ -207,10 +212,11 @@ impl ContextDocs {
             page_id,
             fetched_at: None,
             order,
+            trusted: true,
         };
         conn.execute(
-            "INSERT INTO context_docs (id, scope_kind, scope_id, kind, target, label, page_id, fetched_at, ord)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, ?8)",
+            "INSERT INTO context_docs (id, scope_kind, scope_id, kind, target, label, page_id, fetched_at, ord, trusted)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, ?8, 1)",
             rusqlite::params![
                 doc.id,
                 scope_kind,
@@ -296,6 +302,7 @@ mod tests {
             page_id: None,
             fetched_at: fetched,
             order: 0,
+            trusted: false,
         }
     }
     fn ws1() -> Container {

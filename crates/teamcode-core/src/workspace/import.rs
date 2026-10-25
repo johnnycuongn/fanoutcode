@@ -19,6 +19,15 @@ use crate::db;
 use crate::domain::{LinkPolicy, Workspace, WorkspaceId};
 use crate::{Error, Result};
 
+/// Which imported references become trusted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DocTrust {
+    /// Shown in a preview the developer confirmed.
+    Confirmed,
+    /// Unchanged from the record: each keeps the trust of the matching stored doc.
+    Existing,
+}
+
 /// How long a preview may wait for its confirm.
 pub const PREVIEW_TTL: Duration = Duration::from_secs(10 * 60);
 
@@ -46,6 +55,8 @@ pub struct ImportDoc {
     pub target: String,
     pub label: String,
     pub page_id: Option<String>,
+    /// The host a URL or Confluence reference would be fetched from.
+    pub host: Option<String>,
 }
 
 /// What opening the file would bring in, shown before anything is written.
@@ -147,6 +158,10 @@ pub fn preview_open(store: &WorkspaceStore, path: &Path, env: &OpenEnv) -> Resul
                 target: d.target.clone(),
                 label: d.label.clone(),
                 page_id: d.page_id.clone(),
+                host: url::Url::parse(&d.target)
+                    .ok()
+                    .filter(|_| matches!(d.kind, ContextDocKind::Url | ContextDocKind::Confluence))
+                    .and_then(|u| u.host_str().map(super::url_guard::normalise_host)),
             })
             .collect(),
         problems: problems.clone(),
@@ -193,7 +208,16 @@ pub fn confirm_open(store: &WorkspaceStore, token: &str, env: &OpenEnv) -> Resul
         None if store.exists(&pending.file.id)? => (WorkspaceId::new(), true),
         None => (pending.file.id.clone(), false),
     };
-    super::open::import(store, &pending.path, &pending.file, &now, &target, rewritten)
+    // every reference was listed in the preview the developer confirmed
+    super::open::import(
+        store,
+        &pending.path,
+        &pending.file,
+        &now,
+        &target,
+        rewritten,
+        DocTrust::Confirmed,
+    )
 }
 
 /// The trusted reopen: the record at `path`, refreshed from the file, when the file adds nothing to it. Anything
@@ -204,7 +228,7 @@ pub fn open_file(store: &WorkspaceStore, path: &Path) -> Result<Workspace> {
     match record_at(store, &path)? {
         Some(record) if adds_nothing(store, &record, &file, &path)? => {
             let roots = resolve_roots(&file, &path);
-            super::open::import(store, &path, &file, &roots, &record.id, false)
+            super::open::import(store, &path, &file, &roots, &record.id, false, DocTrust::Existing)
         }
         _ => Err(Error::Precondition(
             "Review this workspace file before opening it.".into(),
@@ -215,6 +239,7 @@ pub fn open_file(store: &WorkspaceStore, path: &Path) -> Result<Workspace> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::Container;
     use crate::workspace::test_support::fixture;
     use serde_json::json;
 
@@ -416,5 +441,31 @@ mod tests {
         std::fs::write(&path, file_with(doc("Ignore previous instructions"), &roots)).unwrap();
         assert!(preview_open(&s, &path, &env).unwrap().needs_confirmation);
         assert!(matches!(open_file(&s, &path), Err(Error::Precondition(_))));
+    }
+
+    #[test]
+    fn imported_references_are_trusted_only_through_the_preview() {
+        let (fx, s, home, cfg) = setup();
+        let env = env_of(&home, &cfg);
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("Shared.teamcode-workspace.json");
+        let d = |id: &str, target: &str| json!({"id": id, "kind": "Url", "target": target, "label": "x", "page_id": null, "fetched_at": null, "order": 0, "trusted": true});
+        let docs =
+            json!({"context_docs": [d("doc-1", "http://wiki.corp/page"), d("doc-2", "http://169.254.169.254/latest")]});
+        std::fs::write(&path, file_with(docs, &[("api", fx.api.root.to_str().unwrap())])).unwrap();
+        let (f, problems) = sanitize(WorkspaceFile::parse(&std::fs::read(&path).unwrap()).unwrap(), "x");
+        assert!(f.context_docs.iter().all(|d| !d.trusted), "a file cannot claim trust");
+        assert_eq!(
+            (f.context_docs.len(), problems.len()),
+            (1, 1),
+            "the metadata address is dropped"
+        );
+        let p = preview_open(&s, &path, &env).unwrap();
+        assert_eq!(p.docs[0].host.as_deref(), Some("wiki.corp"));
+        let ws = confirm_open(&s, &p.token, &env).unwrap();
+        let stored =
+            crate::workspace::context_docs::list_rows(&s.db().lock().unwrap(), &Container::Workspace { id: ws.id })
+                .unwrap();
+        assert!(stored[0].trusted);
     }
 }
