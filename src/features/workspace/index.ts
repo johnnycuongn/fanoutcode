@@ -15,3 +15,8 @@ export { jiraStore, issueKey } from "./jiraStore";
 export type { JiraScope, JiraState } from "./jiraStore";
 export { JiraLinkForm } from "./components/JiraLinkForm";
 export { IssuePicker } from "./components/IssuePicker";
+export { costsStore } from "./costsStore";
+export { formatTokens, rowsFor } from "./costFormat";
+export type { CostGroup } from "./costFormat";
+export { CostsPanel } from "./components/CostsPanel";
+export type { CostsPanelProps } from "./components/CostsPanel";

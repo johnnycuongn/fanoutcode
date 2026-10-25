@@ -1,10 +1,12 @@
 // The workspace settings screen: file, projects, linking policy, options, prompt fragments, agents, workspace
 // references, the Jira default site and costs. Plan 06's settings dialog mounts it for workspace windows.
-import { useEffect, type ReactElement, type ReactNode } from "react";
+import { useEffect, useMemo, type ReactElement, type ReactNode } from "react";
 import type { WorkspaceId } from "@/lib/bindings";
 import { workspaceStore } from "../store";
 import { useSetting, workspaceScope } from "@/features/settings";
 import { ContextDocsEditor } from "./ContextDocsEditor";
+import { projectsStore } from "@/lib/stores/projectsStore";
+import { CostsPanel } from "./CostsPanel";
 import { JiraLinkForm } from "./JiraLinkForm";
 import { LinkingPolicy } from "./LinkingPolicy";
 import { PromptFragments } from "./PromptFragments";
@@ -19,6 +21,8 @@ export type WorkspaceSettingsProps = { workspaceId: WorkspaceId; jira?: ReactNod
 export function WorkspaceSettings({ workspaceId, jira, costs }: WorkspaceSettingsProps): ReactElement {
   const loaded = workspaceStore.useSelector((s) => s.workspace?.id === workspaceId);
   const site = useSetting(workspaceScope(workspaceId), "jira");
+  const byId = projectsStore.useSelector((s) => s.byId);
+  const names = useMemo(() => Object.fromEntries(Object.values(byId).map((p) => [p.id, p.name])), [byId]);
   useEffect(() => {
     if (!loaded) void workspaceStore.load(workspaceId);
   }, [loaded, workspaceId]);
@@ -36,7 +40,7 @@ export function WorkspaceSettings({ workspaceId, jira, costs }: WorkspaceSetting
       <Section title="Jira default site">
         {jira ?? <JiraLinkForm scope={{ workspace: workspaceId }} linked={site ?? null} />}
       </Section>
-      {costs && <Section title="Costs">{costs}</Section>}
+      <Section title="Costs">{costs ?? <CostsPanel scope={{ workspace: workspaceId }} names={names} />}</Section>
     </div>
   );
 }
