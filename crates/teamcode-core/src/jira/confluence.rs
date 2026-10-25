@@ -152,7 +152,8 @@ pub fn html_to_text(html: &str) -> String {
             continue;
         }
         if c == '&' {
-            if let Some(semi) = rest.find(';').filter(|semi| *semi <= 12) {
+            // a bounded byte search: `;` is ASCII, so a hit is a char boundary, and a page of `&` stays linear
+            if let Some(semi) = rest.as_bytes().iter().take(13).position(|&b| b == b';') {
                 if let Some(ch) = decode_entity(&rest[1..semi]) {
                     raw.push(ch);
                     rest = &rest[semi + 1..];
@@ -269,5 +270,17 @@ mod tests {
         );
         assert_eq!(html_to_text("text <unterminated é"), "text");
         assert_eq!(html_to_text("&é;"), "&é;");
+    }
+
+    #[test]
+    fn many_ampersands_without_semicolons_stay_linear() {
+        let page = "&".repeat(1_000_000);
+        let start = std::time::Instant::now();
+        assert_eq!(html_to_text(&page).len(), 1_000_000);
+        assert!(
+            start.elapsed() < std::time::Duration::from_secs(2),
+            "{:?}",
+            start.elapsed()
+        );
     }
 }
