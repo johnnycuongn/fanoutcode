@@ -1,9 +1,10 @@
-// STUB(plan 09): the smallest CanvasPane with Plan 09's canonical props (A20); Plan 09 replaces this file and may add
-// `renderTeam`, which the views feature passes to the task page when present.
-import { createElement, type ReactElement } from "react";
-import { Panel } from "@/components/ui";
-import type { TaskId } from "@/lib/bindings";
-
-export function CanvasPane({ taskId }: { taskId: TaskId }): ReactElement {
-  return createElement(Panel, { variant: "plain", className: "h-full text-mute" }, `Team ${taskId}`);
-}
+// The canvas feature's public surface (A5, A20): the Team tab, its strip and pane, the task-page wiring, the ⌘⇧J
+// placement helper and the store's open/close.
+export { TeamTab } from "./components/TeamTab";
+export { TeamStrip } from "./components/TeamStrip";
+export { CanvasPane } from "./components/CanvasPane";
+export { renderTeam, onOpenTeamPane, teamCanvasContent } from "./teamPage";
+export { teamShortcut, teamSummary, DOCK_GROWN_FRACTION } from "./placement";
+export type { TeamPlacementState, TeamPlacementAction } from "./placement";
+export { openCanvas, closeCanvas } from "./store";
+export type { CanvasNode, CanvasEdge } from "./types";
