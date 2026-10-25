@@ -135,7 +135,13 @@ export function DecisionPane({ task, row }: DecisionPaneProps): ReactElement {
       <div className="grid min-w-0 grid-cols-2 gap-2">
         <DiffBox who={other} taskId={otherId} repo={row.repo_root} path={row.path} />
         {row.pending ? (
-          <WillWriteBox taskTitle={task.title} taskId={task.id} repo={row.repo_root} path={row.path} />
+          <WillWriteBox
+            taskTitle={task.title}
+            taskId={task.id}
+            otherTask={row.other_task}
+            repo={row.repo_root}
+            path={row.path}
+          />
         ) : (
           <DiffBox who={task.title} taskId={task.id} repo={row.repo_root} path={row.path} />
         )}

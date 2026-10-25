@@ -55,7 +55,8 @@ pub fn awaits_snapshot(row: &OverlapRow) -> bool {
 /// - a denied write (`path`): one, with the newest of `recent` that writes that file as its snapshot, else an `Edit`
 ///   with a null input that a later `PreToolUse` fills in;
 /// - a denied command: one per claimed path of another task it touches (`evaluate_git` from the repo root), else one
-///   per claim of `other` in the repo, each with the command. Empty without claims (nothing to key them on).
+///   per claim of `other` in the repo, else (the claims moved before the line was read) one per claim of anyone else
+///   left in the repo, each with the command. Empty without claims (nothing to key them on).
 #[allow(clippy::too_many_arguments)]
 pub fn denial_rows(
     own: &TaskId,
@@ -93,10 +94,17 @@ pub fn denial_rows(
         .filter(|c| c.task_id.as_ref() != Some(own))
         .filter(|c| !grants.covers(&file.repo_root, &c.path, c.task_id.as_ref()))
         .collect();
-    let named: Vec<&Claim> = match evaluate_git(command, repo, repo, &others) {
+    let touched: Vec<&Claim> = match evaluate_git(command, repo, repo, &others) {
         Some((_, paths)) => others.iter().copied().filter(|c| paths.contains(&c.path)).collect(),
-        None => others.iter().copied().filter(|c| c.task_id.as_ref() == other).collect(),
+        None => Vec::new(),
     };
+    let of_other = || -> Vec<&Claim> { others.iter().copied().filter(|c| c.task_id.as_ref() == other).collect() };
+    // the claims may have moved between the hook's check and this line: the session waits on what is left rather
+    // than on nothing
+    let named = [touched, of_other()]
+        .into_iter()
+        .find(|v| !v.is_empty())
+        .unwrap_or_else(|| others.clone());
     named
         .into_iter()
         .map(|c| Denied {
@@ -278,6 +286,30 @@ mod tests {
             == PendingDecision::Command {
                 command: "git add -A".into()
             }));
+    }
+
+    #[test]
+    fn a_command_whose_claims_moved_still_opens_a_decision() {
+        // t-b2's claim left the file before the denial was processed (it committed): the command still waits on the
+        // claims that are left, rather than on nothing
+        let file = claims(vec![claim("src/b.ts", Some("t-c3")), claim("src/g.ts", None)]);
+        for command in ["git add a.ts", "git add src/a.ts"] {
+            let rows = denial_rows(
+                &id("t-a1"),
+                Path::new("/r"),
+                None,
+                Some(command),
+                Some(&id("t-b2")),
+                Some(&file),
+                &GrantsFile::default(),
+                &[],
+            );
+            let keys: Vec<(&str, Option<&str>)> = rows
+                .iter()
+                .map(|d| (d.path.as_str(), d.other_task.as_ref().map(TaskId::as_str)))
+                .collect();
+            assert_eq!(keys, vec![("src/b.ts", Some("t-c3")), ("src/g.ts", None)], "{command}");
+        }
     }
 
     #[test]

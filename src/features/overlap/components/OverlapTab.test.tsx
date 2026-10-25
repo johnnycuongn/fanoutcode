@@ -80,7 +80,7 @@ describe("OverlapTab", () => {
     expect(screen.getByText("What Checkout will write")).toBeInTheDocument();
     expect(await screen.findByText("const a = 2;")).toBeInTheDocument();
     expect(screen.getByText("const a = 1;")).toBeInTheDocument();
-    expect(commands.overlapPendingInput).toHaveBeenCalledWith("task-b2", "/r/alpha", "src/a.ts");
+    expect(commands.overlapPendingInput).toHaveBeenCalledWith("task-b2", "/r/alpha", "src/a.ts", "task-c3");
     const radios = screen.getAllByRole("radio").map((r) => r.getAttribute("aria-labelledby"));
     expect(radios).toHaveLength(4);
     for (const name of [

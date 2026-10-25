@@ -8,7 +8,7 @@
 
 use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use chrono::Utc;
 use fanoutcode_core::changes::{self, AttributedFile};
@@ -49,6 +49,23 @@ pub struct OverlapCache {
     pub(super) unattributed: Mutex<HashMap<PathBuf, Vec<AttributedFile>>>,
     /// Per shared repo, the status `observe_hookless` saw last.
     pub(super) last_status: Mutex<HashMap<PathBuf, Vec<StatusEntry>>>,
+    /// Per task, the lock every read-modify-write of its grants file in the shell holds (`grants_lock`), so a prune
+    /// and a decision never drop each other's write. The claim-check hook runs in its own process and is not
+    /// covered: its rewrite of the file can still race one of these.
+    grants_locks: Mutex<HashMap<TaskId, Arc<Mutex<()>>>>,
+}
+
+/// The task's grants-file lock (see `OverlapCache::grants_locks`); hold the returned guard's mutex while reading,
+/// changing and writing the file.
+pub(super) fn grants_lock(state: &AppState, id: &TaskId) -> Arc<Mutex<()>> {
+    state
+        .overlap
+        .grants_locks
+        .lock()
+        .expect("grants locks lock")
+        .entry(id.clone())
+        .or_default()
+        .clone()
 }
 
 /// An active (not archived) task with its home root and repos.
@@ -196,6 +213,8 @@ pub(super) async fn orphan_files(app: &AppHandle, task: &Task) -> Result<()> {
 
 /// Drops the task's grants whose claims are gone, reading the claims of its other repos from disk.
 fn prune_grants(state: &AppState, a: &Active, fresh: &ClaimsFile) -> Result<()> {
+    let lock = grants_lock(state, &a.task.id);
+    let _held = lock.lock().expect("grants lock");
     let path = grants::grants_path(&state.data_dir, &a.task.id);
     let mut held = grants::read_grants(&path);
     if held.grants.is_empty() {

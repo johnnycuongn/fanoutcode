@@ -19,7 +19,7 @@ use fanoutcode_core::pipeline::{self, Effect};
 use fanoutcode_core::{db, Error, Result};
 use tauri::{AppHandle, Manager};
 
-use super::{deliver_notes_if_idle, emit_overlap_changed, rebuild_claims, rebuild_overlaps, repin};
+use super::{deliver_notes_if_idle, emit_overlap_changed, grants_lock, rebuild_claims, rebuild_overlaps, repin};
 use crate::events;
 use crate::git_watcher;
 use crate::observe::{self, log_err};
@@ -115,6 +115,8 @@ pub async fn decide(
     let out = outcome(decision, &row, &me.title, &other_title, now);
 
     if let Some(g) = out.grant.clone() {
+        let lock = grants_lock(&state, task_id);
+        let _guard = lock.lock().expect("grants lock");
         let mut held = grants::read_grants(&grants::grants_path(&state.data_dir, task_id));
         held.add(g);
         grants::write_grants(&state.data_dir, task_id, &held)?;
