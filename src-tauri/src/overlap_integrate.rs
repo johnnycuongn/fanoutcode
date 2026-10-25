@@ -122,7 +122,8 @@ async fn rerecord_base(app: &AppHandle, state: &AppState, id: &TaskId, tree: &Pa
 
 /// A main-agent `Stop` of a task bringing its base in: Done (the sentinel on a clean tree) → Idle with the
 /// integration in the timeline, and after a rebase the base re-recorded; Conflicted → *Merge needs you* with the
-/// unmerged paths; otherwise Working. Returns whether it handled the event (the stage feed then skips it).
+/// unmerged paths; otherwise handed back `Replied`, still marked integrating so Resume, Abort and the next `Stop`
+/// treat it as one. Returns whether it handled the event (the stage feed then skips it).
 pub async fn on_main_stop(app: &AppHandle, state: &AppState, task: &Task, ev: &TaskEvent) -> Result<bool> {
     let HookEvent::Stop {
         last_assistant_message, ..
@@ -157,7 +158,16 @@ pub async fn on_main_stop(app: &AppHandle, state: &AppState, task: &Task, ev: &T
             rerecord_base(app, state, &task.id, &tree, &base).await?;
         }
     }
-    let effects = stop_effects(result, &base, aborted, &tree, conflicted, task.stage, Utc::now());
+    let effects = stop_effects(
+        result,
+        &base,
+        aborted,
+        &tree,
+        conflicted,
+        task.stage,
+        last_assistant_message,
+        Utc::now(),
+    );
     apply(app, state, &task.id, effects)?;
     Ok(true)
 }

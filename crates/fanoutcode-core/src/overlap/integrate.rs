@@ -11,6 +11,7 @@ use super::OverlapRow;
 use crate::domain::{AgentState, HandbackReason, Stage, TaskId};
 pub use crate::git::valid_branch;
 use crate::memory::{IndexEntry, TimelineKind};
+use crate::pipeline::handback::first_line;
 use crate::pipeline::Effect;
 use crate::settings::Integration;
 
@@ -21,7 +22,8 @@ pub enum IntegrationResult {
     Done,
     /// Conflict markers or a merge or rebase in progress: `MergeNeedsYou`, whatever the session said.
     Conflicted,
-    /// Neither: the session is still at it.
+    /// Neither: the session stopped short of finishing (a question, a report, a stall). It is handed back `Replied`
+    /// while the task stays integrating, so the next `Stop` is judged the same way and Resume and Abort still work.
     StillWorking,
 }
 
@@ -148,7 +150,9 @@ pub fn conflict_ctxs(rows: &[OverlapRow], intent_of: impl Fn(&TaskId) -> Option<
 
 /// The effects of an integrating session's `Stop` (§6.3): `Done` returns the task to Idle and records the
 /// integration in the timeline (or the abort, when `aborted`); `Conflicted` hands back `MergeNeedsYou` with the
-/// conflicted paths of `repo`; `StillWorking` keeps it Working.
+/// conflicted paths of `repo`; `StillWorking` hands back `Replied` with the first line of `last_message`, as a
+/// normal `Stop` without a sentinel does, so a stalled integration never shows Working forever.
+#[allow(clippy::too_many_arguments)]
 pub fn stop_effects(
     result: IntegrationResult,
     base: &str,
@@ -156,6 +160,7 @@ pub fn stop_effects(
     repo: &Path,
     conflicted: Vec<String>,
     stage: Stage,
+    last_message: &str,
     now: DateTime<Utc>,
 ) -> Vec<Effect> {
     match result {
@@ -180,7 +185,11 @@ pub fn stop_effects(
                 paths: conflicted,
             },
         })],
-        IntegrationResult::StillWorking => vec![Effect::SetState(AgentState::Working)],
+        IntegrationResult::StillWorking => vec![Effect::SetState(AgentState::NeedsYou {
+            reason: HandbackReason::Replied {
+                first_line: first_line(last_message),
+            },
+        })],
     }
 }
 
@@ -343,11 +352,29 @@ mod tests {
             })
         };
         assert_eq!(
-            stop_effects(IntegrationResult::Done, "main", false, repo, vec![], Stage::Done, now),
+            stop_effects(
+                IntegrationResult::Done,
+                "main",
+                false,
+                repo,
+                vec![],
+                Stage::Done,
+                "",
+                now
+            ),
             [Effect::SetState(AgentState::Idle), entry("integrated main")]
         );
         assert_eq!(
-            stop_effects(IntegrationResult::Done, "main", true, repo, vec![], Stage::Done, now),
+            stop_effects(
+                IntegrationResult::Done,
+                "main",
+                true,
+                repo,
+                vec![],
+                Stage::Done,
+                "",
+                now
+            ),
             [Effect::SetState(AgentState::Idle), entry("aborted bringing main in")]
         );
         assert_eq!(
@@ -358,6 +385,7 @@ mod tests {
                 repo,
                 vec!["src/a.ts".into()],
                 Stage::Done,
+                "",
                 now
             ),
             [Effect::SetState(AgentState::NeedsYou {
@@ -375,9 +403,39 @@ mod tests {
                 repo,
                 vec![],
                 Stage::Done,
+                "Running the tests now.",
                 now
             ),
-            [Effect::SetState(AgentState::Working)]
+            [Effect::SetState(AgentState::NeedsYou {
+                reason: HandbackReason::Replied {
+                    first_line: "Running the tests now.".into()
+                },
+            })]
+        );
+    }
+
+    #[test]
+    fn a_stop_without_sentinel_or_conflicts_hands_back_replied() {
+        let now: DateTime<Utc> = "2026-10-25T10:00:00Z".parse().unwrap();
+        let message = "## I am stuck\n\nThe tests in src/a.ts fail after the merge.";
+        let result = integration_result(message, false);
+        assert_eq!(result, IntegrationResult::StillWorking);
+        assert_eq!(
+            stop_effects(
+                result,
+                "main",
+                false,
+                Path::new("/wt/a"),
+                vec![],
+                Stage::Done,
+                message,
+                now
+            ),
+            [Effect::SetState(AgentState::NeedsYou {
+                reason: HandbackReason::Replied {
+                    first_line: "I am stuck".into()
+                },
+            })]
         );
     }
 
