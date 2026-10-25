@@ -442,3 +442,77 @@ fn nesting_past_the_cap_is_conservative() {
     assert_eq!(eval(deep, "/r", &claims()), Some((GitRule::Unparsed, all)));
     assert_eq!(eval("sh -c \"bash -c 'git status'\"", "/r", &claims()), None);
 }
+
+#[test]
+fn short_magic_with_a_trailing_colon_is_parsed() {
+    assert_eq!(
+        eval("git add ':!:src/a.ts'", "/r", &claims()).map(|h| h.1),
+        Some(paths(&["README.md", "src/deep/b.ts"]))
+    );
+    assert_eq!(
+        eval("git add ':^:src'", "/r", &claims()).map(|h| h.1),
+        Some(paths(&["README.md"]))
+    );
+    assert_eq!(
+        eval("git restore ':/:src/a.ts'", "/r/src/deep", &claims()),
+        Some((GitRule::RestorePath, paths(&["src/a.ts"])))
+    );
+}
+
+#[test]
+fn icase_pathspec_matches_case_insensitively() {
+    assert_eq!(
+        eval("git add ':(icase)SRC/A.TS'", "/r", &claims()).map(|h| h.1),
+        Some(paths(&["src/a.ts"]))
+    );
+    assert_eq!(
+        eval("git checkout -- ':(icase,top)readme.MD'", "/r/src", &claims()).map(|h| h.1),
+        Some(paths(&["README.md"]))
+    );
+    assert_eq!(
+        eval("git add ':(icase)Src/*.TS'", "/r", &claims()).map(|h| h.1),
+        Some(paths(&["src/a.ts", "src/deep/b.ts"]))
+    );
+    // without icase, case counts
+    assert_eq!(eval("git add SRC/A.TS", "/r", &claims()), None);
+}
+
+#[test]
+fn icase_env_or_flag_matches_case_insensitively() {
+    for cmd in [
+        "git --icase-pathspecs add SRC/A.TS",
+        "GIT_ICASE_PATHSPECS=1 git add SRC/A.TS",
+        "env GIT_ICASE_PATHSPECS=1 git add SRC/A.TS",
+        "sh -c 'GIT_ICASE_PATHSPECS=1 git add SRC/A.TS'",
+    ] {
+        assert_eq!(
+            eval(cmd, "/r", &claims()).map(|h| h.1),
+            Some(paths(&["src/a.ts"])),
+            "{cmd}"
+        );
+    }
+    assert_eq!(eval("GIT_ICASE_PATHSPECS=0 git add SRC/A.TS", "/r", &claims()), None);
+}
+
+#[test]
+fn unknown_long_magic_names_every_claim() {
+    let all = paths(&["README.md", "src/a.ts", "src/deep/b.ts"]);
+    for cmd in [
+        "git add ':(attr:binary)nothing'",
+        "git checkout -- ':(future)x'",
+        "git add ':(top,whatever)x'",
+    ] {
+        assert_eq!(eval(cmd, "/r", &claims()).map(|h| h.1), Some(all.clone()), "{cmd}");
+    }
+    // `literal` reads the path as written, no glob
+    assert_eq!(eval("git add ':(literal)src/*.ts'", "/r", &claims()), None);
+    assert_eq!(
+        eval("git add ':(literal)src/a.ts'", "/r", &claims()).map(|h| h.1),
+        Some(paths(&["src/a.ts"]))
+    );
+    // `glob` is read as a (wider) glob
+    assert_eq!(
+        eval("git add ':(glob)src/*.ts'", "/r", &claims()).map(|h| h.1.contains(&"src/a.ts".to_owned())),
+        Some(true)
+    );
+}

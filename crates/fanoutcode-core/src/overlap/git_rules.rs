@@ -135,7 +135,14 @@ fn staged_paths(claimed: &[&Claim]) -> Vec<String> {
 const TAKES_PATHSPECS: &[&str] = &["commit", "add", "checkout", "restore", "rm", "reset", "stash"];
 
 /// One `git <sub> <args>` run in `dir`, inside `repo`.
-fn git_rule(sub: &str, args: &[String], dir: &Path, repo: &Path, claimed: &[&Claim]) -> Option<(GitRule, Vec<String>)> {
+fn git_rule(
+    sub: &str,
+    args: &[String],
+    dir: &Path,
+    repo: &Path,
+    claimed: &[&Claim],
+    icase: bool,
+) -> Option<(GitRule, Vec<String>)> {
     // paths read from a file (or stdin) cannot be seen: every claim counts
     let from_file = args
         .iter()
@@ -170,11 +177,11 @@ fn git_rule(sub: &str, args: &[String], dir: &Path, repo: &Path, claimed: &[&Cla
             } else if specs.is_empty() {
                 (GitRule::CommitStaged, staged_paths(claimed))
             } else if with_index {
-                let mut paths = named(&specs, dir, repo, claimed);
+                let mut paths = named(&specs, dir, repo, claimed, icase);
                 paths.extend(staged_paths(claimed));
                 (GitRule::CommitStaged, paths)
             } else {
-                (GitRule::CommitPath, named(&specs, dir, repo, claimed))
+                (GitRule::CommitPath, named(&specs, dir, repo, claimed, icase))
             }
         }
         "add" => {
@@ -186,7 +193,7 @@ fn git_rule(sub: &str, args: &[String], dir: &Path, repo: &Path, claimed: &[&Cla
             if has(&a, 'A', "--all") || has(&a, 'u', "--update") || names_root {
                 (GitRule::AddAll, all_paths(claimed))
             } else {
-                (GitRule::AddPath, named(&specs, dir, repo, claimed))
+                (GitRule::AddPath, named(&specs, dir, repo, claimed, icase))
             }
         }
         "checkout" => {
@@ -200,7 +207,7 @@ fn git_rule(sub: &str, args: &[String], dir: &Path, repo: &Path, claimed: &[&Cla
             if has(&a, 'f', "--force") {
                 (GitRule::CheckoutForce, all_paths(claimed))
             } else {
-                (GitRule::CheckoutPath, named(specs, dir, repo, claimed))
+                (GitRule::CheckoutPath, named(specs, dir, repo, claimed, icase))
             }
         }
         "switch" => {
@@ -213,7 +220,7 @@ fn git_rule(sub: &str, args: &[String], dir: &Path, repo: &Path, claimed: &[&Cla
         "rm" => {
             let a = split_args(args, "", &[]);
             let specs: Vec<&str> = a.positionals.iter().chain(&a.after_dashes).copied().collect();
-            (GitRule::Remove, named(&specs, dir, repo, claimed))
+            (GitRule::Remove, named(&specs, dir, repo, claimed, icase))
         }
         "restore" => {
             let a = split_args(args, "s", &["source"]);
@@ -222,7 +229,7 @@ fn git_rule(sub: &str, args: &[String], dir: &Path, repo: &Path, claimed: &[&Cla
                 return None;
             }
             let specs: Vec<&str> = a.positionals.iter().chain(&a.after_dashes).copied().collect();
-            (GitRule::RestorePath, named(&specs, dir, repo, claimed))
+            (GitRule::RestorePath, named(&specs, dir, repo, claimed, icase))
         }
         "stash" => match args.first().map(String::as_str) {
             Some("list" | "show") => return None,
@@ -272,6 +279,11 @@ fn evaluate_in(
     let mut cwd = cwd.to_owned();
     for seg in segments(command) {
         let words = strip_prefixes(&seg.words);
+        // `GIT_ICASE_PATHSPECS=1 git …`, `env GIT_ICASE_PATHSPECS=1 git …`
+        let mut icase = seg.words[..seg.words.len() - words.len()].iter().any(|w| {
+            w.strip_prefix("GIT_ICASE_PATHSPECS=")
+                .is_some_and(|v| !matches!(v, "" | "0" | "false"))
+        });
         let Some((first, rest)) = words.split_first() else {
             continue;
         };
@@ -315,6 +327,7 @@ fn evaluate_in(
                     i += 1;
                 }
                 "-c" | "--git-dir" | "--work-tree" | "--namespace" => i += 1,
+                "--icase-pathspecs" => icase = true,
                 _ => {}
             }
         }
@@ -322,7 +335,7 @@ fn evaluate_in(
         if rel_in(repo, &dir).is_none() {
             continue;
         }
-        if let Some(hit) = git_rule(sub, &rest[i + 1..], &dir, repo, claimed) {
+        if let Some(hit) = git_rule(sub, &rest[i + 1..], &dir, repo, claimed, icase) {
             return Some(hit);
         }
     }
