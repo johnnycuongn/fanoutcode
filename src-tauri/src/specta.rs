@@ -10,8 +10,7 @@ use teamcode_core::{Error, Result};
 use crate::commands::tests as test_runs;
 use crate::commands::{
     activity, canvas, context_docs, cost, git, hooks, jira, livespec, memory, projects, sessions, settings, tasks,
-    views,
-    windows, workspaces,
+    views, windows, workspaces,
 };
 use crate::events::{
     ContextDocsChanged, CostUpdated, GitChanges, NeedsYou, SessionAttached, SessionExited, SessionQueueChanged,

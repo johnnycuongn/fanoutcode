@@ -95,6 +95,8 @@ export const SETTINGS = {
   terminal_font_size: 13,
   terminal_ligatures: false,
   scrollback_lines: 10000,
+  jira: null,
+  jira_transitions: { enabled: false, on_stage: {} },
   first_run_complete: true,
 } satisfies ResolvedSettings;
 

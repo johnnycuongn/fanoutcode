@@ -51,6 +51,7 @@ export const HANDLERS: Record<string, (args: Args) => unknown> = {
   hooks_plan_steps: (args) => PLANS[String(args.taskId)] ?? EMPTY_PLAN,
   git_changes: () => [],
   cost_summary: () => COST,
+  context_docs_list: () => [],
   canvas_positions_get: () => [],
   canvas_positions_set: () => null,
   sessions_open: () => "s-0e1",
