@@ -5,7 +5,7 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use serde_json::Value;
 
 use super::{repo_for, AttributedFile, ChangeSource, MAIN_AGENT};
@@ -177,6 +177,31 @@ impl Attributor {
             })
     }
 
+    /// A hookless session's edits in a shared root (Plan 11, §4): every dirty path of `repo` that no agent has
+    /// attributed yet (neither it nor, for a rename, its old name) is attributed to the main agent as `Observed`.
+    /// The caller decides that this task's session is the only hookless one producing output there.
+    pub fn observe_dirty(&mut self, repo: &Path, status: &[StatusEntry], now: DateTime<Utc>) -> Vec<AttributedFile> {
+        let mut fresh = Vec::new();
+        for e in status {
+            let known = self
+                .files
+                .iter()
+                .any(|f| f.repo_root == repo && (f.path == e.path || e.orig_path.as_deref() == Some(f.path.as_str())));
+            if !known {
+                let f = AttributedFile {
+                    repo_root: repo.to_owned(),
+                    path: e.path.clone(),
+                    agent_id: MAIN_AGENT.to_owned(),
+                    source: ChangeSource::Observed,
+                    added_at: now,
+                };
+                self.files.push(f.clone());
+                fresh.push(f);
+            }
+        }
+        fresh
+    }
+
     pub fn files(&self) -> &[AttributedFile] {
         &self.files
     }
@@ -188,5 +213,63 @@ impl Attributor {
     /// The windows still waiting on a status, oldest first (the git watcher feeds them).
     pub fn open_windows(&self) -> Vec<u64> {
         self.windows.keys().copied().collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn entry(path: &str, orig: Option<&str>) -> StatusEntry {
+        StatusEntry {
+            path: path.into(),
+            status: if orig.is_some() {
+                FileStatus::Renamed
+            } else {
+                FileStatus::Modified
+            },
+            orig_path: orig.map(str::to_owned),
+        }
+    }
+
+    #[test]
+    fn observe_dirty_attributes_only_new_dirty_paths_as_observed() {
+        let repo = Path::new("/r");
+        let earlier: DateTime<Utc> = "2026-10-25T09:00:00Z".parse().unwrap();
+        let now: DateTime<Utc> = "2026-10-25T10:00:00Z".parse().unwrap();
+        let known = |path: &str, agent: &str, root: &str| AttributedFile {
+            repo_root: root.into(),
+            path: path.into(),
+            agent_id: agent.into(),
+            source: ChangeSource::Hook,
+            added_at: earlier,
+        };
+        let mut a = Attributor::with_files(
+            vec![repo.into()],
+            vec![
+                known("src/a.ts", "sub-1", "/r"),
+                known("src/old.ts", MAIN_AGENT, "/r"),
+                known("src/b.ts", MAIN_AGENT, "/elsewhere"),
+            ],
+        );
+        let status = [
+            entry("src/a.ts", None),
+            entry("src/b.ts", None),
+            entry("src/new.ts", Some("src/old.ts")),
+        ];
+        let fresh = a.observe_dirty(repo, &status, now);
+        assert_eq!(
+            fresh,
+            vec![AttributedFile {
+                repo_root: repo.into(),
+                path: "src/b.ts".into(),
+                agent_id: MAIN_AGENT.into(),
+                source: ChangeSource::Observed,
+                added_at: now,
+            }]
+        );
+        assert_eq!(a.files().len(), 4);
+        // seen once, never again
+        assert!(a.observe_dirty(repo, &status, now).is_empty());
     }
 }

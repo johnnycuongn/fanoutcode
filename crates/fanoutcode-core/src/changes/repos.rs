@@ -17,11 +17,13 @@ pub fn repos_of(task: &Task, home_root: &Path) -> Vec<PathBuf> {
 }
 
 /// Per repo, the paths that must be committed (or undone) before the task is Done (§6.6): every attributed path plus
-/// every file the last change set held for it. Repos with none are left out.
+/// every file the last change set held for it, less the paths another task took over (Plan 11, §5.4). Repos with
+/// none are left out.
 pub fn done_paths(
     repos: &[PathBuf],
     attributed: &[AttributedFile],
     last: Option<&ChangeSet>,
+    taken_over: &[(PathBuf, Vec<String>)],
 ) -> Vec<(PathBuf, Vec<String>)> {
     repos
         .iter()
@@ -33,6 +35,12 @@ pub fn done_paths(
                 .collect();
             let cached = last.into_iter().flat_map(|s| &s.repos).filter(|r| &r.repo_root == repo);
             paths.extend(cached.flat_map(|r| r.files.iter().map(|f| f.path.clone())));
+            let gone: Vec<&String> = taken_over
+                .iter()
+                .filter(|(r, _)| r == repo)
+                .flat_map(|(_, p)| p)
+                .collect();
+            paths.retain(|p| !gone.contains(&p));
             paths.sort();
             paths.dedup();
             (!paths.is_empty()).then(|| (repo.clone(), paths))
@@ -91,9 +99,34 @@ mod tests {
         };
         let repos = vec![PathBuf::from("/app"), "/api".into()];
         assert_eq!(
-            done_paths(&repos, &[a], Some(&set)),
+            done_paths(&repos, &[a], Some(&set), &[]),
             vec![(PathBuf::from("/app"), vec!["a.rs".to_owned(), "b.rs".into()])]
         );
-        assert!(done_paths(&repos, &[], None).is_empty());
+        assert!(done_paths(&repos, &[], None, &[]).is_empty());
+    }
+
+    #[test]
+    fn done_paths_skips_taken_over_paths() {
+        let file = |p: &str| AttributedFile {
+            repo_root: "/app".into(),
+            path: p.into(),
+            agent_id: "main".into(),
+            source: ChangeSource::Hook,
+            added_at: Utc::now(),
+        };
+        let repos = vec![PathBuf::from("/app")];
+        let attributed = [file("a.rs"), file("b.rs")];
+        let other_repo = (PathBuf::from("/api"), vec!["b.rs".to_owned()]);
+        assert_eq!(
+            done_paths(&repos, &attributed, None, std::slice::from_ref(&other_repo)),
+            vec![(PathBuf::from("/app"), vec!["a.rs".to_owned(), "b.rs".into()])]
+        );
+        let taken = [(PathBuf::from("/app"), vec!["b.rs".to_owned()]), other_repo];
+        assert_eq!(
+            done_paths(&repos, &attributed, None, &taken),
+            vec![(PathBuf::from("/app"), vec!["a.rs".to_owned()])]
+        );
+        let all = [(PathBuf::from("/app"), vec!["a.rs".to_owned(), "b.rs".into()])];
+        assert!(done_paths(&repos, &attributed, None, &all).is_empty());
     }
 }
