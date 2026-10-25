@@ -5,6 +5,7 @@
 pub mod context_docs;
 pub mod file;
 pub mod import;
+pub(crate) mod import_checks;
 pub mod link;
 pub mod open;
 pub mod policy;

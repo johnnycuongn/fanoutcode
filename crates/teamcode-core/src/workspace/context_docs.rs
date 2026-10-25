@@ -71,3 +71,32 @@ pub(crate) fn list_rows(conn: &Connection, container: &Container) -> Result<Vec<
     }
     Ok(out)
 }
+
+/// Replaces the container's docs with `docs` in their order, each under a fresh id (ids from a file are never
+/// trusted to be unique across containers).
+pub(crate) fn replace_rows(conn: &Connection, container: &Container, docs: &[ContextDoc]) -> Result<()> {
+    let (kind, id) = scope_of(container);
+    let tx = conn.unchecked_transaction()?;
+    tx.execute(
+        "DELETE FROM context_docs WHERE scope_kind = ?1 AND scope_id = ?2",
+        [kind, id],
+    )?;
+    for (i, d) in docs.iter().enumerate() {
+        tx.execute(
+            "INSERT INTO context_docs (id, scope_kind, scope_id, kind, target, label, page_id, fetched_at, ord)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, ?8)",
+            rusqlite::params![
+                crate::ids::new_id("doc"),
+                kind,
+                id,
+                crate::db::enum_str(&d.kind)?,
+                d.target,
+                d.label,
+                d.page_id,
+                i as u32
+            ],
+        )?;
+    }
+    tx.commit()?;
+    Ok(())
+}

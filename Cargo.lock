@@ -4616,6 +4616,7 @@ name = "teamcode-core"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "getrandom 0.3.4",
  "livespec-core",
  "notify",
  "reqwest 0.12.28",

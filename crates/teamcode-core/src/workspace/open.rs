@@ -28,6 +28,7 @@ pub(crate) fn import(
     store: &WorkspaceStore,
     path: &Path,
     file: &WorkspaceFile,
+    roots: &[PathBuf],
     target: &WorkspaceId,
     rewritten: bool,
 ) -> Result<Workspace> {
@@ -37,8 +38,7 @@ pub(crate) fn import(
     let members = {
         let conn = store.db().lock().expect("db lock");
         let mut members = Vec::new();
-        for (i, (fp, root)) in file.projects.iter().zip(file.absolute_project_paths(path)).enumerate() {
-            let root = std::fs::canonicalize(&root).unwrap_or(root);
+        for (i, (fp, root)) in file.projects.iter().zip(roots.iter().cloned()).enumerate() {
             let project = match db::projects::find_by_root(&conn, &root)? {
                 Some(p) => p,
                 None => {
@@ -65,6 +65,11 @@ pub(crate) fn import(
         members
     };
     store.replace_from_file(target, file, &members)?;
+    super::context_docs::replace_rows(
+        &store.db().lock().expect("db lock"),
+        &crate::domain::Container::Workspace { id: target.clone() },
+        &file.context_docs,
+    )?;
     store.set_file_clean(target, path)?;
     store.after_open(target, path);
     if rewritten {
@@ -122,13 +127,18 @@ pub fn relocate_file(store: &WorkspaceStore, id: &WorkspaceId, new_path: &Path) 
             "This workspace's file is still in place; open the other file as its own workspace.".into(),
         ));
     }
-    let (file, _) = super::import::sanitize(parsed, &record.name);
-    if !super::import::adds_nothing(store, &record, &file, new_path)? {
+    let (file, _) = super::import_checks::sanitize(parsed, &record.name);
+    if !super::import_checks::adds_nothing(store, &record, &file, new_path)? {
         return Err(Error::Precondition(
             "That file adds folders, agents or instructions; open it as a new workspace instead.".into(),
         ));
     }
-    import(store, new_path, &file, id, false)
+    let roots: Vec<PathBuf> = file
+        .absolute_project_paths(new_path)
+        .iter()
+        .map(|r| std::fs::canonicalize(r).unwrap_or_else(|_| r.clone()))
+        .collect();
+    import(store, new_path, &file, &roots, id, false)
 }
 
 /// Moves a member's root to `new_root`, which no other project may already own.
@@ -191,7 +201,7 @@ mod tests {
             app_config: cfg.path(),
         };
         let p = preview_open(s, path, &env)?;
-        confirm_open(s, path, &p.token, &env)
+        confirm_open(s, &p.token, &env)
     }
 
     #[test]
@@ -228,7 +238,7 @@ mod tests {
         );
         let opened = open_reviewed(&s, &copy).unwrap();
         assert_ne!(opened.id, ws.id);
-        assert_eq!(opened.file_path.as_deref(), Some(copy.as_path()));
+        assert_eq!(opened.file_path, Some(std::fs::canonicalize(&copy).unwrap()));
         assert!(opened.dirty, "the new id is written into the file on its next save");
         assert_eq!(s.get(&ws.id).unwrap(), before, "the existing record is untouched");
         let conn = s.db().lock().unwrap();

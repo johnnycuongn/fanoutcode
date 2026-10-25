@@ -19,11 +19,24 @@ pub struct WorkspaceStore {
     db: Db,
     app_data: PathBuf,
     watcher: Option<Arc<WorkspaceFileWatcher>>,
+    /// Previews waiting for their confirm, by random token (`import::preview_open`).
+    pending: std::sync::Mutex<std::collections::HashMap<String, super::import::PendingImport>>,
 }
 
 impl WorkspaceStore {
     pub fn new(db: Db, app_data: PathBuf, watcher: Option<Arc<WorkspaceFileWatcher>>) -> Self {
-        Self { db, app_data, watcher }
+        Self {
+            db,
+            app_data,
+            watcher,
+            pending: std::sync::Mutex::default(),
+        }
+    }
+
+    pub(crate) fn pending_imports(
+        &self,
+    ) -> std::sync::MutexGuard<'_, std::collections::HashMap<String, super::import::PendingImport>> {
+        self.pending.lock().expect("pending imports lock")
     }
 
     pub fn db(&self) -> &Db {
