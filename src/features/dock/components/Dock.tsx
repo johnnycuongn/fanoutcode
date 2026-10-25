@@ -1,8 +1,9 @@
 // The dock (⌘J): a bottom panel or a right inspector holding the stage's tabs (§6, §10.3). The tab and height are
 // remembered per stage in the dock store; whether it is open is the pane's own state.
-import type { ReactElement, ReactNode } from "react";
+import { useEffect, type ReactElement, type ReactNode } from "react";
 import { EmptyState, Panel, Tabs, TabsContent } from "@/components/ui";
 import type { Project, Task } from "@/lib/bindings";
+import { ChangesTab, changesStore, repoName } from "@/features/changes";
 import type { TaskSettings } from "@/features/task-page";
 import { dockStore, type DockStore } from "../store";
 import { GROWN_HEIGHT, resolveTab, visibleTabs } from "../tabRules";
@@ -24,6 +25,10 @@ function body(tab: DockTab, p: DockProps): ReactNode {
   switch (tab) {
     case "memory":
       return <MemoryTab key={p.task.id} task={p.task} />;
+    case "changes": {
+      const home = p.projects?.find((x) => x.id === p.task.project_id);
+      return <ChangesTab key={p.task.id} task={p.task} {...(home ? { homeName: repoName(home.root) } : {})} />;
+    }
     case "team":
       return p.teamSlot ?? <EmptyState size="sm" title="The team view arrives with the canvas" />;
     default:
@@ -35,6 +40,13 @@ export function Dock(p: DockProps): ReactElement | null {
   const { task, settings, open, store = dockStore } = p;
   const remembered = store.store.useSelector((s) => s.tabByStage[task.stage]);
   const height = store.store.useSelector((s) => s.heightByStage[task.stage]);
+  // §6.3: the Changes tab counts the task's files as they change.
+  const changed = changesStore.store.useSelector((s) =>
+    (s.byTask[task.id]?.repos ?? []).reduce((n, r) => n + r.files.length, 0),
+  );
+  useEffect(() => {
+    if (open) void changesStore.refresh(task.id);
+  }, [open, task.id]);
   if (!open) return null;
   const tabs = visibleTabs(task.stage, settings.testCommand !== null);
   const tab = resolveTab(task.stage, remembered, tabs);
@@ -55,6 +67,7 @@ export function Dock(p: DockProps): ReactElement | null {
           tabs={tabs}
           grown={(height ?? 0) >= GROWN_HEIGHT}
           onToggleGrow={() => store.toggleGrow(task.stage)}
+          counts={{ changes: changed }}
         />
         <TabsContent value={tab} className="min-h-0 flex-1 overflow-auto">
           {body(tab, p)}
