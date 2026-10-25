@@ -20,6 +20,7 @@ fn claim(path: &str, task: &str, title: &str) -> Claim {
         stage: None,
         state: None,
         last_edit: "2026-10-25T10:00:00Z".parse().unwrap(),
+        staged: false,
     }
 }
 
@@ -111,6 +112,7 @@ fn hook() -> (tempfile::TempDir, PathBuf, CheckArgs) {
         grants_path: data.join("grants/t-a1.json"),
         notes_path: data.join("notes/t-a1.json"),
         log_path: data.join("events/t-a1.jsonl"),
+        ask_before: true,
         guard_git: true,
     };
     (dir, root, args)

@@ -54,6 +54,8 @@ function overlapText(o: OverlapDetail): string {
   switch (o.kind) {
     case "held":
       return o.path !== null ? `edit held: ${o.path}${other}` : `command held: ${o.command ?? ""}${other}`;
+    case "overlapped":
+      return `edited over: ${o.path ?? ""}${other}`;
     case "decided":
       return `decided ${o.decision}: ${o.path}${other}`;
     case "noted":

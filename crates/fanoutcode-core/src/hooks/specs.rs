@@ -214,6 +214,12 @@ mod tests {
                 command: None,
                 other_task: Some(crate::domain::TaskId::parse("t-b2").unwrap()),
             },
+            HookEvent::ClaimNoted {
+                repo: "/r".into(),
+                path: Some("a.ts".into()),
+                command: None,
+                other_task: None,
+            },
             HookEvent::OverlapDecided {
                 repo: "/r".into(),
                 path: "a.ts".into(),

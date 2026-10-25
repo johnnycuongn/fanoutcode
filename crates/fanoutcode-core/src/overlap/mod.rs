@@ -13,6 +13,7 @@ pub mod integrate;
 pub mod notes;
 pub mod observed;
 pub mod others;
+mod pathspec;
 pub mod prompts;
 pub mod store;
 

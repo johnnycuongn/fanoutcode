@@ -34,6 +34,7 @@ describe("hookText", () => {
     expect(hookText(fx.stop(4, "All done\nmore"))).toBe("All done");
     expect(hookText(fx.stopFailure(5, "rate limited"))).toBe("error: rate limited");
     expect(hookText(fx.claimDenied(6, { path: "src/a.ts" }, "t-b2"))).toBe("edit held: src/a.ts · t-b2");
+    expect(hookText(fx.claimNoted(8, "src/a.ts", "t-b2"))).toBe("edited over: src/a.ts · t-b2");
     expect(hookText(fx.overlapDecided(7, "src/a.ts", null, "Told"))).toBe("decided Told: src/a.ts");
   });
 });

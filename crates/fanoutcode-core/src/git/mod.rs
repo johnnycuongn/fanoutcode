@@ -69,12 +69,14 @@ pub enum FileStatus {
     Untracked,
 }
 
-/// One `git status` entry; `orig_path` is the old name of a rename.
+/// One `git status` entry; `orig_path` is the old name of a rename; `staged` when the index column shows a change
+/// (part of it is in the index, so a bare `git commit` would take it).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StatusEntry {
     pub path: String,
     pub status: FileStatus,
     pub orig_path: Option<String>,
+    pub staged: bool,
 }
 
 fn status_of(xy: &str) -> FileStatus {
@@ -108,6 +110,7 @@ fn parse_status(out: &str) -> Vec<StatusEntry> {
             path: path.to_owned(),
             status,
             orig_path,
+            staged: !matches!(xy.as_bytes()[0], b' ' | b'?' | b'!'),
         });
     }
     entries
@@ -308,6 +311,21 @@ mod tests {
                 ("n.txt", FileStatus::Untracked)
             ]
         );
+    }
+
+    #[tokio::test]
+    async fn status_marks_what_the_index_holds_as_staged() {
+        let r = temp_repo();
+        write(&r, "a.txt", "1");
+        write(&r, "b.txt", "1");
+        commit_all(r.path(), "base");
+        write(&r, "a.txt", "2");
+        write(&r, "b.txt", "2");
+        write(&r, "n.txt", "new");
+        run(r.path(), &["add", "a.txt"]).await.unwrap();
+        let s = status(r.path()).await.unwrap();
+        let staged: Vec<(&str, bool)> = s.iter().map(|e| (e.path.as_str(), e.staged)).collect();
+        assert_eq!(staged, vec![("a.txt", true), ("b.txt", false), ("n.txt", false)]);
     }
 
     #[tokio::test]

@@ -87,6 +87,14 @@ pub enum HookEvent {
         command: Option<String>,
         other_task: Option<TaskId>,
     },
+    /// Written by the `claim-check` hook with "Ask before editing another task's files" off (§8): the write to `path`
+    /// overlapped `other_task`'s uncommitted changes and was allowed. Nothing pins on it.
+    ClaimNoted {
+        repo: PathBuf,
+        path: Option<String>,
+        command: Option<String>,
+        other_task: Option<TaskId>,
+    },
     /// Written by the app when the developer decides a pending overlap; `decision` is the `Decision` variant name.
     OverlapDecided {
         repo: PathBuf,

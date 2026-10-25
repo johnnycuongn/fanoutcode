@@ -219,6 +219,7 @@ mod tests {
                     stage: None,
                     state: None,
                     last_edit: at(),
+                    staged: false,
                 })
                 .collect(),
         }
@@ -275,10 +276,11 @@ mod tests {
                 file_grant(None, "/s", "gen.ts"),              // unattributed claim in /s: kept
                 all_grant("t-b2"),                             // B claims something: kept
                 all_grant("t-d4"),                             // D claims nothing: dropped
+                file_grant(Some("t-b2"), "/r", "src/x.ts"),    // B claims src/x.ts in /s only: dropped
             ],
         };
         let r = claims("/r", &[("src/a.ts", Some("t-b2"))]);
-        let s = claims("/s", &[("gen.ts", None)]);
+        let s = claims("/s", &[("gen.ts", None), ("src/x.ts", Some("t-b2"))]);
         g.prune(&[&r, &s]);
         assert_eq!(
             g.grants,

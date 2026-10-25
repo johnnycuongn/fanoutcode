@@ -91,6 +91,7 @@ mod tests {
                 path: (*p).into(),
                 status: FileStatus::Modified,
                 orig_path: None,
+                staged: false,
             })
             .collect()
     }

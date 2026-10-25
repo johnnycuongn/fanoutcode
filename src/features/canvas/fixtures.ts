@@ -64,6 +64,8 @@ export const fx = {
       command: held.command ?? null,
       other_task: otherTask,
     }),
+  claimNoted: (seq: number, path: string, otherTask: string | null = null): TaskEvent =>
+    ev(seq, null, { type: "ClaimNoted", repo: "/repo/app", path, command: null, other_task: otherTask }),
   overlapDecided: (seq: number, path: string, otherTask: string | null, decision: string): TaskEvent =>
     ev(seq, null, { type: "OverlapDecided", repo: "/repo/app", path, other_task: otherTask, decision }),
   overlapNoted: (seq: number, path: string, otherTask: string, direction: "in" | "out"): TaskEvent =>

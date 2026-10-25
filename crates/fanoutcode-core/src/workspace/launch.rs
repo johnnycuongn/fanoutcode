@@ -11,7 +11,7 @@ use super::briefs::cached_brief;
 use super::context_docs::{context_dir, list_rows};
 use super::fragments::{reference_lines, LinkContext, LinkedProject};
 use super::guard::prepare_guard;
-use super::link::{bind_links, link_status, links_for, load_links, same_root, save_links, LinkStatus};
+use super::link::{bind_links, canonical_root, link_status, links_for, load_links, same_root, save_links, LinkStatus};
 use super::policy::{deny_rules, protected_roots};
 use super::rows;
 use super::store::member_projects;
@@ -123,15 +123,28 @@ pub fn workspace_agents(conn: &Connection, task: &Task) -> Result<Vec<AgentDef>>
 /// What a Claude Code launch adds for the task's workspace.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct LaunchExtras {
-    /// `permissions.deny` rules for the protected roots.
+    /// `permissions.deny` rules for the protected roots and the overlap folders (`overlap_dirs`).
     pub deny: Vec<String>,
-    /// The Bash guard hook, when anything is protected.
+    /// The Bash guard hook: always for Claude Code, since the overlap folders are always guarded.
     pub guard: Option<HookSpec>,
     /// Beyond the linked roots (which the launch adds itself): the context-doc cache when a reference is cached.
     pub add_dirs: Vec<PathBuf>,
-    /// The claim-check hook (Plan 11 §5.3, §5.6), unless both `ask_before_other_tasks_files` and
-    /// `guard_git_for_other_tasks` are off; Bash only when just the git guard is on.
+    /// The claim-check hook (Plan 11 §5.3, §5.6, §8), on the file tools and Bash for every Claude Code task. With
+    /// `ask_before_other_tasks_files` off it logs an overlapping edit (`ClaimNoted`) and allows it; with
+    /// `guard_git_for_other_tasks` off it leaves Bash alone. With both off it never denies but still runs, so the
+    /// overlap is logged and queued notes reach a working session through `additionalContext`.
     pub claim_check: Option<HookSpec>,
+}
+
+/// The app's folders its hooks trust (Plan 11): every task's grants, the claims, the queued notes, the event logs, the
+/// Bash guard's roots files and the generated Claude settings. Every Claude Code task gets `Edit` deny rules for them
+/// and the Bash guard refusing shell writes there, whatever the overlap settings, so the agent cannot grant itself,
+/// clear a claim, forge a log line or switch a guard off.
+pub fn overlap_dirs(app_data: &Path) -> Vec<PathBuf> {
+    ["grants", "claims", "notes", "events", "guards", "claude-settings"]
+        .iter()
+        .map(|d| app_data.join(d))
+        .collect()
 }
 
 /// The claim-check hook over the claims files of the task's repos (its worktree or home root, then its links).
@@ -143,9 +156,6 @@ fn claim_check_hook(
     ask_before: bool,
     guard_git: bool,
 ) -> Result<Option<HookSpec>> {
-    if !ask_before && !guard_git {
-        return Ok(None);
-    }
     let home_root = db::projects::get(conn, &task.project_id)?.map(|p| p.root);
     let repos = match &home_root {
         Some(root) => repos_of(task, root),
@@ -158,13 +168,10 @@ fn claim_check_hook(
         grants_path: grants_path(app_data, &task.id),
         notes_path: notes_path(app_data, &task.id),
         log_path: event_log_path(app_data, &task.id),
+        ask_before,
         guard_git,
     };
-    let mut spec = check_hook_spec(exe, &args);
-    if !ask_before {
-        spec.matcher = Some("Bash".into());
-    }
-    Ok(Some(spec))
+    Ok(Some(check_hook_spec(exe, &args)))
 }
 
 /// Refuses the launch (`Precondition`) when a protected root cannot be expressed as a safe deny rule. `ask_before`
@@ -183,8 +190,27 @@ pub fn launch_extras(
     }
     let claim_check = claim_check_hook(conn, task, app_data, exe, ask_before, guard_git)?;
     let protected = protected_for(conn, task)?;
-    let deny = deny_rules(&protected)?;
-    let guard = prepare_guard(app_data, exe, &task.id, &protected, home)?;
+    let app_files = overlap_dirs(app_data);
+    // created now, so the rules also name their canonical form (a symlinked app data folder)
+    for d in &app_files {
+        std::fs::create_dir_all(d)?;
+    }
+    let mut deny = deny_rules(&protected)?;
+    for rule in deny_rules(&app_files)? {
+        if !deny.contains(&rule) {
+            deny.push(rule);
+        }
+    }
+    // the guard compares paths as written, so it gets both forms of each folder, as the deny rules do
+    let mut guarded: Vec<PathBuf> = Vec::new();
+    for d in &app_files {
+        for form in [d.clone(), canonical_root(d)] {
+            if !guarded.contains(&form) {
+                guarded.push(form);
+            }
+        }
+    }
+    let guard = prepare_guard(app_data, exe, &task.id, &protected, &guarded, home)?;
     // only the home project's cache and, when bound to one, the workspace's: never another project's
     let mut containers = vec![Container::Project {
         id: task.project_id.clone(),
@@ -281,191 +307,5 @@ pub fn status_of(conn: &Connection, task: &Task) -> Result<LinkStatus> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::domain::{LinkPolicy, Stage};
-    use crate::pipeline::ctx::{build_prompt_ctx, build_stage_prompts};
-    use crate::workspace::context_docs::ContextDocKind;
-    use crate::workspace::store::WorkspaceStore;
-    use crate::workspace::test_support::{fixture, Fixture};
-
-    /// A workspace of api and web, and a Claude Code task in web created there.
-    fn setup() -> (Fixture, WorkspaceStore, Workspace, Task) {
-        let fx = fixture();
-        let s = WorkspaceStore::new(fx.db.clone(), fx.app_data.path().into(), None);
-        let ws = s.create("Shop", &[fx.api.id.clone(), fx.web.id.clone()]).unwrap();
-        let conn = fx.db.lock().unwrap();
-        let mut t = crate::test_support::task_fixture("t-1", fx.web.id.as_str());
-        t.workspace_id = Some(ws.id.clone());
-        db::tasks::insert(&conn, &t).unwrap();
-        drop(conn);
-        (fx, s, ws, t)
-    }
-
-    #[test]
-    fn first_start_binds_once_and_records_links() {
-        let (fx, _s, _ws, t) = setup();
-        let conn = fx.db.lock().unwrap();
-        let (bound, needs_briefs) = bind_if_first_start(&conn, fx.app_data.path(), &t.id, None).unwrap();
-        assert_eq!(bound.linked_roots, vec![fx.api.root.clone()]);
-        assert!(bound.links_bound_at.is_some() && needs_briefs);
-        assert_eq!(load_links(&conn, &t.id).unwrap()[0].project_id, Some(fx.api.id.clone()));
-        let (again, _) = bind_if_first_start(&conn, fx.app_data.path(), &t.id, None).unwrap();
-        assert_eq!(again.links_bound_at, bound.links_bound_at);
-    }
-
-    #[test]
-    fn protection_deny_rules_and_guard_follow_the_policy() {
-        let (fx, s, ws, t) = setup();
-        bind_if_first_start(&fx.db.lock().unwrap(), fx.app_data.path(), &t.id, None).unwrap();
-        let exe = Path::new("/x/fanoutcode");
-        let task = db::tasks::require(&fx.db.lock().unwrap(), &t.id).unwrap();
-        let none = launch_extras(
-            &fx.db.lock().unwrap(),
-            &task,
-            fx.app_data.path(),
-            exe,
-            Path::new("/h"),
-            true,
-            true,
-        )
-        .unwrap();
-        assert!(none.deny.is_empty() && none.guard.is_none());
-        s.set_policy(&ws.id, LinkPolicy::ReadOnly, &[]).unwrap();
-        let ro = launch_extras(
-            &fx.db.lock().unwrap(),
-            &task,
-            fx.app_data.path(),
-            exe,
-            Path::new("/h"),
-            true,
-            true,
-        )
-        .unwrap();
-        assert!(ro.deny.contains(&format!("Edit(/{}/**)", fx.api.root.display())));
-        assert!(ro.guard.is_some());
-    }
-
-    #[test]
-    fn a_task_whose_workspace_is_gone_keeps_its_links_protected() {
-        let (fx, _s, ws, t) = setup();
-        let conn = fx.db.lock().unwrap();
-        bind_if_first_start(&conn, fx.app_data.path(), &t.id, None).unwrap();
-        // a record removed out from under the task (the foreign key would normally keep it)
-        conn.pragma_update(None, "foreign_keys", "OFF").unwrap();
-        conn.execute("DELETE FROM workspaces WHERE id = ?1", [ws.id.as_str()])
-            .unwrap();
-        let task = db::tasks::require(&conn, &t.id).unwrap();
-        assert_eq!(protected_for(&conn, &task).unwrap(), vec![fx.api.root.clone()]);
-    }
-
-    #[test]
-    fn prompts_carry_policy_protection_references_and_stage_instructions() {
-        let (fx, s, ws, t) = setup();
-        bind_if_first_start(&fx.db.lock().unwrap(), fx.app_data.path(), &t.id, None).unwrap();
-        s.set_policy(
-            &ws.id,
-            LinkPolicy::ReadAndModifyOnRequest,
-            std::slice::from_ref(&fx.api.id),
-        )
-        .unwrap();
-        s.set_fragment(&ws.id, "plan", Some("Run both suites.")).unwrap();
-        let docs = crate::workspace::context_docs::ContextDocs::new(fx.db.clone());
-        docs.add(
-            &Container::Workspace { id: ws.id.clone() },
-            ContextDocKind::Url,
-            "https://x.y/spec",
-            None,
-        )
-        .unwrap();
-        let conn = fx.db.lock().unwrap();
-        let task = db::tasks::require(&conn, &t.id).unwrap();
-        let mut ctx = build_prompt_ctx(&conn, &task, &fx.web, fx.app_data.path(), fx.app_data.path()).unwrap();
-        assert!(ctx.linked[0].protected);
-        let prompts = build_stage_prompts(&mut ctx, fx.app_data.path(), fx.app_data.path()).unwrap();
-        assert!(prompts.plan.contains("Run both suites.") && !prompts.build.contains("Run both suites."));
-        assert!(prompts.plan.contains("url: https://x.y/spec — not fetched yet"));
-        assert!(prompts.plan.contains("(protected: read only)"));
-        let _ = Stage::Plan;
-    }
-
-    #[test]
-    fn launch_extras_adds_the_claim_check_hook() {
-        let (fx, _s, _ws, t) = setup();
-        bind_if_first_start(&fx.db.lock().unwrap(), fx.app_data.path(), &t.id, None).unwrap();
-        let task = db::tasks::require(&fx.db.lock().unwrap(), &t.id).unwrap();
-        let exe = Path::new("/x/fanoutcode");
-        let extras = |ask: bool, git: bool| {
-            launch_extras(
-                &fx.db.lock().unwrap(),
-                &task,
-                fx.app_data.path(),
-                exe,
-                Path::new("/h"),
-                ask,
-                git,
-            )
-            .unwrap()
-        };
-        let spec = extras(true, false).claim_check.expect("a claim-check hook");
-        assert!(
-            spec.command.starts_with("'/x/fanoutcode' claim-check 't-1' "),
-            "{}",
-            spec.command
-        );
-        assert_eq!(spec.matcher.as_deref(), Some("Edit|Write|MultiEdit|NotebookEdit|Bash"));
-        assert!(spec.command.contains(" 0 "), "git guard off: {}", spec.command);
-        // the home root's claims file, then the linked root's
-        let data = fx.app_data.path();
-        let tail = format!(
-            " '{}' '{}'",
-            claims_path(data, &fx.web.root).display(),
-            claims_path(data, &fx.api.root).display()
-        );
-        assert!(spec.command.ends_with(&tail), "{}", spec.command);
-        assert!(spec
-            .command
-            .contains(&format!("'{}'", grants_path(data, &task.id).display())));
-        assert!(spec
-            .command
-            .contains(&format!("'{}'", notes_path(data, &task.id).display())));
-        assert!(spec
-            .command
-            .contains(&format!("'{}'", event_log_path(data, &task.id).display())));
-        let git_only = extras(false, true).claim_check.expect("the git guard alone");
-        assert_eq!(git_only.matcher.as_deref(), Some("Bash"));
-        assert!(git_only.command.contains(" 1 "));
-        assert_eq!(extras(false, false).claim_check, None);
-        let mut shell = task.clone();
-        shell.agent_kind = AgentKind::Shell;
-        let none = launch_extras(&fx.db.lock().unwrap(), &shell, data, exe, Path::new("/h"), true, true).unwrap();
-        assert_eq!(none.claim_check, None);
-    }
-
-    #[test]
-    fn a_task_gets_only_its_own_projects_and_workspaces_cache() {
-        let (fx, _s, ws, t) = setup();
-        bind_if_first_start(&fx.db.lock().unwrap(), fx.app_data.path(), &t.id, None).unwrap();
-        for c in [
-            Container::Project { id: fx.api.id.clone() },
-            Container::Project { id: fx.web.id.clone() },
-            Container::Workspace { id: ws.id.clone() },
-        ] {
-            std::fs::create_dir_all(context_dir(fx.app_data.path(), &c).unwrap()).unwrap();
-        }
-        let task = db::tasks::require(&fx.db.lock().unwrap(), &t.id).unwrap(); // home: web
-        let extras = launch_extras(
-            &fx.db.lock().unwrap(),
-            &task,
-            fx.app_data.path(),
-            Path::new("/x"),
-            Path::new("/h"),
-            false,
-            false,
-        )
-        .unwrap();
-        let api_cache = context_dir(fx.app_data.path(), &Container::Project { id: fx.api.id.clone() }).unwrap();
-        assert!(extras.add_dirs.iter().all(|d| !d.starts_with(&api_cache)));
-        assert_eq!(extras.add_dirs.len(), 2, "web's own cache and the workspace's");
-    }
-}
+#[path = "launch_tests.rs"]
+mod tests;

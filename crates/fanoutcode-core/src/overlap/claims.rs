@@ -1,7 +1,7 @@
 //! The claims file per shared repo (§5.1): `<app_data>/claims/<repo-key>.json`, every dirty, attributed path of an
 //! active task, rewritten atomically whenever attribution or `git status` changes. The claim-check hook reads it.
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Utc};
@@ -25,6 +25,10 @@ pub struct Claim {
     pub stage: Option<Stage>,
     pub state: Option<AgentState>,
     pub last_edit: DateTime<Utc>,
+    /// The path has changes in the index, so a bare `git commit` would take them (§5.6). Missing in a file written
+    /// before it existed: unstaged.
+    #[serde(default)]
+    pub staged: bool,
 }
 
 /// One repo's claims, sorted by path then task.
@@ -60,8 +64,9 @@ pub fn claims_path(app_data: &Path, root: &Path) -> PathBuf {
     app_data.join("claims").join(format!("{}.json", repo_key(root)))
 }
 
-fn dirty_set(status: &[StatusEntry]) -> HashSet<&str> {
-    status.iter().map(|e| e.path.as_str()).collect()
+/// Each dirty path, with whether it is staged.
+fn dirty_set(status: &[StatusEntry]) -> HashMap<&str, bool> {
+    status.iter().map(|e| (e.path.as_str(), e.staged)).collect()
 }
 
 /// A claim for every path of `root` that an active (not archived) task has attributed and `status` shows dirty; the
@@ -72,7 +77,7 @@ pub fn build_claims(root: &Path, tasks: &[TaskFiles<'_>], status: &[StatusEntry]
     for tf in tasks.iter().filter(|tf| !tf.task.archived) {
         let mut latest: BTreeMap<&str, DateTime<Utc>> = BTreeMap::new();
         for f in tf.files {
-            if f.repo_root == root && dirty.contains(f.path.as_str()) {
+            if f.repo_root == root && dirty.contains_key(f.path.as_str()) {
                 let at = latest.entry(f.path.as_str()).or_insert(f.added_at);
                 *at = (*at).max(f.added_at);
             }
@@ -84,6 +89,7 @@ pub fn build_claims(root: &Path, tasks: &[TaskFiles<'_>], status: &[StatusEntry]
             stage: Some(tf.task.stage),
             state: Some(tf.task.state.clone()),
             last_edit,
+            staged: dirty.get(path).copied().unwrap_or(false),
         }));
     }
     sort(&mut claims);
@@ -102,7 +108,7 @@ pub fn add_unattributed(file: &mut ClaimsFile, observed: &[AttributedFile], stat
     for f in observed {
         let fresh = f.source == ChangeSource::Observed
             && f.repo_root == file.repo_root
-            && dirty.contains(f.path.as_str())
+            && dirty.contains_key(f.path.as_str())
             && seen.insert(f.path.clone());
         if fresh {
             file.claims.push(Claim {
@@ -112,6 +118,7 @@ pub fn add_unattributed(file: &mut ClaimsFile, observed: &[AttributedFile], stat
                 stage: None,
                 state: None,
                 last_edit: f.added_at,
+                staged: dirty.get(f.path.as_str()).copied().unwrap_or(false),
             });
         }
     }
@@ -189,6 +196,7 @@ mod tests {
                 path: (*p).into(),
                 status: FileStatus::Modified,
                 orig_path: None,
+                staged: false,
             })
             .collect()
     }
@@ -242,6 +250,7 @@ mod tests {
                     stage: Some(Stage::Build),
                     state: Some(AgentState::Working),
                     last_edit: at("2026-10-25T09:30:00Z"),
+                    staged: false,
                 },
                 Claim {
                     path: "src/b.ts".into(),
@@ -250,6 +259,7 @@ mod tests {
                     stage: Some(Stage::Build),
                     state: Some(AgentState::Working),
                     last_edit: at("2026-10-25T09:10:00Z"),
+                    staged: false,
                 },
             ]
         );
@@ -322,6 +332,7 @@ mod tests {
                 stage: None,
                 state: None,
                 last_edit: at("2026-10-25T09:50:00Z"),
+                staged: false,
             }
         );
     }
@@ -370,6 +381,39 @@ mod tests {
         let path = write_claims(app_data.path(), &built).unwrap();
         assert_eq!(path, claims_path(app_data.path(), Path::new("/r")));
         assert_eq!(read_claims(&path), Some(built));
+    }
+
+    #[test]
+    fn a_claim_records_whether_its_path_is_staged() {
+        let login = task("t-a1", "Login");
+        let files = [
+            file("/r", "src/a.ts", ChangeSource::Hook, NOW),
+            file("/r", "src/b.ts", ChangeSource::Hook, NOW),
+        ];
+        let mut status = dirty(&["src/a.ts", "src/b.ts"]);
+        status[0].staged = true;
+        let out = build_claims(
+            Path::new("/r"),
+            &[TaskFiles {
+                task: &login,
+                files: &files,
+            }],
+            &status,
+            at(NOW),
+        );
+        let staged: Vec<(&str, bool)> = out.claims.iter().map(|c| (c.path.as_str(), c.staged)).collect();
+        assert_eq!(staged, vec![("src/a.ts", true), ("src/b.ts", false)]);
+        // a claims file written before `staged` existed still reads, every claim unstaged
+        let dir = tempfile::tempdir().unwrap();
+        let old = dir.path().join("old.json");
+        std::fs::write(
+            &old,
+            r#"{"repo_root":"/r","written_at":"2026-10-25T10:00:00Z","claims":[{"path":"src/a.ts",
+                "task_id":"t-a1","title":"Login","stage":null,"state":null,"last_edit":"2026-10-25T10:00:00Z"}]}"#,
+        )
+        .unwrap();
+        let read = read_claims(&old).expect("an old claims file");
+        assert!(!read.claims[0].staged);
     }
 
     #[test]
