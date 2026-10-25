@@ -309,10 +309,17 @@ impl WorkspaceStore {
         self.get(id)
     }
 
-    /// Hook for the watcher (Task 4).
-    fn after_save_as(&self, _id: &WorkspaceId, _path: &Path) {}
+    /// A file outside app data is watched for edits made elsewhere; one in app data is not.
+    fn after_save_as(&self, id: &WorkspaceId, path: &Path) {
+        let Some(w) = &self.watcher else { return };
+        if is_in_app_data(path, &self.app_data) {
+            w.unwatch(id);
+        } else if let Err(e) = w.watch(id.clone(), path) {
+            eprintln!("Team Code: {e}");
+        }
+    }
 
-    /// Hook for the watcher (Task 4): a file opened outside app data is watched.
+    /// A file opened outside app data is watched.
     pub(crate) fn after_open(&self, id: &WorkspaceId, path: &Path) {
         self.after_save_as(id, path)
     }
