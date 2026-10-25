@@ -3,7 +3,7 @@
 
 use std::path::{Path, PathBuf};
 
-use super::context_docs::{text_cache_path, ContextDoc, ContextDocKind};
+use super::context_docs::{is_visible, text_cache_path, ContextDoc, ContextDocKind};
 use crate::domain::{Container, LinkPolicy};
 
 pub const LINK_POLICY_TEXT: &str = "Read linked projects freely for references. Modify a linked project only when the task's intent or plan calls for it, and list any such edit in plan.md under that project's heading.";
@@ -23,6 +23,8 @@ pub struct LinkedProject {
 pub struct LinkContext {
     /// The workspace, as the container its references belong to.
     pub workspace: Container,
+    /// Its members' roots: where its file and folder references may point.
+    pub workspace_roots: Vec<PathBuf>,
     pub policy: LinkPolicy,
     pub linked: Vec<LinkedProject>,
     pub workspace_docs: Vec<ContextDoc>,
@@ -82,24 +84,51 @@ pub fn reference_line(doc: &ContextDoc, container: &Container, app_data: &Path) 
     }
 }
 
-pub fn references_fragment(heading: &str, container: &Container, docs: &[ContextDoc], app_data: &Path) -> String {
-    if docs.is_empty() {
+/// The lines for `docs`: only the visible ones (`is_visible`), named; the rest counted in one line with no paths.
+pub fn reference_lines(container: &Container, docs: &[ContextDoc], roots: &[PathBuf], app_data: &Path) -> Vec<String> {
+    let mut lines: Vec<String> = docs
+        .iter()
+        .filter(|d| is_visible(d, roots))
+        .map(|d| reference_line(d, container, app_data))
+        .collect();
+    let waiting = docs.iter().filter(|d| !d.trusted).count();
+    if waiting > 0 {
+        lines.push(waiting_line(waiting));
+    }
+    lines
+}
+
+/// `N context docs are waiting for confirmation in Team Code`.
+pub fn waiting_line(n: usize) -> String {
+    format!(
+        "{n} context doc{} waiting for confirmation in Team Code",
+        if n == 1 { " is" } else { "s are" }
+    )
+}
+
+pub fn references_fragment(
+    heading: &str,
+    container: &Container,
+    docs: &[ContextDoc],
+    roots: &[PathBuf],
+    app_data: &Path,
+) -> String {
+    let lines = reference_lines(container, docs, roots, app_data);
+    if lines.is_empty() {
         return String::new();
     }
-    let lines: Vec<String> = docs
-        .iter()
-        .map(|d| format!("- {}", reference_line(d, container, app_data)))
-        .collect();
+    let lines: Vec<String> = lines.into_iter().map(|l| format!("- {l}")).collect();
     format!("## {heading}\n\n{}", lines.join("\n"))
 }
 
 pub fn prompt_fragments(
     project: &Container,
+    project_roots: &[PathBuf],
     project_docs: &[ContextDoc],
     link: Option<&LinkContext>,
     app_data: &Path,
 ) -> PromptFragments {
-    let project_context = references_fragment("Project references", project, project_docs, app_data);
+    let project_context = references_fragment("Project references", project, project_docs, project_roots, app_data);
     let Some(link) = link else {
         return PromptFragments {
             project_context,
@@ -110,7 +139,13 @@ pub fn prompt_fragments(
     let linked_projects = linked_projects_fragment(link);
     let parts: Vec<String> = [
         linked_projects.clone(),
-        references_fragment("Workspace references", &link.workspace, &link.workspace_docs, app_data),
+        references_fragment(
+            "Workspace references",
+            &link.workspace,
+            &link.workspace_docs,
+            &link.workspace_roots,
+            app_data,
+        ),
         link.workspace_instructions
             .clone()
             .unwrap_or_default()
@@ -150,6 +185,7 @@ mod tests {
             workspace: Container::Workspace {
                 id: crate::ids::WorkspaceId::parse("ws-1").unwrap(),
             },
+            workspace_roots: vec![],
             policy: LinkPolicy::ReadAndModifyOnRequest,
             workspace_docs: vec![],
             workspace_instructions: None,
@@ -168,6 +204,7 @@ mod tests {
             workspace: Container::Workspace {
                 id: crate::ids::WorkspaceId::parse("ws-1").unwrap(),
             },
+            workspace_roots: vec![],
             policy: LinkPolicy::ReadAndModifyOnRequest,
             workspace_docs: vec![],
             workspace_instructions: None,
@@ -203,16 +240,27 @@ mod tests {
 
     #[test]
     fn references_fragment_lists_kinds_and_cache_paths() {
+        let root = tempfile::tempdir().unwrap();
+        let web = std::fs::canonicalize(root.path()).unwrap();
+        std::fs::create_dir_all(web.join("docs")).unwrap();
+        std::fs::create_dir_all(web.join("adr")).unwrap();
+        std::fs::write(web.join("docs/arch.md"), "a").unwrap();
+        let arch = web.join("docs/arch.md").to_string_lossy().into_owned();
+        let adr = web.join("adr").to_string_lossy().into_owned();
+        let t = |mut d: ContextDoc| {
+            d.trusted = true;
+            d
+        };
         let docs = vec![
-            doc("doc-1", ContextDocKind::File, "/w/web/docs/arch.md", None),
-            doc(
+            t(doc("doc-1", ContextDocKind::File, &arch, None)),
+            t(doc(
                 "doc-2",
                 ContextDocKind::Confluence,
                 "https://acme.atlassian.net/wiki/spaces/ENG/pages/123/Pay",
                 Some(Utc::now()),
-            ),
-            doc("doc-3", ContextDocKind::Url, "https://x.y/spec", None),
-            doc("doc-4", ContextDocKind::Folder, "/w/web/adr", None),
+            )),
+            t(doc("doc-3", ContextDocKind::Url, "https://x.y/spec", None)),
+            t(doc("doc-4", ContextDocKind::Folder, &adr, None)),
         ];
         let app = tempfile::tempdir().unwrap();
         let project = Container::Project {
@@ -221,17 +269,53 @@ mod tests {
         let cache = text_cache_path(app.path(), &project, "doc-2").unwrap();
         std::fs::create_dir_all(cache.parent().unwrap()).unwrap();
         std::fs::write(&cache, "Pay text").unwrap();
-        let s = references_fragment("Project references", &project, &docs, app.path());
-        assert!(s.starts_with("## Project references\n\n- file: `/w/web/docs/arch.md`\n"));
+        let s = references_fragment(
+            "Project references",
+            &project,
+            &docs,
+            std::slice::from_ref(&web),
+            app.path(),
+        );
+        assert!(s.starts_with(&format!("## Project references\n\n- file: `{arch}`\n")));
         assert!(s.contains(&format!(
             "- confluence: \"Pay\" https://acme.atlassian.net/wiki/spaces/ENG/pages/123/Pay — text: `{}`",
             cache.display()
         )));
         assert!(s.contains("- url: https://x.y/spec — not fetched yet"));
-        assert!(s.contains("- folder: `/w/web/adr/`"));
+        assert!(s.contains(&format!("- folder: `{adr}/`")));
         assert_eq!(
-            references_fragment("Workspace references", &project, &[], Path::new("/app")),
+            references_fragment("Workspace references", &project, &[], &[], Path::new("/app")),
             ""
+        );
+    }
+
+    #[test]
+    fn untrusted_references_are_counted_never_named() {
+        let root = tempfile::tempdir().unwrap();
+        let secret = root.path().join("id_rsa");
+        std::fs::write(&secret, "k").unwrap();
+        let project = Container::Project {
+            id: crate::ids::ProjectId::parse("p-1").unwrap(),
+        };
+        let docs = vec![
+            doc("doc-1", ContextDocKind::File, secret.to_str().unwrap(), None),
+            doc("doc-2", ContextDocKind::Url, "https://x.y/spec", None),
+        ];
+        let s = references_fragment(
+            "Workspace references",
+            &project,
+            &docs,
+            &[root.path().to_path_buf()],
+            Path::new("/app"),
+        );
+        assert_eq!(
+            s,
+            "## Workspace references\n\n- 2 context docs are waiting for confirmation in Team Code"
+        );
+        assert!(!s.contains("id_rsa") && !s.contains("x.y"));
+        assert_eq!(
+            waiting_line(1),
+            "1 context doc is waiting for confirmation in Team Code"
         );
     }
 
@@ -244,6 +328,7 @@ mod tests {
                 id: crate::ids::ProjectId::parse("p-1").unwrap(),
             },
             &[],
+            &[],
             Some(&ctx),
             Path::new("/app"),
         );
@@ -255,6 +340,7 @@ mod tests {
             &Container::Project {
                 id: crate::ids::ProjectId::parse("p-1").unwrap()
             },
+            &[],
             &[],
             None,
             Path::new("/app")

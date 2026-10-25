@@ -9,7 +9,7 @@ use rusqlite::Connection;
 
 use super::briefs::cached_brief;
 use super::context_docs::{context_dir, list_rows};
-use super::fragments::{reference_line, LinkContext, LinkedProject};
+use super::fragments::{reference_lines, LinkContext, LinkedProject};
 use super::guard::prepare_guard;
 use super::link::{bind_links, link_status, links_for, load_links, same_root, save_links, LinkStatus};
 use super::policy::{deny_rules, protected_roots};
@@ -175,6 +175,7 @@ pub fn link_context(conn: &Connection, task: &Task, app_data: &Path) -> Result<O
     }
     Ok(Some(LinkContext {
         workspace: Container::Workspace { id: ws.id.clone() },
+        workspace_roots: member_projects(conn, &ws)?.into_iter().map(|p| p.root).collect(),
         policy: ws.policy,
         linked,
         workspace_docs: list_rows(conn, &Container::Workspace { id: ws.id.clone() })?,
@@ -189,10 +190,11 @@ pub fn fill_prompt_ctx(conn: &Connection, task: &Task, ctx: &mut PromptCtx, app_
     let project = Container::Project {
         id: task.project_id.clone(),
     };
-    ctx.project_context = list_rows(conn, &project)?
-        .iter()
-        .map(|d| reference_line(d, &project, app_data))
+    let project_roots: Vec<PathBuf> = db::projects::get(conn, &task.project_id)?
+        .map(|p| p.root)
+        .into_iter()
         .collect();
+    ctx.project_context = reference_lines(&project, &list_rows(conn, &project)?, &project_roots, app_data);
     let Some(link) = link_context(conn, task, app_data)? else {
         return Ok(());
     };
@@ -205,11 +207,7 @@ pub fn fill_prompt_ctx(conn: &Connection, task: &Task, ctx: &mut PromptCtx, app_
             }
         }
     }
-    ctx.workspace_context = link
-        .workspace_docs
-        .iter()
-        .map(|d| reference_line(d, &link.workspace, app_data))
-        .collect();
+    ctx.workspace_context = reference_lines(&link.workspace, &link.workspace_docs, &link.workspace_roots, app_data);
     if let Some(id) = &task.workspace_id {
         ctx.workspace_fragments = rows::map_column(conn, id, "fragments_json")?;
     }

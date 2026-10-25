@@ -230,7 +230,7 @@ mod tests {
             app_config: cfg.path(),
         };
         let p = preview_open(s, path, &env)?;
-        confirm_open(s, &p.token, false, &env)
+        confirm_open(s, &p.token, &[], &env)
     }
 
     #[test]

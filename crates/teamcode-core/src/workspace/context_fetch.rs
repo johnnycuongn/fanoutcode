@@ -1,6 +1,6 @@
 //! Fetching a context doc's text on demand (`context_docs_fetch`), cached by the shell at `text_cache_path`.
 
-use super::context_docs::{ContextDoc, ContextDocKind};
+use super::context_docs::{readable_path, ContextDoc, ContextDocKind};
 use super::url_guard::{client_for, client_plan, guarded_get, validate_hop, NetGuard};
 use crate::{Error, Result};
 
@@ -53,29 +53,6 @@ pub async fn fetch_text(
     guard: &NetGuard<'_>,
 ) -> Result<String> {
     fetch_text_capped(doc, allowed_roots, atlassian, guard, MAX_TEXT_BYTES).await
-}
-
-/// The path to read for a file or folder doc, or why not.
-fn readable_path(doc: &ContextDoc, allowed_roots: &[std::path::PathBuf]) -> Result<std::path::PathBuf> {
-    if !doc.trusted {
-        return Err(Error::Precondition(format!(
-            "{} came from a workspace file and is outside its projects; confirm it before Team Code reads it.",
-            doc.target
-        )));
-    }
-    let canonical = std::fs::canonicalize(&doc.target)
-        .map_err(|_| Error::Precondition(format!("{} no longer exists.", doc.target)))?;
-    let inside = allowed_roots
-        .iter()
-        .any(|r| canonical.starts_with(std::fs::canonicalize(r).unwrap_or_else(|_| r.clone())));
-    if !inside && canonical != std::path::Path::new(&doc.target) {
-        return Err(Error::Precondition(format!(
-            "{} now resolves to {}, outside the workspace's projects; add it again to read it.",
-            doc.target,
-            canonical.display()
-        )));
-    }
-    Ok(canonical)
 }
 
 /// `bytes` as text, cut at `cap` (on a character boundary) with `TRUNCATED_NOTE` when longer.

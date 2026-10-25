@@ -708,12 +708,12 @@ async workspacesPreviewOpen(path: string) : Promise<Result<WorkspaceImportPrevie
 }
 },
 /**
- * Imports exactly what the preview with this token showed. `allow_outside_docs` also trusts the file and folder
- * references the preview marked as outside the workspace's projects.
+ * Imports exactly what the preview with this token showed. `approved_doc_ids` are the file and folder references
+ * (by their preview ids) the developer approved one by one; the rest are imported untrusted.
  */
-async workspacesConfirmOpen(token: string, allowOutsideDocs: boolean) : Promise<Result<Workspace, string>> {
+async workspacesConfirmOpen(token: string, approvedDocIds: string[]) : Promise<Result<Workspace, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("workspaces_confirm_open", { token, allowOutsideDocs }) };
+    return { status: "ok", data: await TAURI_INVOKE("workspaces_confirm_open", { token, approvedDocIds }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -1057,13 +1057,25 @@ export type ImportDoc = { kind: ContextDocKind; target: string; label: string; p
  */
 host: string | null; 
 /**
- * A file or folder outside every project the file names: read only when the developer allows these.
+ * The doc's id in the file: what `confirm_open` approves file and folder references by.
+ */
+id: string; 
+/**
+ * A file or folder: never trusted unless approved one by one in the preview.
+ */
+needs_approval: boolean; 
+/**
+ * A file or folder outside every project the file names (a warning shown beside it).
  */
 outside_projects: boolean }
 /**
  * One project root the file names.
  */
-export type ImportRoot = { path: string; exists: boolean; is_dir: boolean; 
+export type ImportRoot = { 
+/**
+ * Shown, not blocking: a dot-folder or a credential location that agents would be able to read and edit.
+ */
+warning: string | null; path: string; exists: boolean; is_dir: boolean; 
 /**
  * No project with this root is open in Team Code yet.
  */

@@ -128,6 +128,36 @@ pub(crate) fn replace_rows(conn: &Connection, container: &Container, docs: &[Con
 
 pub use super::context_fetch::fetch_text;
 
+/// The path to read for a file or folder doc, or why not.
+pub fn readable_path(doc: &ContextDoc, allowed_roots: &[std::path::PathBuf]) -> Result<std::path::PathBuf> {
+    if !doc.trusted {
+        return Err(Error::Precondition(format!(
+            "{} came from a workspace file and is outside its projects; confirm it before Team Code reads it.",
+            doc.target
+        )));
+    }
+    let canonical = std::fs::canonicalize(&doc.target)
+        .map_err(|_| Error::Precondition(format!("{} no longer exists.", doc.target)))?;
+    let inside = allowed_roots
+        .iter()
+        .any(|r| canonical.starts_with(std::fs::canonicalize(r).unwrap_or_else(|_| r.clone())));
+    if !inside && canonical != std::path::Path::new(&doc.target) {
+        return Err(Error::Precondition(format!(
+            "{} now resolves to {}, outside the workspace's projects; add it again to read it.",
+            doc.target,
+            canonical.display()
+        )));
+    }
+    Ok(canonical)
+}
+
+/// A doc the agent may be pointed at: trusted, and for a file or folder, readable under `readable_path`.
+pub fn is_visible(doc: &ContextDoc, allowed_roots: &[std::path::PathBuf]) -> bool {
+    doc.trusted
+        && (!matches!(doc.kind, ContextDocKind::File | ContextDocKind::Folder)
+            || readable_path(doc, allowed_roots).is_ok())
+}
+
 /// The last path component; a URL's host and path; a Confluence page's title from its URL.
 pub fn label_for(kind: &ContextDocKind, target: &str) -> String {
     let last = |t: &str| t.trim_end_matches('/').rsplit('/').next().unwrap_or(t).to_owned();

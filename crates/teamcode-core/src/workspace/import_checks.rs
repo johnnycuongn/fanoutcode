@@ -63,11 +63,47 @@ pub fn sanitize(mut file: WorkspaceFile, fallback_name: &str) -> (WorkspaceFile,
         }
         why.is_none()
     });
+    let mut seen = std::collections::HashSet::new();
+    file.context_docs.retain(|d| {
+        let first = seen.insert(d.id.clone());
+        if !first {
+            problems.push(format!("Ignored a second reference with id {:?}.", d.id));
+        }
+        first
+    });
     // trust is the app's to give (in the preview), never the file's to claim
     for d in &mut file.context_docs {
         d.trusted = false;
     }
     (file, problems)
+}
+
+/// Folders under the home folder that commonly hold credentials or app data.
+const SENSITIVE_UNDER_HOME: &[&str] = &[
+    "Library",
+    ".ssh",
+    ".aws",
+    ".config",
+    ".gnupg",
+    ".kube",
+    ".docker",
+    ".azure",
+    ".gcloud",
+    ".password-store",
+];
+
+/// A warning for a root that is a dot-folder or sits in a credential location under the home folder.
+pub(crate) fn sensitive_root(root: &Path, home: &Path) -> Option<String> {
+    let root = canonical(root);
+    let home = canonical(home);
+    let dot = root.file_name().is_some_and(|n| n.to_string_lossy().starts_with('.'));
+    let sensitive = SENSITIVE_UNDER_HOME.iter().any(|s| root.starts_with(home.join(s)));
+    (dot || sensitive).then(|| {
+        format!(
+            "{}: agents would be able to read and edit this folder, which may hold credentials or app data.",
+            root.display()
+        )
+    })
 }
 
 /// Why a canonical root may not be imported, if it may not: not an existing folder, `/`, or equal to or an ancestor

@@ -22,7 +22,7 @@ use crate::{Error, Result};
 /// Which imported references become trusted.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum DocTrust {
-    /// Shown in a preview the developer confirmed: one flag per reference (a file outside the projects only when
+    /// Shown in a preview the developer confirmed: one flag per reference (a file or folder only when approved by
     /// the developer also allowed those).
     Confirmed(Vec<bool>),
     /// Unchanged from the record: each keeps the trust of the matching stored doc.
@@ -41,6 +41,8 @@ pub struct OpenEnv<'a> {
 /// One project root the file names.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 pub struct ImportRoot {
+    /// Shown, not blocking: a dot-folder or a credential location that agents would be able to read and edit.
+    pub warning: Option<String>,
     pub path: PathBuf,
     pub exists: bool,
     pub is_dir: bool,
@@ -58,7 +60,11 @@ pub struct ImportDoc {
     pub page_id: Option<String>,
     /// The host a URL or Confluence reference would be fetched from.
     pub host: Option<String>,
-    /// A file or folder outside every project the file names: read only when the developer allows these.
+    /// The doc's id in the file: what `confirm_open` approves file and folder references by.
+    pub id: String,
+    /// A file or folder: never trusted unless approved one by one in the preview.
+    pub needs_approval: bool,
+    /// A file or folder outside every project the file names (a warning shown beside it).
     pub outside_projects: bool,
 }
 
@@ -87,8 +93,8 @@ pub struct WorkspaceImportPreview {
 
 /// A preview waiting for its confirm: the file exactly as read and its roots as they resolved then.
 pub(crate) struct PendingImport {
-    /// Per reference: a file or folder outside the file's projects.
-    outside: Vec<bool>,
+    /// Per reference: a file or folder, which needs per-doc approval.
+    needs_approval: Vec<bool>,
     path: PathBuf,
     file: WorkspaceFile,
     roots: Vec<PathBuf>,
@@ -155,7 +161,12 @@ pub fn preview_open(store: &WorkspaceStore, path: &Path, env: &OpenEnv) -> Resul
                 blocked = true;
                 problems.push(why);
             }
+            let warning = super::import_checks::sensitive_root(root, env.home_dir);
+            if let Some(w) = &warning {
+                problems.push(w.clone());
+            }
             shown.push(ImportRoot {
+                warning,
                 path: root.clone(),
                 exists: root.exists(),
                 is_dir: root.is_dir(),
@@ -181,6 +192,8 @@ pub fn preview_open(store: &WorkspaceStore, path: &Path, env: &OpenEnv) -> Resul
                 target: d.target.clone(),
                 label: d.label.clone(),
                 page_id: d.page_id.clone(),
+                id: d.id.clone(),
+                needs_approval: matches!(d.kind, ContextDocKind::File | ContextDocKind::Folder),
                 outside_projects: *out,
                 host: url::Url::parse(&d.target)
                     .ok()
@@ -198,7 +211,11 @@ pub fn preview_open(store: &WorkspaceStore, path: &Path, env: &OpenEnv) -> Resul
     pending.insert(
         token,
         PendingImport {
-            outside: outside.clone(),
+            needs_approval: file
+                .context_docs
+                .iter()
+                .map(|d| matches!(d.kind, ContextDocKind::File | ContextDocKind::Folder))
+                .collect(),
             path,
             file,
             roots,
@@ -213,9 +230,15 @@ pub fn preview_open(store: &WorkspaceStore, path: &Path, env: &OpenEnv) -> Resul
 /// another record elsewhere is imported under a fresh id (written into the file on its next save) and inherits
 /// nothing from that record. Refused when the token is unknown or expired, the preview was blocked, or a root now
 /// resolves to a different folder.
-/// `allow_outside_docs` trusts the file and folder references outside the projects too (the preview marks them);
-/// otherwise they are imported untrusted and never read.
-pub fn confirm_open(store: &WorkspaceStore, token: &str, allow_outside_docs: bool, env: &OpenEnv) -> Result<Workspace> {
+/// `approved_doc_ids` names the file and folder references (by their id in the preview) the developer approved one
+/// by one; every other file or folder reference is imported untrusted and never read nor named in prompts. A root
+/// the file declares never implies approval.
+pub fn confirm_open(
+    store: &WorkspaceStore,
+    token: &str,
+    approved_doc_ids: &[String],
+    env: &OpenEnv,
+) -> Result<Workspace> {
     let review_again = || Error::Precondition("This review expired; open the workspace file again.".into());
     let pending = store.pending_imports().remove(token).ok_or_else(review_again)?;
     if pending.at.elapsed() >= PREVIEW_TTL {
@@ -236,7 +259,13 @@ pub fn confirm_open(store: &WorkspaceStore, token: &str, allow_outside_docs: boo
         None => (pending.file.id.clone(), false),
     };
     // every reference was listed in the preview the developer confirmed
-    let trust = pending.outside.iter().map(|out| !out || allow_outside_docs).collect();
+    let trust = pending
+        .file
+        .context_docs
+        .iter()
+        .zip(&pending.needs_approval)
+        .map(|(d, needs)| !needs || approved_doc_ids.contains(&d.id))
+        .collect();
     super::open::import(
         store,
         &pending.path,
@@ -345,10 +374,10 @@ mod tests {
         );
         assert!(s.list().unwrap().is_empty(), "nothing is written before confirm");
         assert!(matches!(
-            confirm_open(&s, "0000", false, &env),
+            confirm_open(&s, "0000", &[], &env),
             Err(Error::Precondition(_))
         ));
-        assert_eq!(confirm_open(&s, &p.token, false, &env).unwrap().id.as_str(), "ws-c1");
+        assert_eq!(confirm_open(&s, &p.token, &[], &env).unwrap().id.as_str(), "ws-c1");
     }
 
     #[test]
@@ -373,9 +402,10 @@ mod tests {
             let path = dir.path().join("Bad.teamcode-workspace.json");
             std::fs::write(&path, file_with(json!({}), &[("x", bad)])).unwrap();
             let p = preview_open(&s, &path, &env).unwrap();
-            assert!(p.blocked && p.problems.len() == 1, "{bad}: {:?}", p.problems);
+            // tempdirs are dot-folders, so a credential warning may come with the refusal
+            assert!(p.blocked && !p.problems.is_empty(), "{bad}: {:?}", p.problems);
             assert!(
-                matches!(confirm_open(&s, &p.token, false, &env), Err(Error::Precondition(_))),
+                matches!(confirm_open(&s, &p.token, &[], &env), Err(Error::Precondition(_))),
                 "{bad}"
             );
         }
@@ -427,11 +457,11 @@ mod tests {
             ),
         )
         .unwrap();
-        let ws = confirm_open(&s, &p.token, false, &env).unwrap();
+        let ws = confirm_open(&s, &p.token, &[], &env).unwrap();
         assert_eq!(ws.projects.len(), 1);
         assert!(s.agents(&ws.id).unwrap().is_empty());
         assert!(
-            matches!(confirm_open(&s, &p.token, false, &env), Err(Error::Precondition(_))),
+            matches!(confirm_open(&s, &p.token, &[], &env), Err(Error::Precondition(_))),
             "a token is single use"
         );
     }
@@ -450,7 +480,7 @@ mod tests {
         std::fs::remove_file(&link).unwrap();
         std::os::unix::fs::symlink(&fx.web.root, &link).unwrap();
         assert!(matches!(
-            confirm_open(&s, &p.token, false, &env),
+            confirm_open(&s, &p.token, &[], &env),
             Err(Error::Precondition(_))
         ));
         assert!(s.list().unwrap().is_empty());
@@ -467,7 +497,7 @@ mod tests {
         std::fs::write(&path, file_with(doc("Spec"), &roots)).unwrap();
         let p = preview_open(&s, &path, &env).unwrap();
         assert_eq!(p.docs[0].label, "Spec");
-        confirm_open(&s, &p.token, false, &env).unwrap();
+        confirm_open(&s, &p.token, &[], &env).unwrap();
         assert!(
             !preview_open(&s, &path, &env).unwrap().needs_confirmation,
             "unchanged: no dialog"
@@ -496,7 +526,7 @@ mod tests {
         );
         let p = preview_open(&s, &path, &env).unwrap();
         assert_eq!(p.docs[0].host.as_deref(), Some("wiki.corp"));
-        let ws = confirm_open(&s, &p.token, false, &env).unwrap();
+        let ws = confirm_open(&s, &p.token, &[], &env).unwrap();
         let stored =
             crate::workspace::context_docs::list_rows(&s.db().lock().unwrap(), &Container::Workspace { id: ws.id })
                 .unwrap();
@@ -523,18 +553,43 @@ mod tests {
             [true, false]
         );
         assert!(p.problems.iter().any(|m| m.contains(OUTSIDE_PROJECTS)) && !p.blocked);
-        let ws = confirm_open(&s, &p.token, false, &env).unwrap();
+        let ws = confirm_open(&s, &p.token, &[], &env).unwrap();
         let stored = crate::workspace::context_docs::list_rows(
             &s.db().lock().unwrap(),
             &Container::Workspace { id: ws.id.clone() },
         )
         .unwrap();
-        assert_eq!(stored.iter().map(|d| d.trusted).collect::<Vec<_>>(), [false, true]);
+        assert_eq!(
+            stored.iter().map(|d| d.trusted).collect::<Vec<_>>(),
+            [false, false],
+            "inside a root the file declared is not approval"
+        );
         let p = preview_open(&s, &path, &env).unwrap();
-        let ws = confirm_open(&s, &p.token, true, &env).unwrap();
+        let ws = confirm_open(&s, &p.token, &["doc-1".to_owned()], &env).unwrap();
         let stored =
             crate::workspace::context_docs::list_rows(&s.db().lock().unwrap(), &Container::Workspace { id: ws.id })
                 .unwrap();
-        assert!(stored.iter().all(|d| d.trusted));
+        assert_eq!(
+            stored.iter().map(|d| d.trusted).collect::<Vec<_>>(),
+            [true, false],
+            "approval is per doc"
+        );
+    }
+
+    #[test]
+    fn credential_folders_as_roots_are_warned_about() {
+        let (_fx, s, home, cfg) = setup();
+        let env = env_of(&home, &cfg);
+        let ssh = home.path().join(".ssh");
+        std::fs::create_dir_all(&ssh).unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("Shared.teamcode-workspace.json");
+        std::fs::write(&path, file_with(json!({}), &[("keys", ssh.to_str().unwrap())])).unwrap();
+        let p = preview_open(&s, &path, &env).unwrap();
+        assert!(!p.blocked, "a warning, not a block");
+        assert!(p.roots[0]
+            .warning
+            .as_deref()
+            .is_some_and(|w| w.contains("read and edit")));
     }
 }
