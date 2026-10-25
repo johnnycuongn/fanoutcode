@@ -10,12 +10,13 @@ use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use fanoutcode_core::changes::{self, AttributedFile};
 use fanoutcode_core::domain::{ProjectId, Task, TaskId};
 use fanoutcode_core::git::{self, StatusEntry};
 use fanoutcode_core::overlap::claims::{self, ClaimsFile, TaskFiles};
 use fanoutcode_core::overlap::compute::{self, OtherTask};
+use fanoutcode_core::overlap::decide::GrantedCommand;
 use fanoutcode_core::overlap::denial::EditCall;
 use fanoutcode_core::overlap::footprint::{self, FootprintRow};
 use fanoutcode_core::overlap::observed;
@@ -27,10 +28,12 @@ use crate::events::{self, OverlapChanged};
 use crate::observe::{self, log_err};
 use crate::state::AppState;
 
+mod commands;
 mod decide;
 mod hookless;
 mod pin;
 
+pub use commands::{drop_stale_command_grants, on_command_ran};
 pub use decide::{decide, release_holds};
 pub use hookless::observe_hookless;
 pub use pin::{apply_derived, clear_task, deliver_notes_if_idle, note_edit_call, on_claim_denied, repin};
@@ -49,6 +52,10 @@ pub struct OverlapCache {
     pub(super) unattributed: Mutex<HashMap<PathBuf, Vec<AttributedFile>>>,
     /// Per shared repo, the status `observe_hookless` saw last.
     pub(super) last_status: Mutex<HashMap<PathBuf, Vec<StatusEntry>>>,
+    /// Per task, the `Command` grants the app wrote and has not yet seen run: what a `CommandRan` line must match.
+    pub(super) granted_commands: Mutex<HashMap<TaskId, Vec<GrantedCommand>>>,
+    /// Per task, when the go-ahead for its granted commands was typed in.
+    pub(super) command_go_aheads: Mutex<HashMap<TaskId, DateTime<Utc>>>,
 }
 
 /// An active (not archived) task with its home root and repos.

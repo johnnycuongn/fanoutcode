@@ -1341,6 +1341,12 @@ export type HookEvent = { type: "SessionStart"; session_id: string; transcript_p
  */
 { type: "ClaimNoted"; repo: string; path: string | null; command: string | null; other_task: TaskId | null } | 
 /**
+ * Written by the `claim-check` hook when it spent a `Command` grant and let `command` run over `other_task`'s
+ * claimed `paths` (§5.6). Agent-writable like every log line: the app acts on it only when it matches a grant
+ * the app recorded itself (`overlap::decide::command_ran`).
+ */
+{ type: "CommandRan"; repo: string; command: string; kind: CommandKind; paths: string[]; other_task: TaskId | null } | 
+/**
  * Written by the app when the developer decides a pending overlap; `decision` is the `Decision` variant name.
  */
 { type: "OverlapDecided"; repo: string; path: string; other_task: TaskId | null; decision: string } | 

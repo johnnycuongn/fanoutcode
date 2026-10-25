@@ -8,6 +8,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use super::claims::ClaimsFile;
+use super::CommandKind;
 use crate::domain::TaskId;
 use crate::memory::store::write_atomic;
 use crate::Result;
@@ -22,11 +23,15 @@ pub enum GrantScope {
         path: String,
     },
     AllFiles,
-    /// Single use: taken out of the grants file before the hook allows the command (`take_command`). `repo` is
-    /// the repo the denied command ran in; the grant matches the command only there.
+    /// Single use: taken out of the grants file before the hook allows the command (`take_commands`). `repo` is
+    /// the repo the denied command ran in; the grant matches the command only there. `paths` are the other task's
+    /// files the command touched when the developer answered: a spend fails once that set has changed, and once the
+    /// grant is older than `COMMAND_GRANT_MINUTES` (the `Grant`'s `granted_at`).
     Command {
         repo: PathBuf,
         command: String,
+        #[serde(default)]
+        paths: Vec<String>,
     },
 }
 
@@ -110,7 +115,48 @@ impl GrantsFile {
 
 fn command_matches(g: &Grant, command: &str, repo: &Path, other: Option<&TaskId>) -> bool {
     g.other_task.as_ref() == other
-        && matches!(&g.scope, GrantScope::Command { repo: r, command: c } if r == repo && c.trim() == command.trim())
+        && matches!(&g.scope, GrantScope::Command { repo: r, command: c, .. } if r == repo && c.trim() == command.trim())
+}
+
+/// How long a `Command` grant may wait to be spent.
+pub const COMMAND_GRANT_MINUTES: i64 = 10;
+
+fn sorted(paths: &[String]) -> Vec<&str> {
+    let mut v: Vec<&str> = paths.iter().map(String::as_str).collect();
+    v.sort_unstable();
+    v.dedup();
+    v
+}
+
+/// Whether `g` may be spent on `need` at `now`: the same command, repo and other task, the same set of that task's
+/// files touched now as when it was granted, and not yet expired.
+fn spendable(g: &Grant, command: &str, need: &CommandNeed, now: DateTime<Utc>) -> bool {
+    let GrantScope::Command { paths, .. } = &g.scope else {
+        return false;
+    };
+    command_matches(g, command, &need.repo, need.other.as_ref())
+        && sorted(paths) == sorted(&need.paths)
+        && now - g.granted_at <= chrono::Duration::minutes(COMMAND_GRANT_MINUTES)
+}
+
+/// One `Command` grant a Bash call needs: the repo, the other task whose claims it touches there, those claimed
+/// paths now, and what the command does to them (logged in `CommandRan` once spent).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CommandNeed {
+    pub repo: PathBuf,
+    pub other: Option<TaskId>,
+    pub paths: Vec<String>,
+    pub kind: CommandKind,
+}
+
+/// The `Command` grants of `file` the go-ahead typed at `delivered_at` covered (granted then or before): unspent at
+/// the session's next main-agent `Stop`, they are dropped, so a later run of the command is asked about again.
+pub fn stale_command_grants(file: &GrantsFile, delivered_at: DateTime<Utc>) -> Vec<Grant> {
+    file.grants
+        .iter()
+        .filter(|g| matches!(g.scope, GrantScope::Command { .. }) && g.granted_at <= delivered_at)
+        .cloned()
+        .collect()
 }
 
 /// `<grants>.lock`, the sibling every writer of the grants file locks.
@@ -139,18 +185,14 @@ pub fn with_grants_lock<T>(path: &Path, f: impl FnOnce() -> Result<T>) -> Result
     out
 }
 
-/// Takes one `Command` grant for each of `needed` (a repo and the other task whose claims the command touches there)
-/// out of the grants file at `path`, under the lock: re-read, every one present, removed, written atomically. True
-/// only when all were there and the write succeeded; otherwise the file is left as it was and the hook denies.
-pub fn take_commands(path: &Path, command: &str, needed: &[(PathBuf, Option<TaskId>)]) -> bool {
+/// Takes one `Command` grant for each of `needed` out of the grants file at `path`, under the lock: re-read, every
+/// one present and `spendable` at `now`, removed, written atomically. True only when all were there and the write
+/// succeeded; otherwise the file is left as it was and the hook denies.
+pub fn take_commands(path: &Path, command: &str, needed: &[CommandNeed], now: DateTime<Utc>) -> bool {
     let taken = with_grants_lock(path, || {
         let mut file = read_grants(path);
-        for (repo, other) in needed {
-            let Some(i) = file
-                .grants
-                .iter()
-                .position(|g| command_matches(g, command, repo, other.as_ref()))
-            else {
+        for need in needed {
+            let Some(i) = file.grants.iter().position(|g| spendable(g, command, need, now)) else {
                 return Ok(false);
             };
             file.grants.remove(i);
@@ -168,201 +210,23 @@ pub fn take_commands(path: &Path, command: &str, needed: &[(PathBuf, Option<Task
 }
 
 /// `take_commands` for one repo and other task.
-pub fn take_command(path: &Path, command: &str, repo: &Path, other: Option<&TaskId>) -> bool {
-    take_commands(path, command, &[(repo.to_owned(), other.cloned())])
+pub fn take_command(
+    path: &Path,
+    command: &str,
+    repo: &Path,
+    other: Option<&TaskId>,
+    paths: &[String],
+    now: DateTime<Utc>,
+) -> bool {
+    let need = CommandNeed {
+        repo: repo.to_owned(),
+        other: other.cloned(),
+        paths: paths.to_vec(),
+        kind: CommandKind::Discards,
+    };
+    take_commands(path, command, &[need], now)
 }
 
 #[cfg(test)]
-mod tests {
-    use serde_json::json;
-
-    use super::*;
-    use crate::overlap::claims::Claim;
-
-    fn id(s: &str) -> TaskId {
-        TaskId::parse(s).unwrap()
-    }
-
-    fn at() -> DateTime<Utc> {
-        "2026-10-25T10:00:00Z".parse().unwrap()
-    }
-
-    fn file_grant(other: Option<&str>, repo: &str, path: &str) -> Grant {
-        Grant {
-            other_task: other.map(id),
-            scope: GrantScope::File {
-                repo: repo.into(),
-                path: path.into(),
-            },
-            granted_at: at(),
-        }
-    }
-
-    fn all_grant(other: &str) -> Grant {
-        Grant {
-            other_task: Some(id(other)),
-            scope: GrantScope::AllFiles,
-            granted_at: at(),
-        }
-    }
-
-    fn claims(repo: &str, held: &[(&str, Option<&str>)]) -> ClaimsFile {
-        ClaimsFile {
-            repo_root: repo.into(),
-            written_at: at(),
-            claims: held
-                .iter()
-                .map(|(path, task)| Claim {
-                    path: (*path).into(),
-                    task_id: task.map(id),
-                    title: "x".into(),
-                    stage: None,
-                    state: None,
-                    last_edit: at(),
-                    staged: false,
-                })
-                .collect(),
-        }
-    }
-
-    #[test]
-    fn file_grant_covers_exactly_its_path() {
-        let g = GrantsFile {
-            grants: vec![file_grant(Some("t-b2"), "/r", "src/a.ts")],
-        };
-        let b = id("t-b2");
-        assert!(g.covers(Path::new("/r"), "src/a.ts", Some(&b)));
-        assert!(!g.covers(Path::new("/r"), "src/b.ts", Some(&b)));
-        assert!(!g.covers(Path::new("/other"), "src/a.ts", Some(&b)));
-        assert!(!g.covers(Path::new("/r"), "src/a.ts", Some(&id("t-c3"))));
-    }
-
-    #[test]
-    fn all_files_grant_covers_only_the_named_task() {
-        let g = GrantsFile {
-            grants: vec![all_grant("t-b2")],
-        };
-        assert!(g.covers(Path::new("/r"), "src/a.ts", Some(&id("t-b2"))));
-        assert!(g.covers(Path::new("/s"), "lib/z.rs", Some(&id("t-b2"))));
-        assert!(!g.covers(Path::new("/r"), "src/a.ts", Some(&id("t-c3"))));
-        assert!(!g.covers(Path::new("/r"), "src/a.ts", None));
-    }
-
-    #[test]
-    fn a_grant_with_no_other_task_matches_an_unattributed_claim() {
-        let g = GrantsFile {
-            grants: vec![file_grant(None, "/r", "src/gen.ts")],
-        };
-        assert!(g.covers(Path::new("/r"), "src/gen.ts", None));
-        assert!(!g.covers(Path::new("/r"), "src/gen.ts", Some(&id("t-b2"))));
-    }
-
-    #[test]
-    fn add_replaces_the_same_grant() {
-        let mut g = GrantsFile::default();
-        g.add(all_grant("t-b2"));
-        g.add(all_grant("t-b2"));
-        g.add(file_grant(Some("t-b2"), "/r", "a"));
-        assert_eq!(g.grants.len(), 2);
-    }
-
-    #[test]
-    fn prune_drops_grants_without_claims() {
-        let mut g = GrantsFile {
-            grants: vec![
-                file_grant(Some("t-b2"), "/r", "src/a.ts"),    // still claimed by B: kept
-                file_grant(Some("t-b2"), "/r", "src/gone.ts"), // committed: dropped
-                file_grant(Some("t-c3"), "/r", "src/a.ts"),    // a.ts is B's, not C's: dropped
-                file_grant(None, "/s", "gen.ts"),              // unattributed claim in /s: kept
-                all_grant("t-b2"),                             // B claims something: kept
-                all_grant("t-d4"),                             // D claims nothing: dropped
-                file_grant(Some("t-b2"), "/r", "src/x.ts"),    // B claims src/x.ts in /s only: dropped
-            ],
-        };
-        let r = claims("/r", &[("src/a.ts", Some("t-b2"))]);
-        let s = claims("/s", &[("gen.ts", None), ("src/x.ts", Some("t-b2"))]);
-        g.prune(&[&r, &s]);
-        assert_eq!(
-            g.grants,
-            vec![
-                file_grant(Some("t-b2"), "/r", "src/a.ts"),
-                file_grant(None, "/s", "gen.ts"),
-                all_grant("t-b2"),
-            ]
-        );
-    }
-
-    #[test]
-    fn a_command_grant_covers_no_edit_and_matches_its_command_trimmed() {
-        let g = GrantsFile {
-            grants: vec![Grant {
-                other_task: Some(id("t-b2")),
-                scope: GrantScope::Command {
-                    repo: "/r".into(),
-                    command: "git stash".into(),
-                },
-                granted_at: at(),
-            }],
-        };
-        let (b, r) = (id("t-b2"), Path::new("/r"));
-        assert!(!g.covers(r, "src/a.ts", Some(&b)));
-        assert!(g.allows_command(" git stash\n", r, Some(&b)));
-        assert!(!g.allows_command("git stash", Path::new("/s"), Some(&b)));
-        assert!(!g.allows_command("git stash -u", r, Some(&b)));
-        assert!(!g.allows_command("git stash", r, Some(&id("t-c3"))));
-        assert!(!g.allows_command("git stash", r, None));
-        let dir = tempfile::tempdir().unwrap();
-        let path = write_grants(dir.path(), &id("t-a1"), &g).unwrap();
-        assert!(!take_command(&path, "git reset --hard", r, Some(&b)));
-        assert_eq!(read_grants(&path), g, "another command spends nothing");
-        assert!(take_command(&path, "git stash", r, Some(&b)));
-        assert!(read_grants(&path).grants.is_empty());
-        assert!(path.with_file_name("t-a1.json.lock").exists());
-    }
-
-    #[test]
-    fn read_is_empty_for_missing_file() {
-        let dir = tempfile::tempdir().unwrap();
-        assert_eq!(read_grants(&dir.path().join("none.json")), GrantsFile::default());
-        let bad = dir.path().join("bad.json");
-        std::fs::write(&bad, "{\"grants\": [").unwrap();
-        assert_eq!(read_grants(&bad), GrantsFile::default());
-    }
-
-    #[test]
-    fn write_then_read_round_trips() {
-        let dir = tempfile::tempdir().unwrap();
-        let file = GrantsFile {
-            grants: vec![file_grant(Some("t-b2"), "/r", "src/a.ts"), all_grant("t-c3")],
-        };
-        let path = write_grants(dir.path(), &id("t-a1"), &file).unwrap();
-        assert_eq!(path, dir.path().join("grants/t-a1.json"));
-        assert_eq!(read_grants(&path), file);
-    }
-
-    #[test]
-    fn grant_scope_is_internally_tagged() {
-        for scope in [
-            GrantScope::AllFiles,
-            GrantScope::File {
-                repo: "/r".into(),
-                path: "a.ts".into(),
-            },
-            GrantScope::Command {
-                repo: "/r".into(),
-                command: "git stash".into(),
-            },
-        ] {
-            let v = serde_json::to_value(&scope).unwrap();
-            assert_eq!(serde_json::from_value::<GrantScope>(v).unwrap(), scope);
-        }
-        assert_eq!(
-            serde_json::to_value(GrantScope::AllFiles).unwrap(),
-            json!({"type": "AllFiles"})
-        );
-        assert_eq!(
-            serde_json::to_value(file_grant(None, "/r", "a.ts")).unwrap()["scope"],
-            json!({"type": "File", "repo": "/r", "path": "a.ts"})
-        );
-    }
-}
+#[path = "grants_tests.rs"]
+mod tests;

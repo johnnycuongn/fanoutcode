@@ -195,19 +195,11 @@ fn a_command_proceeds_with_a_command_grant_and_an_unattributed_other_is_told_not
             out.grant.unwrap().scope,
             GrantScope::Command {
                 repo: "/r".into(),
-                command: "git add -A".into()
+                command: "git add -A".into(),
+                paths: vec!["src/a.ts".into()],
             }
         );
         assert_eq!(out.my_prompt, Some(go_ahead_command("Login", "git add -A")));
-        assert_eq!(
-            out.other_prompt,
-            Some(told_command(
-                "Checkout",
-                "git add -A",
-                CommandKind::Commits,
-                &["src/a.ts".into()]
-            ))
-        );
         assert!(!out.taken_over);
     }
     assert!(

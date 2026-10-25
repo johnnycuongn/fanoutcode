@@ -95,6 +95,20 @@ fn event_from(name: &str, p: &Value) -> HookEvent {
             command: opt_text(p, "command"),
             other_task: task_id(p, "other_task"),
         },
+        "CommandRan" => match serde_json::from_value(field(p, "kind")) {
+            Ok(kind) => HookEvent::CommandRan {
+                repo: text(p, "repo").into(),
+                command: text(p, "command"),
+                kind,
+                paths: p
+                    .get("paths")
+                    .and_then(Value::as_array)
+                    .map(|a| a.iter().filter_map(Value::as_str).map(str::to_owned).collect())
+                    .unwrap_or_default(),
+                other_task: task_id(p, "other_task"),
+            },
+            Err(_) => HookEvent::Unknown { name: name.to_owned() },
+        },
         "OverlapDecided" => HookEvent::OverlapDecided {
             repo: text(p, "repo").into(),
             path: text(p, "path"),
@@ -262,6 +276,28 @@ mod tests {
     fn a_payload_that_is_not_json_is_preserved_as_unknown() {
         let e = parse_line(&tid(), 1, "Stop\t2026-10-24T05:15:00Z\t{\"half").unwrap();
         assert!(matches!(e.event, HookEvent::Unknown { ref name } if name == "Stop"));
+    }
+
+    #[test]
+    fn parses_command_ran() {
+        let a = TaskId::parse("t-a1").unwrap();
+        let line = "CommandRan\t2026-10-25T10:02:00Z\t{\"repo\":\"/r\",\"command\":\"git stash\",\"kind\":\"Discards\",\"paths\":[\"src/a.ts\"],\"other_task\":\"t-b2\"}";
+        assert_eq!(
+            parse_line(&a, 1, line).unwrap().event,
+            HookEvent::CommandRan {
+                repo: "/r".into(),
+                command: "git stash".into(),
+                kind: crate::overlap::CommandKind::Discards,
+                paths: vec!["src/a.ts".into()],
+                other_task: Some(TaskId::parse("t-b2").unwrap()),
+            }
+        );
+        // a kind it cannot read is not a run
+        let bad = "CommandRan\t2026-10-25T10:02:00Z\t{\"repo\":\"/r\",\"command\":\"git stash\",\"kind\":\"Eats\"}";
+        assert!(matches!(
+            parse_line(&a, 2, bad).unwrap().event,
+            HookEvent::Unknown { .. }
+        ));
     }
 
     #[test]

@@ -131,6 +131,13 @@ pub async fn handle(app: &AppHandle, mut ev: TaskEvent, line: &str, live: bool) 
                 overlap_sync::on_claim_denied(app, &state, &ev),
             );
         }
+        // acted on only when it matches a grant the app recorded; a replayed one was handled before the relaunch
+        HookEvent::CommandRan { .. } if live => {
+            log_err(
+                "telling the other task a command ran",
+                overlap_sync::on_command_ran(app, &state, &ev),
+            );
+        }
         HookEvent::SubagentStart {
             agent_id, description, ..
         } => {
@@ -212,6 +219,10 @@ pub async fn handle(app: &AppHandle, mut ev: TaskEvent, line: &str, live: bool) 
     crate::hooks_tailer::publish(&id, &ev.event);
     // the session went idle (its idle state was just updated by the publish): queued notes go in now
     if live && ev.agent_id.is_none() && matches!(ev.event, HookEvent::Stop { .. }) {
+        log_err(
+            "dropping unspent command grants",
+            overlap_sync::drop_stale_command_grants(&state, &id, ev.at),
+        );
         log_err(
             "delivering notes",
             overlap_sync::deliver_notes_if_idle(app, &state, &id),

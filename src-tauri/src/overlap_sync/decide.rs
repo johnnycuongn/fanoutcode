@@ -21,6 +21,7 @@ use fanoutcode_core::pipeline::{self, Effect};
 use fanoutcode_core::{db, Error, Result};
 use tauri::{AppHandle, Manager};
 
+use super::commands::{note_go_ahead, record_grant};
 use super::{deliver_notes_if_idle, emit_overlap_changed, rebuild_claims, rebuild_overlaps, repin};
 use crate::events;
 use crate::git_watcher;
@@ -29,7 +30,13 @@ use crate::session_service;
 use crate::state::AppState;
 
 /// Writes a `TimelineKind::Overlap` line into the task's timeline and `index.md`, and tells the windows.
-fn timeline(app: &AppHandle, state: &AppState, id: &TaskId, detail: String, now: DateTime<Utc>) -> Result<()> {
+pub(super) fn timeline(
+    app: &AppHandle,
+    state: &AppState,
+    id: &TaskId,
+    detail: String,
+    now: DateTime<Utc>,
+) -> Result<()> {
     let applied = {
         let mut conn = state.db.lock().expect("db lock");
         let task = db::tasks::require(&conn, id)?;
@@ -125,6 +132,10 @@ pub async fn decide(
             grants::write_grants(&state.data_dir, task_id, &held).map(|_| ())
         })?;
     }
+    if let Some(g) = out.granted_command.clone() {
+        // what the hook's `CommandRan` line must match before the other task is told
+        record_grant(&state, task_id, g);
+    }
     {
         let conn = state.db.lock().expect("db lock");
         let key = (task_id, repo.as_path(), path, row.other_task.as_ref());
@@ -175,15 +186,20 @@ pub async fn decide(
     repin(app, &state, task_id)?;
     emit_overlap_changed(app, &state, task_id)?;
     // a command that touches several tasks' files is told to run only once the last of them is answered
-    let due = match &row.pending {
-        Some(PendingDecision::Command { command, .. }) => {
-            command_go_ahead_due(&store::pending(&state.db.lock().expect("db lock"), task_id)?, command)
-        }
-        _ => true,
+    let (due, command) = match &row.pending {
+        Some(PendingDecision::Command { command, .. }) => (
+            command_go_ahead_due(&store::pending(&state.db.lock().expect("db lock"), task_id)?, command),
+            true,
+        ),
+        _ => (true, false),
     };
     if let (true, Some(p)) = (due, out.my_prompt.clone()) {
+        if command {
+            note_go_ahead(&state, task_id, now);
+        }
         inject(app, &state, task_id, p)?;
     }
+    // an edit grant tells the other task now; a command grant once it runs (`commands::on_command_ran`)
     if let (Some(o), Some(p)) = (&other_task, out.other_prompt.clone()) {
         notes::push_note(&notes::notes_path(&state.data_dir, &o.id), &p)?;
         deliver_notes_if_idle(app, &state, &o.id)?;

@@ -2,7 +2,7 @@
 //! (the grant, the relation, the timeline lines, the prompts), which other open decisions the new grant answers too,
 //! which held decisions a clean file releases, and the `OverlapDecided` log line.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Utc};
 
@@ -10,14 +10,18 @@ use crate::git::StatusEntry;
 
 use super::grants::{Grant, GrantScope, GrantsFile};
 use super::prompts::{command_free, go_ahead, go_ahead_command, told, told_command};
-use super::{Decision, OverlapRow, PendingDecision, Relation};
+use super::{CommandKind, Decision, OverlapRow, PendingDecision, Relation};
+use crate::domain::TaskId;
 
 /// Everything one decision writes. `my_prompt` goes into this task's session, `other_prompt` to the other task's
 /// note inbox; the timeline texts are `TimelineKind::Overlap` details. `taken_over` moves the path from the other
 /// task's change set into this one's; `hold` keeps the decision open with `held` set. `other_relation` is the row the
-/// other task gets for the same path (against this task), so both Overlap tabs show a Replace.
+/// other task gets for the same path (against this task), so both Overlap tabs show a Replace. For a command,
+/// `granted_command` is the app's own record of the grant: the other task is told only once a `CommandRan` line of
+/// this task matches it (`command_ran`), never at decide time.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DecisionOutcome {
+    pub granted_command: Option<GrantedCommand>,
     pub grant: Option<Grant>,
     pub relation: Relation,
     pub other_relation: Option<Relation>,
@@ -29,10 +33,64 @@ pub struct DecisionOutcome {
     pub hold: bool,
 }
 
+/// A `Command` grant the app wrote, kept by the shell until the command runs or the grant goes stale: the only thing
+/// a `CommandRan` line (agent-writable, so never trusted alone) is matched against.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GrantedCommand {
+    pub repo: PathBuf,
+    pub command: String,
+    pub kind: CommandKind,
+    pub paths: Vec<String>,
+    pub other_task: TaskId,
+    pub my_title: String,
+    pub other_title: String,
+    pub granted_at: DateTime<Utc>,
+}
+
+/// What a matched `CommandRan` writes: the note for the other task's inbox and both timeline lines.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CommandTold {
+    pub other_task: TaskId,
+    pub other_prompt: String,
+    pub my_timeline: String,
+    pub other_timeline: String,
+}
+
+/// A `CommandRan { repo, command, paths, other_task }` line of a task's own log against the grants the app recorded
+/// for that task (`granted`): the matching record (same repo, trimmed command, other task and set of paths) is taken
+/// out and the other task told what the command did, from the record, not from the line. A line with no matching
+/// record does nothing.
+pub fn command_ran(
+    granted: &mut Vec<GrantedCommand>,
+    repo: &Path,
+    command: &str,
+    paths: &[String],
+    other: Option<&TaskId>,
+) -> Option<CommandTold> {
+    let other = other?;
+    let mut wanted: Vec<&String> = paths.iter().collect();
+    wanted.sort();
+    wanted.dedup();
+    let i = granted.iter().position(|g| {
+        let mut have: Vec<&String> = g.paths.iter().collect();
+        have.sort();
+        have.dedup();
+        g.repo == repo && g.command.trim() == command.trim() && &g.other_task == other && have == wanted
+    })?;
+    let g = granted.remove(i);
+    Some(CommandTold {
+        other_prompt: told_command(&g.my_title, &g.command, g.kind, &g.paths),
+        my_timeline: format!("ran `{}` over {}'s changes", g.command, g.other_title),
+        other_timeline: format!("{} ran `{}` over your changes", g.my_title, g.command),
+        other_task: g.other_task,
+    })
+}
+
 /// The outcome of `decision` on `row`. For a denied shell command (§5.6) the only answers are Proceed and Hold:
 /// `OnTopFile`, `OnTopAll` and `Replace` all proceed, granting one run of exactly that command over the other
 /// task's claims (`GrantScope::Command`; an edit grant would switch the git guard off). The other task is told
-/// nothing when there is none (an unattributed session) or the answer is Hold.
+/// nothing at decide time: for a command only once it runs (`command_ran`), and never when there is no other task
+/// (an unattributed session) or the answer is Hold.
 pub fn outcome(
     decision: Decision,
     row: &OverlapRow,
@@ -59,19 +117,24 @@ pub fn outcome(
                 grant: grant(GrantScope::Command {
                     repo: row.repo_root.clone(),
                     command: command.trim().to_owned(),
+                    paths: paths.clone(),
+                }),
+                granted_command: row.other_task.as_ref().map(|o| GrantedCommand {
+                    repo: row.repo_root.clone(),
+                    command: command.trim().to_owned(),
+                    kind: *kind,
+                    paths: paths.clone(),
+                    other_task: o.clone(),
+                    my_title: my_title.to_owned(),
+                    other_title: other_title.to_owned(),
+                    granted_at: now,
                 }),
                 relation: Relation::GrantedOnTop,
                 other_relation: None,
                 my_prompt: Some(go_ahead_command(other_title, command)),
-                other_prompt: row
-                    .other_task
-                    .as_ref()
-                    .map(|_| told_command(my_title, command, *kind, paths)),
+                other_prompt: None,
                 my_timeline: format!("proceed with `{command}` over {other_title}'s changes"),
-                other_timeline: row
-                    .other_task
-                    .as_ref()
-                    .map(|_| format!("{my_title} ran `{command}` over your changes")),
+                other_timeline: None,
                 taken_over: false,
                 hold: false,
             };
@@ -80,6 +143,7 @@ pub fn outcome(
     let other_timeline = |text: String| row.other_task.as_ref().map(|_| text);
     match decision {
         Decision::OnTopFile => DecisionOutcome {
+            granted_command: None,
             grant: grant(file()),
             relation: Relation::GrantedOnTop,
             other_relation: None,
@@ -91,6 +155,7 @@ pub fn outcome(
             hold: false,
         },
         Decision::OnTopAll => DecisionOutcome {
+            granted_command: None,
             grant: grant(GrantScope::AllFiles),
             relation: Relation::GrantedOnTop,
             other_relation: None,
@@ -102,6 +167,7 @@ pub fn outcome(
             hold: false,
         },
         Decision::Replace => DecisionOutcome {
+            granted_command: None,
             grant: grant(file()),
             relation: Relation::TakenOver,
             other_relation: row.other_task.as_ref().map(|_| Relation::TakenOverBy),
@@ -113,6 +179,7 @@ pub fn outcome(
             hold: false,
         },
         Decision::Hold => DecisionOutcome {
+            granted_command: None,
             grant: None,
             relation: row.relation,
             other_relation: None,
@@ -257,3 +324,7 @@ pub fn decided_line(
 #[cfg(test)]
 #[path = "decide_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "decide_command_tests.rs"]
+mod command_tests;

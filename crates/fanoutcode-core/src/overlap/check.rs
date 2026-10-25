@@ -14,7 +14,7 @@ use serde::Deserialize;
 use super::claims::{read_claims, Claim, ClaimsFile};
 use super::denial::rule_kind;
 use super::git_rules::{evaluate_git, rel_in};
-use super::grants::{read_grants, take_commands, GrantsFile};
+use super::grants::{read_grants, take_commands, CommandNeed, GrantsFile};
 use super::notes::drain_notes;
 use super::CommandKind;
 use crate::domain::TaskId;
@@ -167,27 +167,37 @@ fn check_bash(input: &CheckInput, own: &TaskId, claims: &[ClaimsFile], grants: &
 }
 
 /// The `Command` grants a Bash call needs to pass the git guard: each repo and other task whose claims the command
-/// touches there, found segment hit by segment hit as `check_bash` would once every earlier hit was granted.
-fn command_grants_needed(input: &CheckInput, own: &TaskId, claims: &[ClaimsFile]) -> Vec<(PathBuf, Option<TaskId>)> {
+/// touches there, with those paths and what it does to them, found segment hit by segment hit as `check_bash` would
+/// once every earlier hit was granted.
+fn command_grants_needed(input: &CheckInput, own: &TaskId, claims: &[ClaimsFile]) -> Vec<CommandNeed> {
     let Some(command) = input.tool_input.get("command").and_then(|c| c.as_str()) else {
         return Vec::new();
     };
-    let mut needed: Vec<(PathBuf, Option<TaskId>)> = Vec::new();
+    let mut needed: Vec<CommandNeed> = Vec::new();
     for file in claims {
         let mut others: Vec<&Claim> = file.claims.iter().filter(|c| c.task_id.as_ref() != Some(own)).collect();
-        while let Some((_, paths)) = evaluate_git(command, &input.cwd, &file.repo_root, &others) {
-            let hit: Vec<Option<TaskId>> = others
-                .iter()
-                .filter(|c| paths.contains(&c.path))
-                .map(|c| c.task_id.clone())
-                .collect();
-            others.retain(|c| !hit.contains(&c.task_id));
-            for other in hit {
-                let key = (file.repo_root.clone(), other);
-                if !needed.contains(&key) {
-                    needed.push(key);
+        while let Some((rule, paths)) = evaluate_git(command, &input.cwd, &file.repo_root, &others) {
+            let hit: Vec<&Claim> = others.iter().copied().filter(|c| paths.contains(&c.path)).collect();
+            for c in &hit {
+                if needed.iter().any(|n| n.repo == file.repo_root && n.other == c.task_id) {
+                    continue;
                 }
+                let mut mine: Vec<String> = hit
+                    .iter()
+                    .filter(|o| o.task_id == c.task_id)
+                    .map(|o| o.path.clone())
+                    .collect();
+                mine.sort();
+                mine.dedup();
+                needed.push(CommandNeed {
+                    repo: file.repo_root.clone(),
+                    other: c.task_id.clone(),
+                    paths: mine,
+                    kind: rule_kind(rule),
+                });
             }
+            let gone: Vec<Option<TaskId>> = hit.iter().map(|c| c.task_id.clone()).collect();
+            others.retain(|c| !gone.contains(&c.task_id));
         }
     }
     needed
@@ -282,15 +292,8 @@ struct HookInput {
     cwd: Option<PathBuf>,
 }
 
-/// Appends `<event><TAB><rfc3339><TAB>{repo, path, command, other_task}` to the task's event log in one write;
-/// `event` is `ClaimDenied` for a stop, `ClaimNoted` for an overlap allowed with "Ask before editing" off.
-fn log_claim(log: &Path, event: &str, repo: &Path, path: Option<&str>, command: Option<&str>, other: Option<&Claim>) {
-    let payload = serde_json::json!({
-        "repo": repo,
-        "path": path,
-        "command": command,
-        "other_task": other.and_then(|c| c.task_id.as_ref()),
-    });
+/// Appends `<event><TAB><rfc3339><TAB><payload>` to the task's event log in one write.
+fn append_event(log: &Path, event: &str, payload: &serde_json::Value) {
     let line = format!("{event}\t{}\t{payload}\n", Utc::now().format("%Y-%m-%dT%H:%M:%SZ"));
     let written = log
         .parent()
@@ -299,6 +302,33 @@ fn log_claim(log: &Path, event: &str, repo: &Path, path: Option<&str>, command: 
         .and_then(|mut f| f.write_all(line.as_bytes()));
     if let Err(e) = written {
         eprintln!("fanoutcode claim-check: cannot log to {}: {e}", log.display());
+    }
+}
+
+/// `{repo, path, command, other_task}` as `event`: `ClaimDenied` for a stop, `ClaimNoted` for an overlap
+/// allowed with "Ask before editing" off.
+fn log_claim(log: &Path, event: &str, repo: &Path, path: Option<&str>, command: Option<&str>, other: Option<&Claim>) {
+    let payload = serde_json::json!({
+        "repo": repo,
+        "path": path,
+        "command": command,
+        "other_task": other.and_then(|c| c.task_id.as_ref()),
+    });
+    append_event(log, event, &payload);
+}
+
+/// One `CommandRan` line per grant just spent (§5.6): the app tells the other task only when the line matches a
+/// grant it wrote itself.
+fn log_command_ran(log: &Path, command: &str, needed: &[CommandNeed]) {
+    for n in needed {
+        let payload = serde_json::json!({
+            "repo": n.repo,
+            "command": command,
+            "kind": n.kind,
+            "paths": n.paths,
+            "other_task": n.other,
+        });
+        append_event(log, "CommandRan", &payload);
     }
 }
 
@@ -333,8 +363,12 @@ pub fn run_check(stdin: &mut dyn Read, stdout: &mut dyn Write, args: &CheckArgs)
             .get("command")
             .and_then(|c| c.as_str())
             .unwrap_or_default();
-        if !needed.is_empty() && !take_commands(&args.grants_path, command, &needed) {
-            decision = evaluate(&input, &args.task_id, &claims, &GrantsFile::default(), true);
+        if !needed.is_empty() {
+            if take_commands(&args.grants_path, command, &needed, Utc::now()) {
+                log_command_ran(&args.log_path, command, &needed);
+            } else {
+                decision = evaluate(&input, &args.task_id, &claims, &GrantsFile::default(), true);
+            }
         }
     }
     let decision = match decision {

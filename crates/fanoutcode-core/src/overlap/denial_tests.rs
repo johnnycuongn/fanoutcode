@@ -147,6 +147,7 @@ fn a_denied_command_opens_one_decision_per_claimed_path_it_touches() {
         scope: GrantScope::Command {
             repo: "/r".into(),
             command: "git add -A".into(),
+            paths: vec!["src/b.ts".into()],
         },
         granted_at: Utc::now(),
     });

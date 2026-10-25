@@ -220,6 +220,13 @@ mod tests {
                 command: None,
                 other_task: None,
             },
+            HookEvent::CommandRan {
+                repo: "/r".into(),
+                command: "git stash".into(),
+                kind: crate::overlap::CommandKind::Discards,
+                paths: vec!["a.ts".into()],
+                other_task: Some(crate::domain::TaskId::parse("t-b2").unwrap()),
+            },
             HookEvent::OverlapDecided {
                 repo: "/r".into(),
                 path: "a.ts".into(),

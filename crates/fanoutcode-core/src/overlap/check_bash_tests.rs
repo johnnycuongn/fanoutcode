@@ -53,7 +53,7 @@ fn grant(other: &str, scope: GrantScope) -> GrantsFile {
         grants: vec![Grant {
             other_task: Some(id(other)),
             scope,
-            granted_at: "2026-10-25T10:00:00Z".parse().unwrap(),
+            granted_at: Utc::now(),
         }],
     }
 }
@@ -64,6 +64,7 @@ fn command_grant_in(other: &str, command: &str, repo: &Path) -> GrantsFile {
         GrantScope::Command {
             repo: repo.to_owned(),
             command: command.into(),
+            paths: vec!["src/a.ts".into()],
         },
     )
 }
@@ -202,13 +203,14 @@ fn a_command_grant_is_used_up_before_the_command_is_allowed() {
     let data = args.grants_path.parent().unwrap().parent().unwrap().to_owned();
     write_grants(&data, &id("t-a1"), &command_grant_in("t-b2", "git stash", &root)).unwrap();
     let b = id("t-b2");
-    assert!(take_command(&args.grants_path, " git stash", &root, Some(&b)));
+    let (a, now) = (["src/a.ts".to_owned()], Utc::now());
+    assert!(take_command(&args.grants_path, " git stash", &root, Some(&b), &a, now));
     assert!(
         read_grants(&args.grants_path).grants.is_empty(),
         "spent on disk before the hook answers"
     );
     assert!(
-        !take_command(&args.grants_path, "git stash", &root, Some(&b)),
+        !take_command(&args.grants_path, "git stash", &root, Some(&b), &a, now),
         "only once"
     );
     // nothing to take: a grant for another repo or task is not this one
@@ -217,9 +219,18 @@ fn a_command_grant_is_used_up_before_the_command_is_allowed() {
         &args.grants_path,
         "git stash",
         Path::new("/elsewhere"),
-        Some(&b)
+        Some(&b),
+        &a,
+        now
     ));
-    assert!(!take_command(&args.grants_path, "git stash", &root, Some(&id("t-c3"))));
+    assert!(!take_command(
+        &args.grants_path,
+        "git stash",
+        &root,
+        Some(&id("t-c3")),
+        &a,
+        now
+    ));
     assert_eq!(read_grants(&args.grants_path).grants.len(), 1);
     assert!(!denied(&args, &root, "git stash"));
     assert!(read_grants(&args.grants_path).grants.is_empty());
@@ -271,4 +282,33 @@ Billing has src/b.ts. {tail}"
         CheckDecision::Deny { reason, .. } if reason == git_deny_reason(
             CommandKind::Discards, &[&claim("src/a.ts", "t-b2", "Checkout")])
     ));
+}
+
+#[test]
+fn a_spent_command_grant_logs_command_ran_and_a_stale_one_denies() {
+    let (_dir, root, args) = hook();
+    let data = args.grants_path.parent().unwrap().parent().unwrap().to_owned();
+    write_grants(&data, &id("t-a1"), &command_grant_in("t-b2", "git stash", &root)).unwrap();
+    assert!(!denied(&args, &root, "git stash"));
+    let log = std::fs::read_to_string(&args.log_path).unwrap();
+    let line = log
+        .lines()
+        .find(|l| l.starts_with("CommandRan\t"))
+        .expect("a CommandRan line");
+    let payload: serde_json::Value = serde_json::from_str(line.splitn(3, '\t').nth(2).unwrap()).unwrap();
+    assert_eq!(
+        payload,
+        json!({"repo": root, "command": "git stash", "kind": "Discards", "paths": ["src/a.ts"], "other_task": "t-b2"})
+    );
+    // granted eleven minutes ago: not spent, denied, nothing logged as run
+    let mut old = command_grant_in("t-b2", "git stash", &root);
+    old.grants[0].granted_at = Utc::now() - chrono::Duration::minutes(11);
+    write_grants(&data, &id("t-a1"), &old).unwrap();
+    assert!(denied(&args, &root, "git stash"));
+    assert_eq!(read_grants(&args.grants_path), old);
+    let ran = std::fs::read_to_string(&args.log_path)
+        .unwrap()
+        .matches("CommandRan\t")
+        .count();
+    assert_eq!(ran, 1);
 }

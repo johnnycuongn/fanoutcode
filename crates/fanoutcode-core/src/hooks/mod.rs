@@ -95,6 +95,16 @@ pub enum HookEvent {
         command: Option<String>,
         other_task: Option<TaskId>,
     },
+    /// Written by the `claim-check` hook when it spent a `Command` grant and let `command` run over `other_task`'s
+    /// claimed `paths` (§5.6). Agent-writable like every log line: the app acts on it only when it matches a grant
+    /// the app recorded itself (`overlap::decide::command_ran`).
+    CommandRan {
+        repo: PathBuf,
+        command: String,
+        kind: crate::overlap::CommandKind,
+        paths: Vec<String>,
+        other_task: Option<TaskId>,
+    },
     /// Written by the app when the developer decides a pending overlap; `decision` is the `Decision` variant name.
     OverlapDecided {
         repo: PathBuf,

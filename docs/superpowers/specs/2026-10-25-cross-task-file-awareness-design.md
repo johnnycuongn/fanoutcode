@@ -201,11 +201,22 @@ hand-back opens with the command shown in place of the pending write. Rules, bes
 - `git stash` (any form but `list`/`show`), `git reset --hard`, `git clean` when any claim exists.
 
 The hand-back's answers for a command are **Proceed** and **Hold**. Proceed grants a single-use
-`Command { repo, command }` on each task named, never `AllFiles` (an edit grant would switch the guard off), then
-injects "go ahead"; the claim-check hook spends the grant, under the grants file's OS lock, before the command runs, so
-the next run of the same command is checked again. A command that touches two tasks' files waits for both answers. The
-decision shows the other task's files the command touches and whether it commits them or discards them, and the other
-task is told the same. A Hold, on a command or an edit, is released only once the file is clean in `git status` (the
+`Command { repo, command, paths }` on each task named (`paths`: that task's files the command touched when the
+developer answered), never `AllFiles` (an edit grant would switch the guard off), then injects "go ahead"; the
+claim-check hook spends the grant, under the grants file's OS lock, before the command runs, so the next run of the
+same command is checked again. A grant has a lifetime: the spend fails when the other task's claimed files the command
+touches now differ from `paths`, or when the grant is older than ten minutes, and the command is then denied and asked
+about again. An unspent `Command` grant is dropped at the session's next main-agent `Stop` after the go-ahead was
+typed. A command that touches two tasks' files waits for both answers. The decision shows the other task's files the
+command touches and whether it commits them or discards them.
+
+The other task is told only when the command runs, not when it is granted: on spending a grant the hook appends
+`CommandRan { repo, command, kind, paths, other_task }` to this task's event log. Event-log lines are agent-writable,
+so the app never trusts one alone: it acts on `CommandRan` only when it matches a grant it recorded itself (same repo,
+command, other task and paths), and only then queues the note for the other task (*"… ran `<command>` with the
+developer's approval; your uncommitted changes in <paths> were committed into its commit / staged into its index /
+stashed / discarded"*) and writes both timeline entries. A line with no matching record does nothing. `git stash pop`
+and `git stash apply` are not caught: git refuses to overwrite dirty files, so they discard nothing. A Hold, on a command or an edit, is released only once the file is clean in `git status` (the
 other task committed it, or no uncommitted changes are left); a claimant that merely drops out of the claims file (a
 lost session, an archived task) releases nothing. Commits that name only the task's own files are never caught. A task's commit through the app's own Commit
 button already stages only the task's files (§6.6) and is unaffected.
