@@ -123,15 +123,25 @@ pub fn workspace_agents(conn: &Connection, task: &Task) -> Result<Vec<AgentDef>>
 /// What a Claude Code launch adds for the task's workspace.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct LaunchExtras {
-    /// `permissions.deny` rules for the protected roots.
+    /// `permissions.deny` rules for the protected roots and the overlap folders (`overlap_dirs`).
     pub deny: Vec<String>,
-    /// The Bash guard hook, when anything is protected.
+    /// The Bash guard hook: always for Claude Code, since the overlap folders are always guarded.
     pub guard: Option<HookSpec>,
     /// Beyond the linked roots (which the launch adds itself): the context-doc cache when a reference is cached.
     pub add_dirs: Vec<PathBuf>,
     /// The claim-check hook (Plan 11 §5.3, §5.6), unless both `ask_before_other_tasks_files` and
     /// `guard_git_for_other_tasks` are off; Bash only when just the git guard is on.
     pub claim_check: Option<HookSpec>,
+}
+
+/// The app's folders the claim-check hook trusts (Plan 11): every task's grants, the claims, the queued notes and the
+/// event logs. Every Claude Code task gets `Edit` deny rules for them and the Bash guard refusing shell writes there,
+/// whatever the overlap settings, so the agent cannot grant itself, clear a claim or forge a log line.
+pub fn overlap_dirs(app_data: &Path) -> Vec<PathBuf> {
+    ["grants", "claims", "notes", "events"]
+        .iter()
+        .map(|d| app_data.join(d))
+        .collect()
 }
 
 /// The claim-check hook over the claims files of the task's repos (its worktree or home root, then its links).
@@ -183,8 +193,18 @@ pub fn launch_extras(
     }
     let claim_check = claim_check_hook(conn, task, app_data, exe, ask_before, guard_git)?;
     let protected = protected_for(conn, task)?;
-    let deny = deny_rules(&protected)?;
-    let guard = prepare_guard(app_data, exe, &task.id, &protected, home)?;
+    let app_files = overlap_dirs(app_data);
+    // created now, so the rules also name their canonical form (a symlinked app data folder)
+    for d in &app_files {
+        std::fs::create_dir_all(d)?;
+    }
+    let mut deny = deny_rules(&protected)?;
+    for rule in deny_rules(&app_files)? {
+        if !deny.contains(&rule) {
+            deny.push(rule);
+        }
+    }
+    let guard = prepare_guard(app_data, exe, &task.id, &protected, &app_files, home)?;
     // only the home project's cache and, when bound to one, the workspace's: never another project's
     let mut containers = vec![Container::Project {
         id: task.project_id.clone(),
@@ -330,7 +350,7 @@ mod tests {
             true,
         )
         .unwrap();
-        assert!(none.deny.is_empty() && none.guard.is_none());
+        assert!(none.deny.iter().all(|r| !r.contains(&*fx.api.root.to_string_lossy())));
         s.set_policy(&ws.id, LinkPolicy::ReadOnly, &[]).unwrap();
         let ro = launch_extras(
             &fx.db.lock().unwrap(),
@@ -344,6 +364,41 @@ mod tests {
         .unwrap();
         assert!(ro.deny.contains(&format!("Edit(/{}/**)", fx.api.root.display())));
         assert!(ro.guard.is_some());
+    }
+
+    #[test]
+    fn generated_settings_deny_edits_to_the_overlap_files() {
+        let (fx, _s, _ws, t) = setup();
+        let conn = fx.db.lock().unwrap();
+        let task = db::tasks::require(&conn, &t.id).unwrap(); // nothing linked, nothing protected
+        let data = fx.app_data.path();
+        let canonical = std::fs::canonicalize(data).unwrap();
+        // whatever the overlap settings say: the hook trusts these files, so the agent never writes them
+        for (ask, git) in [(true, true), (false, false)] {
+            let extras = launch_extras(
+                &conn,
+                &task,
+                data,
+                Path::new("/x/fanoutcode"),
+                Path::new("/h"),
+                ask,
+                git,
+            )
+            .unwrap();
+            for dir in ["grants", "claims", "notes", "events"] {
+                for base in [data, canonical.as_path()] {
+                    let rule = format!("Edit(/{}/**)", base.join(dir).display());
+                    assert!(extras.deny.contains(&rule), "{rule} in {:?}", extras.deny);
+                }
+            }
+            // and the Bash guard runs to refuse shell writes there, though no linked root is protected
+            let guard = extras.guard.expect("the Bash guard");
+            assert_eq!(guard.matcher.as_deref(), Some("Bash"));
+        }
+        let mut shell = task.clone();
+        shell.agent_kind = AgentKind::Shell;
+        let none = launch_extras(&conn, &shell, data, Path::new("/x"), Path::new("/h"), true, true).unwrap();
+        assert!(none.deny.is_empty() && none.guard.is_none());
     }
 
     #[test]

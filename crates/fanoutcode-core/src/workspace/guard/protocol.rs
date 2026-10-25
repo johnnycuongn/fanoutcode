@@ -6,17 +6,30 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use super::{evaluate, GuardDecision, GuardInput};
+use super::rules::clean;
+use super::{evaluate, GuardDecision, GuardInput, GuardRule};
 use crate::domain::TaskId;
 use crate::hooks::{sh_single_quote, HookSpec};
 use crate::memory::store::write_atomic;
 use crate::Result;
 
-/// `<app_data>/guards/<task-id>.guard.json`.
+/// `<app_data>/guards/<task-id>.guard.json`: the protected linked roots, and the app's own folders the hooks trust
+/// (`app_files`, Plan 11: grants, claims, notes, events), which no shell command of the agent may write either.
 #[derive(Debug, Serialize, Deserialize)]
 struct RootsFile {
     protected: Vec<PathBuf>,
+    #[serde(default)]
+    app_files: Vec<PathBuf>,
     home_dir: PathBuf,
+}
+
+/// Why a write to one of the app's own folders is refused.
+pub fn app_files_reason(dir: &Path, rule: &GuardRule) -> String {
+    format!(
+        "Fanout Code: {} holds Fanout Code's own records (claims, grants, notes and events between tasks); this shell \
+         command looks like it writes there ({rule}). Never change these files; ask the developer instead.",
+        dir.display()
+    )
 }
 
 #[derive(Deserialize)]
@@ -64,15 +77,21 @@ pub fn run_guard(stdin: &mut dyn Read, stdout: &mut dyn Write, roots_file: &Path
         return 0;
     };
     let cwd = input.cwd.unwrap_or_else(|| PathBuf::from("/"));
+    let watched: Vec<PathBuf> = roots.protected.iter().chain(&roots.app_files).cloned().collect();
     let decision = evaluate(
         &GuardInput {
             command: command.to_owned(),
             cwd,
         },
-        &roots.protected,
+        &watched,
         &roots.home_dir,
     );
-    if let GuardDecision::Deny { reason, .. } = decision {
+    if let GuardDecision::Deny { root, rule, reason } = decision {
+        let reason = if roots.app_files.iter().any(|a| clean(a) == root) {
+            app_files_reason(&root, &rule)
+        } else {
+            reason
+        };
         let out = serde_json::json!({"hookSpecificOutput": {
             "hookEventName": "PreToolUse",
             "permissionDecision": "deny",
@@ -88,12 +107,14 @@ pub fn write_roots_file(
     guards_dir: &Path,
     task_id: &TaskId,
     protected: &[PathBuf],
+    app_files: &[PathBuf],
     home_dir: &Path,
 ) -> Result<PathBuf> {
     let id = TaskId::parse(task_id.as_str())?;
     let path = guards_dir.join(format!("{id}.guard.json"));
     let body = RootsFile {
         protected: protected.to_vec(),
+        app_files: app_files.to_vec(),
         home_dir: home_dir.to_owned(),
     };
     write_atomic(&path, &serde_json::to_vec_pretty(&body)?)?;
@@ -114,18 +135,19 @@ pub fn guard_hook_spec(exe: &Path, roots_file: &Path) -> HookSpec {
     }
 }
 
-/// `None` without protected roots; otherwise writes `<app_data>/guards/<task-id>.guard.json` and returns the hook to
+/// `None` without protected roots or app folders; otherwise writes `<app_data>/guards/<task-id>.guard.json` and returns the hook to
 /// add to the task's generated settings. Called at every launch.
 pub fn prepare_guard(
     app_data: &Path,
     exe: &Path,
     task_id: &TaskId,
     protected: &[PathBuf],
+    app_files: &[PathBuf],
     home_dir: &Path,
 ) -> Result<Option<HookSpec>> {
-    if protected.is_empty() {
+    if protected.is_empty() && app_files.is_empty() {
         return Ok(None);
     }
-    let file = write_roots_file(&app_data.join("guards"), task_id, protected, home_dir)?;
+    let file = write_roots_file(&app_data.join("guards"), task_id, protected, app_files, home_dir)?;
     Ok(Some(guard_hook_spec(exe, &file)))
 }

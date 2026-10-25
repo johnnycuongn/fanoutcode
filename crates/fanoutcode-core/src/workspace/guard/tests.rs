@@ -119,7 +119,7 @@ mod protocol {
         .unwrap()
     }
     fn roots(dir: &Path) -> PathBuf {
-        write_roots_file(dir, &tid("t-1"), &[PathBuf::from("/w/api")], Path::new("/Users/j")).unwrap()
+        write_roots_file(dir, &tid("t-1"), &[PathBuf::from("/w/api")], &[], Path::new("/Users/j")).unwrap()
     }
 
     #[test]
@@ -159,6 +159,39 @@ mod protocol {
     }
 
     #[test]
+    fn run_guard_denies_shell_writes_to_the_overlap_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let app_files: Vec<PathBuf> = ["grants", "claims", "notes", "events"]
+            .iter()
+            .map(|d| Path::new("/d").join(d))
+            .collect();
+        let r = write_roots_file(dir.path(), &tid("t-1"), &[], &app_files, Path::new("/Users/j")).unwrap();
+        for cmd in [
+            "echo x > /d/grants/t-a1.json",
+            "rm /d/claims/0123456789abcdef.json",
+            "cd /d/notes && touch t-a1.json",
+            "sh -c 'cat x >> /d/events/t-a1.jsonl'",
+        ] {
+            let mut out = Vec::new();
+            run_guard(&mut hook_json(cmd, "/w/web").as_slice(), &mut out, &r);
+            let v: serde_json::Value = serde_json::from_slice(&out).unwrap_or_else(|_| panic!("denied: {cmd}"));
+            assert_eq!(v["hookSpecificOutput"]["permissionDecision"], "deny", "{cmd}");
+            let reason = v["hookSpecificOutput"]["permissionDecisionReason"].as_str().unwrap();
+            assert!(
+                reason.contains("Fanout Code's own records") && !reason.contains("linking policy"),
+                "{reason}"
+            );
+        }
+        let mut out = Vec::new();
+        run_guard(
+            &mut hook_json("cat /d/grants/t-a1.json", "/w/web").as_slice(),
+            &mut out,
+            &r,
+        );
+        assert!(out.is_empty());
+    }
+
+    #[test]
     fn run_guard_fails_open_on_bad_input_or_missing_roots() {
         let mut out = Vec::new();
         assert_eq!(
@@ -172,7 +205,7 @@ mod protocol {
     fn write_roots_file_validates_task_id() {
         let dir = tempfile::tempdir().unwrap();
         assert!(matches!(
-            write_roots_file(dir.path(), &tid("../evil"), &[], Path::new("/h")),
+            write_roots_file(dir.path(), &tid("../evil"), &[], &[], Path::new("/h")),
             Err(Error::Invalid(_))
         ));
     }
@@ -197,26 +230,32 @@ mod protocol {
     }
 
     #[test]
-    fn prepare_guard_is_none_without_protected_roots() {
+    fn prepare_guard_is_none_without_protected_roots_or_app_files() {
         let dir = tempfile::tempdir().unwrap();
+        let exe = Path::new("/x/fanoutcode");
+        assert!(prepare_guard(dir.path(), exe, &tid("t-1"), &[], &[], Path::new("/h"))
+            .unwrap()
+            .is_none());
         assert!(prepare_guard(
             dir.path(),
-            Path::new("/x/fanoutcode"),
-            &tid("t-1"),
-            &[],
-            Path::new("/h")
-        )
-        .unwrap()
-        .is_none());
-        assert!(prepare_guard(
-            dir.path(),
-            Path::new("/x/fanoutcode"),
+            exe,
             &tid("t-1"),
             &[PathBuf::from("/w/api")],
+            &[],
             Path::new("/h")
         )
         .unwrap()
         .is_some());
         assert!(dir.path().join("guards/t-1.guard.json").exists());
+        assert!(prepare_guard(
+            dir.path(),
+            exe,
+            &tid("t-2"),
+            &[],
+            &[PathBuf::from("/d/grants")],
+            Path::new("/h")
+        )
+        .unwrap()
+        .is_some());
     }
 }
