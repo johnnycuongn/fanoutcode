@@ -270,12 +270,19 @@ pub fn confirm_open(
     )
 }
 
-/// The trusted reopen: the record at `path`, refreshed from the file, when the file adds nothing to it. Anything
+/// The trusted reopen: the record at `path`, refreshed from the file, when the file adds nothing to it. A dirty
+/// record is the truth and its file the stale mirror, so it opens as it is (nothing is read from the file). Anything
 /// else needs `preview_open` and `confirm_open`.
 pub fn open_file(store: &WorkspaceStore, path: &Path) -> Result<Workspace> {
+    reopen(store, path, true)
+}
+
+/// `open_file`; `keep_unsaved: false` (Reload, discarding) refreshes a dirty record from its file too.
+pub(crate) fn reopen(store: &WorkspaceStore, path: &Path, keep_unsaved: bool) -> Result<Workspace> {
     let path = canonical(path);
     let (file, _) = read_file(&path)?;
     match record_at(store, &path)? {
+        Some(record) if record.dirty && keep_unsaved => Ok(record),
         Some(record) if adds_nothing(store, &record, &file, &path)? => {
             let roots = resolve_roots(&file, &path);
             super::open::import(store, &path, &file, &roots, &record.id, false, DocTrust::Existing)

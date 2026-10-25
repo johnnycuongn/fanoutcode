@@ -58,4 +58,11 @@ describe("keyboard registry", () => {
     matchShortcut(ev("2", { metaKey: true }), { scope: "global", terminalFocused: false }, { dispatch: true });
     expect(seen).toEqual([2]);
   });
+  it("claims ⌘S for the workspace file only while the sidebar has focus", () => {
+    const save = ev("s", { metaKey: true });
+    expect(matchShortcut(save, { scope: "pane", terminalFocused: false })).toBeNull();
+    expect(matchShortcut(save, { scope: "global", terminalFocused: false, sidebarFocused: true })).toEqual({
+      id: "workspace.save",
+    });
+  });
 });

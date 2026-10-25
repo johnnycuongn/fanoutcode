@@ -305,6 +305,14 @@ impl WorkspaceStore {
         self.get(id)
     }
 
+    /// `save` when the record has unsaved changes (closing its window, §4.2); whether it wrote.
+    pub fn save_if_dirty(&self, id: &WorkspaceId) -> Result<bool> {
+        if !self.get(id)?.dirty {
+            return Ok(false);
+        }
+        self.save(id).map(|_| true)
+    }
+
     /// Saves to `path` (the suffix appended when missing) and points the record there. A previous file in app data
     /// is removed; a path in app data switches back to write-through.
     pub fn save_as(&self, id: &WorkspaceId, path: &Path) -> Result<Workspace> {

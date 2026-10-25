@@ -110,7 +110,7 @@ pub fn reload(store: &WorkspaceStore, id: &WorkspaceId, discard_unsaved: bool) -
     let path = ws
         .file_path
         .ok_or_else(|| Error::Precondition("This workspace has no file yet; save it first".into()))?;
-    super::import::open_file(store, &path)
+    super::import::reopen(store, &path, false)
 }
 
 pub fn status(store: &WorkspaceStore, id: &WorkspaceId) -> Result<WorkspaceStatus> {
@@ -250,6 +250,21 @@ mod tests {
         assert!(!p.needs_confirmation && !p.blocked);
         let opened = open_file(&s, &path).unwrap();
         assert_eq!((opened.id, s.list().unwrap().len()), (ws.id, 1));
+    }
+
+    #[test]
+    fn reopening_a_dirty_workspace_keeps_its_unsaved_changes() {
+        let (_fx, s, ws) = store_with("Shop");
+        let dir = tempfile::tempdir().unwrap();
+        let saved = s.save_as(&ws.id, &dir.path().join("Shop")).unwrap();
+        let path = saved.file_path.clone().unwrap();
+        s.set_fragment(&ws.id, "plan", Some("Unsaved instruction.")).unwrap();
+        assert!(s.get(&ws.id).unwrap().dirty);
+        let opened = open_file(&s, &path).unwrap();
+        assert!(opened.dirty, "still unsaved");
+        let conn = s.db().lock().unwrap();
+        let fragments = super::super::rows::map_column(&conn, &ws.id, "fragments_json").unwrap();
+        assert_eq!(fragments.get("plan").map(String::as_str), Some("Unsaved instruction."));
     }
 
     #[test]

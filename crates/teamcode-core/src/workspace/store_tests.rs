@@ -134,3 +134,22 @@ fn reorder_and_remove_renumber_members() {
     let ws = s.remove_project(&ws.id, &fx.web.id).unwrap();
     assert_eq!((ws.projects.len(), ws.projects[0].order), (1, 0));
 }
+
+#[test]
+fn save_if_dirty_writes_only_unsaved_changes() {
+    let (fx, s, ws) = store_with("Shop");
+    assert!(!s.save_if_dirty(&ws.id).unwrap(), "written through in app data");
+    let out = tempfile::tempdir().unwrap();
+    let ws = s.save_as(&ws.id, &out.path().join("Shop")).unwrap();
+    s.add_project(&ws.id, &fx.web.id).unwrap();
+    assert!(s.save_if_dirty(&ws.id).unwrap());
+    let path = s.get(&ws.id).unwrap().file_path.unwrap();
+    assert_eq!(
+        WorkspaceFile::parse(&std::fs::read(path).unwrap())
+            .unwrap()
+            .projects
+            .len(),
+        2
+    );
+    assert!(!s.get(&ws.id).unwrap().dirty && !s.save_if_dirty(&ws.id).unwrap());
+}

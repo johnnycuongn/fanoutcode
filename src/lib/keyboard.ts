@@ -28,12 +28,16 @@ export type ShortcutId =
   | "task.rename"
   | "task.archive"
   | "terminalStrip.toggle"
+  | "workspace.save"
   | "settings";
 
-/** `global` chords match everywhere; `pane` chords in a pane or a Spec page; `spec-page` chords only on a Spec page. */
-export type Scope = "global" | "pane" | "spec-page";
+/**
+ * `global` chords match everywhere; `pane` chords in a pane or a Spec page; `spec-page` chords only on a Spec page;
+ * `sidebar` chords only while focus is in the sidebar (so ⌘S stays with the diff and memory editors elsewhere).
+ */
+export type Scope = "global" | "pane" | "spec-page" | "sidebar";
 
-export type ActiveScope = { scope: Scope; terminalFocused: boolean };
+export type ActiveScope = { scope: Scope; terminalFocused: boolean; sidebarFocused?: boolean };
 
 const DIGITS = ["⌘1", "⌘2", "⌘3", "⌘4", "⌘5", "⌘6", "⌘7", "⌘8", "⌘9"];
 
@@ -62,6 +66,8 @@ export const KEYMAP: Record<ShortcutId, { chords: string[]; scope: Scope }> = {
   "task.rename": { chords: ["⌘E"], scope: "pane" },
   "task.archive": { chords: ["⌘⇧A"], scope: "pane" },
   "terminalStrip.toggle": { chords: ["⌃`"], scope: "spec-page" },
+  // §4.2: a workspace file saved outside app data is written on ⌘S with the sidebar focused
+  "workspace.save": { chords: ["⌘S"], scope: "sidebar" },
   settings: { chords: ["⌘,"], scope: "global" },
 };
 
@@ -124,10 +130,11 @@ const PARSED: Array<{ id: ShortcutId; chord: Chord; label: string; scope: Scope 
   Object.entries(KEYMAP) as Array<[ShortcutId, { chords: string[]; scope: Scope }]>
 ).flatMap(([id, { chords, scope }]) => chords.map((label) => ({ id, chord: parseChord(label), label, scope })));
 
-function scopeAllows(chordScope: Scope, active: Scope): boolean {
+function scopeAllows(chordScope: Scope, active: ActiveScope): boolean {
   if (chordScope === "global") return true;
-  if (chordScope === "pane") return active === "pane" || active === "spec-page";
-  return active === "spec-page";
+  if (chordScope === "sidebar") return active.sidebarFocused === true;
+  if (chordScope === "pane") return active.scope === "pane" || active.scope === "spec-page";
+  return active.scope === "spec-page";
 }
 
 type Handler = (m: { digit?: number }) => void;
@@ -150,7 +157,7 @@ export function matchShortcut(
   const chord = chordOf(e);
   // A focused terminal keeps every key that is not a ⌘ chord (⌃` included).
   if (active.terminalFocused && !chord.meta) return null;
-  const hit = PARSED.find((p) => scopeAllows(p.scope, active.scope) && chordEquals(p.chord, chord));
+  const hit = PARSED.find((p) => scopeAllows(p.scope, active) && chordEquals(p.chord, chord));
   if (!hit) return null;
   const match: { id: ShortcutId; digit?: number } =
     hit.id === "tab.nth" ? { id: hit.id, digit: Number(hit.chord.key) } : { id: hit.id };
