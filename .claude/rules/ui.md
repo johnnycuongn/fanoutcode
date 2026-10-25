@@ -17,9 +17,12 @@ paths: ["src/**"]
   `useSelector()`. Never add a state library.
 - Agent and model output renders only through `MiniMarkdown` or xterm, never `innerHTML` or
   `dangerouslySetInnerHTML`.
-- IPC only through `src/lib/bindings.ts` (`commands`, `events`); never import from `@tauri-apps/api/core` or
-  `@tauri-apps/api/event`.
+- IPC only through `src/lib/bindings.ts` (`commands`, `events`). From `@tauri-apps/api/core` import only `Channel`
+  (to receive a generated command's stream); nothing from `@tauri-apps/api/event` (`teamcode/no-manual-ipc`).
+  Window and webview handles (`@tauri-apps/api/window`, `/webview`) are allowed for window-local work.
 - A feature imports another feature only through `@/features/<name>` (its `index.ts`).
+- A new ⌘ chord goes into `KEYMAP` in `src/lib/keyboard.ts`; the native menu (`src-tauri/src/menu.rs`) must not
+  claim it (its test reads the keymap).
 - Budgets: a component under about 200 lines, a store under 300.
 - Nothing a user triggers takes longer than 250 ms to respond; show progress for anything slower.
 - To add a primitive: `src/components/ui/<Name>.tsx` + `<Name>.test.tsx`, export it from `index.ts`, add it to

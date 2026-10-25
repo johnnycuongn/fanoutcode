@@ -29,5 +29,6 @@ file.
 | specta-typescript | =0.0.9 |
 | tauri-specta | =2.0.0-rc.21 (features derive, typescript) |
 
-The generated file starts with `// @ts-nocheck`: tauri-specta's globals import `Channel` before any command takes
-one, which `noUnusedLocals` rejects. Every consumer is still type-checked against the exported types.
+The generated file is type-checked like any other source. It started with `// @ts-nocheck` while no command took
+a `Channel` (tauri-specta's globals import it, which `noUnusedLocals` rejected); since `sessions_attach`,
+`tests_run` and `livespec_analyze` take one, the header line was dropped and errors inside the file are reported.

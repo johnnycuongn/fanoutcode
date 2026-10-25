@@ -17,3 +17,4 @@ paths: ["src-tauri/**", "src/lib/bindings.ts"]
 - The shell holds no logic worth a unit test. Anything testable moves into `teamcode-core`.
 - `std` locks are never held across `.await`. Build windows only from `setup` or an `async` command.
 - Windows are created in Rust only; the capability grants no window-creation permission to the webview.
+- The native menu is built in `menu.rs`; its accelerators (`MENU_CHORDS`) never overlap the webview's `KEYMAP`.

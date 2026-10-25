@@ -20,10 +20,18 @@ a real terminal session (Claude Code, Codex or a shell) and a markdown memory fo
 
 ## Commands
 
-Use Node 22 (`nvm use 22`).
+Use Node 22 (`nvm use 22`). A fresh clone, or a checkout whose `package-lock.json` moved (after a merge or a
+rebase), runs these two first; nothing installs them for you (there is no `postinstall`):
 
 ```sh
-npm install                                        # also installs the lefthook pre-commit hook
+npm ci                                             # exact lockfile install; also installs the lefthook hook
+PLAYWRIGHT_BROWSERS_PATH=0 npx playwright install webkit   # WebKit into node_modules, for npm run e2e
+```
+
+A stale `node_modules` shows as hundreds of `Cannot find module` errors in `npm run typecheck` and a pre-commit hook
+that refuses every commit; run `npm ci` again.
+
+```sh
 npm run tauri dev                                  # the app
 npm run dev                                        # Vite alone; every invoke fails outside Tauri
 npm run typecheck                                  # tsc --noEmit
@@ -35,8 +43,7 @@ npm run bindings                                   # regenerate src/lib/bindings
 npm run bindings:check                             # fails when bindings.ts is stale (CI runs it)
 npm run format                                     # Prettier --write
 npm run build                                      # tsc + vite build
-npm run e2e                                        # Playwright smoke suite (WebKit in node_modules:
-                                                   #   PLAYWRIGHT_BROWSERS_PATH=0 npx playwright install webkit)
+npm run e2e                                        # Playwright smoke suite (needs the WebKit install above)
 ```
 
 ## Rules that lint enforces
@@ -71,6 +78,8 @@ data-carrying enums are `#[serde(tag = "type")]` with unit or struct variants on
   `index.ts`, the feature's only public surface.
 - **A primitive**: `src/components/ui/<Name>.tsx`, its test, a barrel and `PRIMITIVES` entry, and an example page
   `src/dev/primitives/pages/<Name>Page.tsx` registered in `registry.ts`.
+- **A ⌘ chord**: an entry in `KEYMAP` (`src/lib/keyboard.ts`) and a `registerHandler` call. The native menu
+  (`src-tauri/src/menu.rs`) must not claim the chord; its test reads the keymap.
 - **A migration**: `crates/teamcode-core/migrations/00NN_<name>.sql` (NN = owning plan) and one line in
   `db::MIGRATIONS`. Never edit an applied migration.
 
@@ -94,4 +103,9 @@ Conventional Commits. Every commit passes the gates: typecheck, lint, vitest (le
 
 ## Current stage
 
-Plan 01 Foundation complete; Plan 02 UI primitives next.
+All ten plans are built and merged, and the final review's Important fixes have landed: the tests start on Test
+entry, a dead session or a failed commit draft hands back, workspace files save on ⌘S and close, and the native
+menu leaves the keymap alone. Nothing has been run in the GUI yet: `npm run tauri dev` end to end (a real `claude`
+session with the generated settings, every §10.5 chord against the menu, two windows, the quit dialog, the Jira
+keychain prompt) is the next step. The final review's Minor items (the automatic-Done toast, the Dock badge after a
+relaunch, `Notification` hooks, determinate canvas progress, launch replay off `setup`, and the rest) are still open.
