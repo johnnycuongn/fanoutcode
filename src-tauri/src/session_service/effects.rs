@@ -8,7 +8,7 @@ use teamcode_core::domain::{AgentKind, AgentState, SessionId, Task, TaskId};
 use teamcode_core::hooks::HookEvent;
 use teamcode_core::pipeline::{Effect, StageAction};
 use teamcode_core::sessions::{QueueOutcome, INJECT_ENTER_DELAY};
-use teamcode_core::{Error, Result};
+use teamcode_core::Result;
 
 use super::{open_primary, queue_changed, stop_blocking};
 use crate::observe::log_err;
@@ -183,11 +183,7 @@ pub fn codex_tick(app: &AppHandle) {
     for (task, idle) in changed {
         let state_now = if idle { AgentState::Idle } else { AgentState::Working };
         let r = crate::commands::tasks::run(app, &state, &task, |_, _| Ok(vec![Effect::SetState(state_now)]));
-        if let Err(e) = r {
-            if !matches!(e, Error::Invalid(_)) {
-                eprintln!("Team Code: updating the Codex task {task}: {e}");
-            }
-        }
+        log_err(&format!("updating the Codex task {task}"), r);
     }
 }
 

@@ -18,6 +18,7 @@ in `docs/superpowers/specs/2026-10-24-team-code-design.md`. Each implementation 
 - [Errors](#errors)
 - [UI primitives](#ui-primitives)
 - [The board](#the-board)
+- [Sessions and terminals](#sessions-and-terminals)
 - [Where to change things](#where-to-change-things)
 
 ## At a glance
@@ -170,22 +171,60 @@ knows nothing about windows or views. Other features import only `src/features/b
   the Done column plays a one-shot dotLottie. `.lottie` files are never inlined (`vite.config.ts`), because the CSP
   blocks fetching a data: URL.
 
+## Sessions and terminals
+
+Every task's agent and every plain terminal is a PTY the app owns (Plan 04, spec §7.1–7.3).
+
+- **Core** (`teamcode_core::sessions`). The core holds everything testable without a terminal:
+  - the scrollback ring (`ScrollbackBuffer`, 10,000 lines by default);
+  - the 60 Hz `Batcher` and the `FlowControl` high/low water marks (1 MiB / 256 KiB unacknowledged);
+  - the `Pty` / `PtySpawner` seam with `fake` doubles;
+  - `SessionDriver` with `OwnedDriver`, the only driver this release (ADR 0004);
+  - the graceful `stop::run` (exit keys, 5 s, kill);
+  - the generated per-task settings file under `<app_data>/claude-settings/` (hooks, status line, deny rules; the
+    app never writes a project's `.claude/`);
+  - the `claude`, `codex` and shell launch builders;
+  - `IdleTracker` and `InjectQueue` (prompts wait until the agent is idle);
+  - `SessionRegistry`, which allows one attached pane per session;
+  - `TerminalTheme` (the value of the `terminal_theme` setting).
+
+  Session rows are in `db::sessions`.
+
+- **Shell.** `pty.rs` implements `PtySpawner` with portable-pty. Each session gets three threads: a reader that stops
+  at a gate while flow control pauses it, a flusher that parks while idle, and a waiter that reports the exit once.
+  Output reaches the webview as raw bytes on a `Channel<TerminalBytes>`. `session_service` launches primary
+  sessions and terminals, takes `StartSession` / `EndSession` / `InjectPrompt` from `effects::dispatch`, and hears
+  every hook event through `hooks_tailer::subscribe` (`note_hook_event`: a `Stop` makes Claude Code idle and sends
+  the next queued prompt). It also runs the Codex quiet-time ticker, stops sessions, and warns at quit. Closing a
+  window detaches its panes; the processes keep running. At launch every stored session is marked exited, and the
+  next open resumes the task's Claude session with `--resume`.
+- **Webview** (`src/features/views/`).
+  - `terminalStore` tracks each session's attach state as this window sees it: attaching, attached, elsewhere, or
+    exited. It also tracks the pending prompt count and coalesces acks.
+  - `TerminalPane` owns one xterm through `useXterm`. xterm is lazy-loaded and uses WebGL, falling back to canvas.
+  - The colours come from the `--term-*` variables of the palette `terminalTheme.ts` picks, so hex values stay in
+    `styles.css`.
+  - A session held by another pane shows `TerminalPlaceholder` (Bring here / Bring back).
+
 ## Where to change things
 
-| To change              | Edit                                                                          |
-| ---------------------- | ----------------------------------------------------------------------------- |
-| A shared type          | `crates/teamcode-core/src/domain.rs`, then `npm run bindings`                 |
-| The schema             | a new `crates/teamcode-core/migrations/00NN_<name>.sql` plus `db::MIGRATIONS` |
-| A command              | `src-tauri/src/commands/<domain>.rs` and `src-tauri/src/specta.rs`            |
-| A setting              | one row in `settings_table!` in `crates/teamcode-core/src/settings/keys.rs`   |
-| A stage's behaviour    | `crates/teamcode-core/src/pipeline/enter.rs` and `pipeline/mod.rs`            |
-| A shipped prompt       | `crates/teamcode-core/src/prompts/templates.rs`                               |
-| An event               | `src-tauri/src/events.rs` and `src-tauri/src/specta.rs`                       |
-| Colours, fonts, radii  | `src/styles.css`                                                              |
-| Theme switching        | `src/lib/theme.ts`                                                            |
-| A lint rule            | `eslint/rules/` and `eslint.config.js`                                        |
-| What a hook event does | `src-tauri/src/hook_feed.rs`; parsing in `crates/teamcode-core/src/hooks/`    |
-| A headless helper      | `crates/teamcode-core/src/helpers/` and `src-tauri/src/helpers.rs`            |
-| Cost accounting        | `crates/teamcode-core/src/cost/`                                              |
-| A primitive            | `src/components/ui/<Name>.tsx`, `index.ts`, and its example page              |
-| A board card or menu   | `src/features/board/components/TaskCard.tsx`, `menu.ts`                       |
+| To change              | Edit                                                                            |
+| ---------------------- | ------------------------------------------------------------------------------- |
+| A shared type          | `crates/teamcode-core/src/domain.rs`, then `npm run bindings`                   |
+| The schema             | a new `crates/teamcode-core/migrations/00NN_<name>.sql` plus `db::MIGRATIONS`   |
+| A command              | `src-tauri/src/commands/<domain>.rs` and `src-tauri/src/specta.rs`              |
+| A setting              | one row in `settings_table!` in `crates/teamcode-core/src/settings/keys.rs`     |
+| A stage's behaviour    | `crates/teamcode-core/src/pipeline/enter.rs` and `pipeline/mod.rs`              |
+| A shipped prompt       | `crates/teamcode-core/src/prompts/templates.rs`                                 |
+| An event               | `src-tauri/src/events.rs` and `src-tauri/src/specta.rs`                         |
+| Colours, fonts, radii  | `src/styles.css`                                                                |
+| Theme switching        | `src/lib/theme.ts`                                                              |
+| A lint rule            | `eslint/rules/` and `eslint.config.js`                                          |
+| What a hook event does | `src-tauri/src/hook_feed.rs`; parsing in `crates/teamcode-core/src/hooks/`      |
+| A headless helper      | `crates/teamcode-core/src/helpers/` and `src-tauri/src/helpers.rs`              |
+| Cost accounting        | `crates/teamcode-core/src/cost/`                                                |
+| A primitive            | `src/components/ui/<Name>.tsx`, `index.ts`, and its example page                |
+| A board card or menu   | `src/features/board/components/TaskCard.tsx`, `menu.ts`                         |
+| How an agent launches  | `crates/teamcode-core/src/sessions/launch.rs`, `src-tauri/src/session_service/` |
+| When prompts are sent  | `crates/teamcode-core/src/sessions/inject.rs`, `session_service/effects.rs`     |
+| The terminal pane      | `src/features/views/useXterm.ts`, `components/TerminalPane.tsx`                 |

@@ -1,6 +1,6 @@
 //! Sessions in the shell (Plan 04): launching a task's primary session or a plain terminal on a PTY, feeding the
-//! registry from the PTY threads, and reporting exits. Stage effects, hook events and stopping are in
-//! `session_effects`; the logic itself lives in `teamcode_core::sessions`.
+//! registry from the PTY threads, and reporting exits. Stage effects and hook events are in `effects`, stopping in
+//! `stop`, the quit warning in `quit`; the logic itself lives in `teamcode_core::sessions`.
 
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -93,6 +93,8 @@ pub fn start(app: &AppHandle, session: Session, launch: LaunchSpec) -> Result<Se
     });
     let (exit_app, exit_id) = (app.clone(), id.clone());
     let on_exit = Box::new(move |code: i32| exited(&exit_app, &exit_id, code));
+    // the spawner resolves the program on the login shell's PATH; read it (once, cached) before taking the lock
+    let _ = livespec_core::shell_env::login_shell_path();
     let mut registry = state.registry();
     registry.set_scrollback_lines(lines);
     match state

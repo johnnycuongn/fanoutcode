@@ -224,3 +224,23 @@ fn working_lists_only_unexited_non_idle_sessions() {
         vec![a]
     );
 }
+
+#[test]
+fn live_for_task_skips_exited_and_stopping_sessions() {
+    let task = crate::domain::TaskId::parse("t-1").unwrap();
+    let mut r = SessionRegistry::new(10);
+    let mut old = session(AgentKind::ClaudeCode);
+    old.task_id = Some(task.clone());
+    let old_id = old.id.clone();
+    r.insert(old, Box::new(FakePty::pair().0), (80, 24));
+    assert_eq!(r.live_for_task(&task), Some(old_id.clone()));
+    let _stopping = r.take_pty(&old_id).unwrap(); // Start fresh session: the old one is being stopped
+    assert_eq!(r.live_for_task(&task), None);
+    let mut new = session(AgentKind::ClaudeCode);
+    new.task_id = Some(task.clone());
+    let new_id = new.id.clone();
+    r.insert(new, Box::new(FakePty::pair().0), (80, 24));
+    assert_eq!(r.live_for_task(&task), Some(new_id.clone()));
+    r.on_exit(&new_id, 0);
+    assert_eq!(r.live_for_task(&task), None);
+}

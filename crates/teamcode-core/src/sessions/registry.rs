@@ -280,11 +280,13 @@ impl SessionRegistry {
         Ok(Some(live.queue.len()))
     }
 
-    /// The task's live (not exited) session, if any.
+    /// The task's live session, if any: not exited and not being stopped (a Start fresh session's old session
+    /// still runs its stop sequence while the new one takes prompts).
     pub fn live_for_task(&self, task: &TaskId) -> Option<SessionId> {
         self.live
             .values()
-            .find(|l| l.session.exited.is_none() && l.session.task_id.as_ref() == Some(task))
+            .filter(|l| l.session.exited.is_none() && l.pty.is_some() && l.session.task_id.as_ref() == Some(task))
+            .max_by(|a, b| a.session.started_at.cmp(&b.session.started_at))
             .map(|l| l.session.id.clone())
     }
 
