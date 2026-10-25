@@ -10,7 +10,6 @@ pub fn site(uri: &str) -> JiraSite {
     JiraSite {
         site_url: uri.into(),
         email: "me@acme.com".into(),
-        account: "jira:project:p-1".into(),
     }
 }
 

@@ -42,6 +42,8 @@ pub fn settings_get(state: State<'_, AppState>, scope: Scope) -> Result<Resolved
 #[specta::specta]
 pub fn settings_set(state: State<'_, AppState>, scope: Scope, key: String, value: serde_json::Value) -> Result<()> {
     let (kind, id) = parse_scope(&scope)?.most_specific();
+    // only linking writes the Jira site, so a setting can't repoint a stored token
+    teamcode_core::jira::settings::check_settable(&key)?;
     settings::validate(&key, kind, &value)?;
     db::settings::set(&state.db.lock().expect("db lock"), kind, &id, &key, &value)
 }

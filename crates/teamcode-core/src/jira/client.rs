@@ -10,13 +10,13 @@ use serde_json::{json, Value};
 use super::adf::adf_to_text;
 use crate::{Error, Result};
 
-/// A linked Atlassian site. `account` names the keychain entry holding the API token (e.g. `jira:project:p-1`); the
-/// token itself never leaves the keychain except into a request. Owned here (A19).
+/// A linked Atlassian site. The API token is in the keychain under an account derived from the scope the site was
+/// linked at (`jira::settings::account_for`), never named here, so a setting cannot point a stored token elsewhere.
+/// Owned here (A19).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 pub struct JiraSite {
     pub site_url: String,
     pub email: String,
-    pub account: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]

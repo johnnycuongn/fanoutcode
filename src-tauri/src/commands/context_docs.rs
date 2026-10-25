@@ -3,9 +3,9 @@
 
 use tauri::{AppHandle, State};
 use teamcode_core::domain::Container;
-use teamcode_core::jira::settings::JiraSiteKey;
+use teamcode_core::jira::settings::resolve_with_account;
 use teamcode_core::memory::store::write_atomic;
-use teamcode_core::settings::{resolve, Scope};
+use teamcode_core::settings::Scope;
 use teamcode_core::workspace::context_docs::{fetch_text, text_cache_path, ContextDoc, ContextDocKind};
 use teamcode_core::workspace::url_guard::NetGuard;
 use teamcode_core::{db, Error, Result};
@@ -13,7 +13,6 @@ use teamcode_core::{db, Error, Result};
 use super::parse_container;
 use crate::events::{self, ContextDocsChanged};
 use crate::observe::log_err;
-use crate::secrets;
 use crate::state::AppState;
 
 fn announce(app: &AppHandle, container: Container) {
@@ -124,16 +123,17 @@ pub async fn context_docs_fetch(
             },
         };
         let values = db::settings::load(&state.db.lock().expect("db lock"), &scope)?;
-        resolve::<JiraSiteKey>(&values, &scope)
+        resolve_with_account(&values, &scope)
     } else {
         None
     };
+    // the token goes only to the site it was linked for
     let token = match &site {
-        Some(s) => secrets::read(&s.account)?,
+        Some((s, account)) => Some(crate::commands::jira::bound_token(s, account)?),
         None => None,
     };
     let atlassian = match (&site, &token) {
-        (Some(s), Some(t)) => Some((s, t.expose())),
+        (Some((s, _)), Some(t)) => Some((s, t.as_str())),
         _ => None,
     };
     let text = fetch_text(&doc, &roots, atlassian, &NetGuard::system()).await?;

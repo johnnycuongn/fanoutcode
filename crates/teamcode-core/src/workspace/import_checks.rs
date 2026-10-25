@@ -42,12 +42,17 @@ pub fn sanitize(mut file: WorkspaceFile, fallback_name: &str) -> (WorkspaceFile,
         ok
     });
     file.settings.retain(|key, value| {
-        let ok = key != "jira" && validate(key, ScopeKind::Workspace, value).is_ok();
+        if key == "jira" || key == "jira_transitions" {
+            problems.push("Jira links aren't imported; link Jira in Team Code".to_owned());
+            return false;
+        }
+        let ok = validate(key, ScopeKind::Workspace, value).is_ok();
         if !ok {
             problems.push(format!("Ignored setting {key:?}."));
         }
         ok
     });
+    problems.dedup();
     file.context_docs.retain(|d| {
         let why = match d.kind {
             ContextDocKind::File | ContextDocKind::Folder if !Path::new(&d.target).is_absolute() => {

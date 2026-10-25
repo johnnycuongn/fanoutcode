@@ -1202,10 +1202,11 @@ description: string; url: string; updated: string }
  */
 export type JiraLinkStatus = { site: JiraSite | null; inherited: boolean }
 /**
- * A linked Atlassian site. `account` names the keychain entry holding the API token (e.g. `jira:project:p-1`); the
- * token itself never leaves the keychain except into a request. Owned here (A19).
+ * A linked Atlassian site. The API token is in the keychain under an account derived from the scope the site was
+ * linked at (`jira::settings::account_for`), never named here, so a setting cannot point a stored token elsewhere.
+ * Owned here (A19).
  */
-export type JiraSite = { site_url: string; email: string; account: string }
+export type JiraSite = { site_url: string; email: string }
 /**
  * Moves the issue when the task enters a stage: stage word (`"review"`) → transition name (`"In Review"`).
  */

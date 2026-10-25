@@ -7,8 +7,8 @@ use teamcode_core::domain::{ProjectId, Task, WorkspaceId};
 use teamcode_core::jira::cache::CachedIssue;
 use teamcode_core::jira::client::{normalise_site, search_jql, Issue, JiraClient, JiraSite, Transition};
 use teamcode_core::jira::intent::intent_from_issue;
-use teamcode_core::jira::settings::JiraSiteKey;
-use teamcode_core::settings::{resolve, Scope, ScopeKind};
+use teamcode_core::jira::settings::{account_for, credential_text, resolve_with_account, token_for_site};
+use teamcode_core::settings::{Scope, ScopeKind};
 use teamcode_core::workspace::url_guard::check_lexical;
 use teamcode_core::{db, Error, Result};
 
@@ -43,31 +43,30 @@ pub(crate) fn project_scope(state: &AppState, project: &ProjectId) -> Result<Sco
     })
 }
 
-fn resolved_site(state: &AppState, project: &ProjectId) -> Result<Option<JiraSite>> {
+fn resolved_site(state: &AppState, project: &ProjectId) -> Result<Option<(JiraSite, String)>> {
     let scope = project_scope(state, project)?;
     let values = db::settings::load(&state.db.lock().expect("db lock"), &scope)?;
-    Ok(resolve::<JiraSiteKey>(&values, &scope))
+    Ok(resolve_with_account(&values, &scope))
 }
 
-/// The client for the project's linked site, with its token from the keychain.
-pub(crate) fn client_for(state: &AppState, project: &ProjectId) -> Result<JiraClient> {
-    let site = resolved_site(state, project)?
-        .ok_or_else(|| Error::Precondition("No Jira site linked for this project".into()))?;
-    let token = secrets::read(&site.account)?
+/// The token for `site` from `account`, only when it was linked for that site's origin.
+pub(crate) fn bound_token(site: &JiraSite, account: &str) -> Result<String> {
+    let stored = secrets::read(account)?
         .ok_or_else(|| Error::Precondition("Jira token missing from the keychain; link again".into()))?;
-    JiraClient::new(&site, token.expose())
+    token_for_site(stored.expose(), site)
 }
 
-/// Checks the credentials, stores the token under `account`, and saves the site at `(kind, id)`.
-async fn link(
-    state: &AppState,
-    kind: ScopeKind,
-    id: &str,
-    account: String,
-    site: &str,
-    email: &str,
-    token: &str,
-) -> Result<()> {
+/// The client for the project's linked site, with the token linked for that site.
+pub(crate) fn client_for(state: &AppState, project: &ProjectId) -> Result<JiraClient> {
+    let (site, account) = resolved_site(state, project)?
+        .ok_or_else(|| Error::Precondition("No Jira site linked for this project".into()))?;
+    JiraClient::new(&site, &bound_token(&site, &account)?)
+}
+
+/// Checks the credentials, stores the token bound to the site's origin under the account derived from `(kind, id)`,
+/// and saves the site there.
+async fn link(state: &AppState, kind: ScopeKind, id: &str, site: &str, email: &str, token: &str) -> Result<()> {
+    let account = account_for(kind, id)?;
     let site_url = normalise_site(site)?;
     check_lexical(&site_url, true)?;
     let email = email.trim();
@@ -77,10 +76,9 @@ async fn link(
     let linked = JiraSite {
         site_url,
         email: email.to_owned(),
-        account,
     };
     JiraClient::new(&linked, token.trim())?.verify().await?;
-    secrets::write(&linked.account, token.trim())?;
+    secrets::write(&account, &credential_text(&linked.site_url, token.trim())?)?;
     db::settings::set(
         &state.db.lock().expect("db lock"),
         kind,
@@ -100,8 +98,7 @@ pub async fn jira_link(
     token: String,
 ) -> Result<()> {
     let id = pid(&project_id)?;
-    let account = format!("jira:project:{id}");
-    link(&state, ScopeKind::Project, id.as_str(), account, &site, &email, &token).await
+    link(&state, ScopeKind::Project, id.as_str(), &site, &email, &token).await
 }
 
 /// The workspace's default site, inherited by its projects without their own.
@@ -115,17 +112,7 @@ pub async fn jira_link_workspace(
     token: String,
 ) -> Result<()> {
     let id = WorkspaceId::parse(workspace_id.as_str())?;
-    let account = format!("jira:workspace:{id}");
-    link(
-        &state,
-        ScopeKind::Workspace,
-        id.as_str(),
-        account,
-        &site,
-        &email,
-        &token,
-    )
-    .await
+    link(&state, ScopeKind::Workspace, id.as_str(), &site, &email, &token).await
 }
 
 /// Removes the site at the scope's most specific layer and its token.
@@ -136,13 +123,14 @@ pub fn jira_unlink(state: State<'_, AppState>, scope: Scope) -> Result<()> {
     if !matches!(kind, ScopeKind::Project | ScopeKind::Workspace) {
         return Err(Error::Invalid("Unlink a project or a workspace.".into()));
     }
-    let conn = state.db.lock().expect("db lock");
-    if let Some(v) = db::settings::get_raw(&conn, kind, &id, "jira")? {
-        if let Ok(site) = serde_json::from_value::<JiraSite>(v) {
-            secrets::delete(&site.account)?;
-        }
-    }
-    db::settings::set(&conn, kind, &id, "jira", &serde_json::Value::Null)
+    secrets::delete(&account_for(kind, &id)?)?;
+    db::settings::set(
+        &state.db.lock().expect("db lock"),
+        kind,
+        &id,
+        "jira",
+        &serde_json::Value::Null,
+    )
 }
 
 #[tauri::command]
@@ -155,7 +143,7 @@ pub fn jira_status(state: State<'_, AppState>, project_id: ProjectId) -> Result<
         id.as_str(),
         "jira",
     )?;
-    let site = resolved_site(&state, &id)?;
+    let site = resolved_site(&state, &id)?.map(|(s, _)| s);
     Ok(JiraLinkStatus {
         inherited: own.is_none() && site.is_some(),
         site,
