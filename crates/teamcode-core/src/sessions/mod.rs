@@ -6,7 +6,9 @@ pub mod driver;
 #[cfg(any(test, feature = "test-support"))]
 pub mod fake;
 pub mod flow;
+pub mod inject;
 pub mod launch;
+pub mod registry;
 pub mod scrollback;
 
 pub use batch::Batcher;

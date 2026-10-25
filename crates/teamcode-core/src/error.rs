@@ -4,7 +4,7 @@ use serde::{Serialize, Serializer};
 
 /// `Precondition` messages are instructions shown verbatim; `Provider` is a model, CLI or network failure;
 /// `Invalid` is a bad id or malformed input; the rest wrap their sources.
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum Error {
     #[error("{0}")]
     Precondition(String),
