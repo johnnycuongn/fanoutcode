@@ -140,10 +140,6 @@ fn stash_reset_hard_and_clean_are_caught_when_any_claim_exists() {
         assert_eq!(eval(cmd, "/r", &[]), None, "{cmd} with no claim");
     }
     assert_eq!(eval("git stash list", "/r", &claims()), None);
-    // git refuses to overwrite dirty files, so neither discards another task's changes
-    assert_eq!(eval("git stash pop", "/r", &claims()), None);
-    assert_eq!(eval("git stash apply stash@{1}", "/r", &claims()), None);
-    assert_eq!(eval("git stash apply --index", "/r", &claims()), None);
     assert_eq!(eval("git stash show -p", "/r", &claims()), None);
     assert_eq!(eval("git reset src/a.ts", "/r", &claims()), None);
     assert_eq!(eval("git clean -n", "/r", &claims()), None);
@@ -349,4 +345,42 @@ fn nesting_past_the_cap_is_conservative() {
     let deep = "sh -c \"bash -c 'zsh -c \\\"dash -c x\\\"'\"";
     assert_eq!(eval(deep, "/r", &claims()), Some((GitRule::Unparsed, all)));
     assert_eq!(eval("sh -c \"bash -c 'git status'\"", "/r", &claims()), None);
+}
+
+fn all() -> Vec<String> {
+    let mut v: Vec<String> = claims().iter().map(|c| c.path.clone()).collect();
+    v.sort();
+    v
+}
+
+#[test]
+fn stash_pop_and_apply_are_still_stopped() {
+    // the stash stack is shared by every task in the repo: a bare pop or apply may take another task's stash
+    for c in [
+        "git stash pop",
+        "git stash apply",
+        "git stash apply stash@{1}",
+        "git stash pop --index",
+    ] {
+        assert_eq!(eval(c, "/r", &claims()), Some((GitRule::Stash, all())), "{c}");
+    }
+}
+
+#[test]
+fn stash_drop_and_clear_discard() {
+    for c in ["git stash drop", "git stash drop stash@{0}", "git stash clear"] {
+        let (rule, paths) = eval(c, "/r", &claims()).expect(c);
+        assert_eq!((rule, paths), (GitRule::Stash, all()), "{c}");
+        assert_eq!(
+            crate::overlap::denial::rule_kind(rule),
+            crate::overlap::CommandKind::Discards
+        );
+    }
+}
+
+#[test]
+fn stash_list_and_show_pass() {
+    for c in ["git stash list", "git stash show", "git stash show -p stash@{1}"] {
+        assert_eq!(eval(c, "/r", &claims()), None, "{c}");
+    }
 }

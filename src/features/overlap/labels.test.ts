@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { OverlapRow, Relation } from "@/lib/bindings";
-import { fileRelationLabels, isStash, overlapsText, relationLabel } from "./labels";
+import { commandEffect, fileRelationLabels, isStash, overlapsText, relationLabel } from "./labels";
 
 function row(relation: string, held = false): OverlapRow {
   return {
@@ -55,9 +55,35 @@ describe("fileRelationLabels", () => {
 
 describe("isStash", () => {
   it("reads git stash from the command text, but not its list and show", () => {
-    for (const c of ["git stash", "git stash push -u", "git -C /r stash", "ls && git stash pop"])
+    for (const c of ["git stash", "git stash push -u", "git -C /r stash", "ls && git stash save wip"])
       expect(isStash(c), c).toBe(true);
-    for (const c of ["git stash list", "git stash show", "git commit -m stash", "git reset --hard"])
+    for (const c of [
+      "git stash list",
+      "git stash show",
+      "git stash pop",
+      "git stash apply stash@{1}",
+      "git stash drop",
+      "git stash clear",
+      "git commit -m stash",
+      "git reset --hard",
+    ])
       expect(isStash(c), c).toBe(false);
+  });
+});
+
+describe("commandEffect", () => {
+  it("words pop and apply, and drop and clear, for the shared stash stack", () => {
+    expect(commandEffect("git stash pop", "Discards", "Login", ["src/a.ts"])).toBe(
+      "Runs `git stash pop`: may apply or remove a stash another task made; the stash stack is shared.",
+    );
+    expect(commandEffect("git stash apply stash@{1}", "Discards", "Login", ["src/a.ts"])).toBe(
+      "Runs `git stash apply stash@{1}`: may apply or remove a stash another task made; the stash stack is shared.",
+    );
+    expect(commandEffect("git stash clear", "Discards", "Login", ["src/a.ts"])).toBe(
+      "Runs `git stash clear`: may throw away a stash another task made; the stash stack is shared.",
+    );
+    expect(commandEffect("git stash -u", "Discards", "Login", ["src/a.ts"])).toBe(
+      "Runs `git stash -u`: Login's uncommitted changes in src/a.ts are stashed and leave the working tree.",
+    );
   });
 });

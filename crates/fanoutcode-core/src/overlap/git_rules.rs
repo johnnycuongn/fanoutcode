@@ -224,9 +224,10 @@ fn git_rule(sub: &str, args: &[String], dir: &Path, repo: &Path, claimed: &[&Cla
             let specs: Vec<&str> = a.positionals.iter().chain(&a.after_dashes).copied().collect();
             (GitRule::RestorePath, named(&specs, dir, repo, claimed))
         }
-        // `pop` and `apply` refuse to overwrite dirty files, so they discard nothing
+        // the stash stack is shared by every task in the repo: `pop` and `apply` may take another task's stash,
+        // `drop` and `clear` may throw one away; only `list` and `show` read
         "stash" => match args.first().map(String::as_str) {
-            Some("list" | "show" | "pop" | "apply") => return None,
+            Some("list" | "show") => return None,
             _ => (GitRule::Stash, all_paths(claimed)),
         },
         "reset" if args.iter().any(|a| a == "--hard") => (GitRule::ResetHard, all_paths(claimed)),

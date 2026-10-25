@@ -243,6 +243,22 @@ src/a.ts were stashed. Re-read those files before your next edit."
 }
 
 #[test]
+fn told_command_for_the_stash_stack_says_the_stack_is_shared() {
+    let p = s(&["src/a.ts"]);
+    assert_eq!(
+        told_command("Checkout", "git stash pop", CommandKind::Discards, &p),
+        "Fanout Code: task Checkout ran `git stash pop` with the developer's approval; it may have applied or \
+removed a stash you made (the stash stack is shared), touching your uncommitted changes in src/a.ts. Re-read those \
+files before your next edit."
+    );
+    assert_eq!(
+        told_command("Checkout", "git stash clear", CommandKind::Discards, &p),
+        "Fanout Code: task Checkout ran `git stash clear` with the developer's approval; it may have thrown away a \
+stash you made (the stash stack is shared). Re-read src/a.ts before your next edit."
+    );
+}
+
+#[test]
 fn told_command_for_a_git_add_says_staged_not_committed() {
     let p = s(&["src/a.ts"]);
     for c in ["git add -A", "git add src/a.ts", "git -C /r add ."] {

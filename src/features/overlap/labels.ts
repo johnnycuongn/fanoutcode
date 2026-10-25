@@ -41,13 +41,27 @@ export function fileRelationLabels(rows: readonly OverlapRow[], repoRoot: string
   return [...new Set(labels)];
 }
 
-/** Whether a shell command stashes (`git stash` in any form but `list` and `show`), read from its text. */
+const GIT_STASH = String.raw`(^|[\s;&|(])git\s+(?:-\S+\s+(?:\S+\s+)?)*stash`;
+
+/** Whether a shell command stashes (`git stash`, `push`, `save`; not a read or a stash-stack command), read from its text. */
 export function isStash(command: string): boolean {
-  return /(^|[\s;&|(])git\s+(?:-\S+\s+(?:\S+\s+)?)*stash(?!\s+(?:list|show)\b)(?=\s|$|[;&|)])/.test(command);
+  return new RegExp(`${GIT_STASH}(?!\\s+(?:list|show|pop|apply|drop|clear)\\b)(?=\\s|$|[;&|)])`).test(command);
+}
+
+/** A command on the stash stack every task in the repo shares: `apply` for pop and apply, `drop` for drop and clear. */
+export function stashStackOp(command: string): "apply" | "drop" | null {
+  const m = new RegExp(`${GIT_STASH}\\s+(pop|apply|drop|clear)\\b`).exec(command);
+  if (!m) return null;
+  return m[2] === "pop" || m[2] === "apply" ? "apply" : "drop";
 }
 
 /** The Proceed sub-line for a stopped command: what it does to the other task's uncommitted changes (§5.6). */
 export function commandEffect(command: string, kind: CommandKind, other: string, paths: readonly string[]): string {
+  const stack = stashStackOp(command);
+  if (stack === "apply")
+    return `Runs \`${command}\`: may apply or remove a stash another task made; the stash stack is shared.`;
+  if (stack === "drop")
+    return `Runs \`${command}\`: may throw away a stash another task made; the stash stack is shared.`;
   const files = paths.join(", ");
   const what =
     kind === "Commits"

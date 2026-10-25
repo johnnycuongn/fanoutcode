@@ -97,16 +97,36 @@ fn git_subcommands(command: &str) -> Vec<(String, Vec<String>)> {
     out
 }
 
-/// Whether `command` stashes (any `git stash` but `list`, `show`, `pop` and `apply`): its changes leave the working
-/// tree but are kept, so the copy says "stashed" rather than "discarded".
+/// Whether `command` stashes (`git stash`, `push` or `save`, not a read or a `stash_stack_op`): its changes leave the
+/// working tree but are kept, so the copy says "stashed" rather than "discarded".
 pub fn is_stash(command: &str) -> bool {
     git_subcommands(command).iter().any(|(sub, args)| {
         sub == "stash"
             && !matches!(
                 args.first().map(String::as_str),
-                Some("list" | "show" | "pop" | "apply")
+                Some("list" | "show" | "pop" | "apply" | "drop" | "clear")
             )
     })
+}
+
+/// A command on the stash stack itself, which every task in the repo shares.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StashOp {
+    /// `pop`, `apply`: may apply or remove a stash another task made.
+    Apply,
+    /// `drop`, `clear`: may throw one away.
+    Drop,
+}
+
+/// The `StashOp` of `command`'s first `git stash pop|apply|drop|clear`, if any.
+pub fn stash_stack_op(command: &str) -> Option<StashOp> {
+    git_subcommands(command)
+        .iter()
+        .find_map(|(sub, args)| match (sub.as_str(), args.first().map(String::as_str)) {
+            ("stash", Some("pop" | "apply")) => Some(StashOp::Apply),
+            ("stash", Some("drop" | "clear")) => Some(StashOp::Drop),
+            _ => None,
+        })
 }
 
 /// Whether `command` stages without committing (a `git add`, no `git commit`): the copy then says "staged into its

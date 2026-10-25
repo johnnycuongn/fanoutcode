@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::decide::Release;
-use super::denial::{is_stash, stages_only};
+use super::denial::{is_stash, stages_only, stash_stack_op, StashOp};
 use super::{CommandKind, Decision};
 use crate::domain::{AgentState, Stage};
 use crate::pipeline::handback::chip_text;
@@ -157,6 +157,23 @@ uncommitted changes in (the developer approved it). Run it now."
 /// The message to the other session once the developer let this task run a command the git guard stopped (§5.5,
 /// §5.6): what the command did to that session's uncommitted changes in `paths`.
 pub fn told_command(my_title: &str, command: &str, kind: CommandKind, paths: &[String]) -> String {
+    let files = paths.join(", ");
+    let ran = format!("Fanout Code: task {my_title} ran `{command}` with the developer's approval;");
+    match stash_stack_op(command) {
+        Some(StashOp::Apply) => {
+            return format!(
+                "{ran} it may have applied or removed a stash you made (the stash stack is shared), touching your \
+uncommitted changes in {files}. Re-read those files before your next edit."
+            )
+        }
+        Some(StashOp::Drop) => {
+            return format!(
+                "{ran} it may have thrown away a stash you made (the stash stack is shared). Re-read {files} before \
+your next edit."
+            )
+        }
+        None => {}
+    }
     let what = match kind {
         CommandKind::Commits if stages_only(command) => "staged into its index",
         CommandKind::Commits => "committed into its commit",

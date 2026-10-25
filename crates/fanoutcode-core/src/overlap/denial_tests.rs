@@ -296,13 +296,16 @@ fn is_stash_reads_the_git_subcommand() {
         "git stash",
         "git stash push -u",
         "git -C /r stash",
-        "ls && git stash drop",
+        "ls && git stash save wip",
     ] {
         assert!(is_stash(c), "{c}");
     }
+    // the stash stack commands are worded on their own (`stash_stack_op`)
     for c in [
         "git stash pop",
         "git stash apply stash@{1}",
+        "git stash drop",
+        "git stash clear",
         "git stash list",
         "git stash show",
         "git commit -m stash",
@@ -343,4 +346,15 @@ fn a_relative_command_from_a_subfolder_lists_only_the_files_it_touches() {
     let from_root = rows(None);
     assert_eq!(from_root.len(), 1);
     assert_eq!(from_root[0].path, "a.ts");
+}
+
+#[test]
+fn stash_stack_op_reads_pop_apply_drop_and_clear() {
+    assert_eq!(stash_stack_op("git stash pop"), Some(StashOp::Apply));
+    assert_eq!(stash_stack_op("ls && git stash apply stash@{1}"), Some(StashOp::Apply));
+    assert_eq!(stash_stack_op("git stash drop"), Some(StashOp::Drop));
+    assert_eq!(stash_stack_op("git stash clear"), Some(StashOp::Drop));
+    for c in ["git stash", "git stash push", "git stash list", "git reset --hard"] {
+        assert_eq!(stash_stack_op(c), None, "{c}");
+    }
 }

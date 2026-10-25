@@ -215,8 +215,10 @@ The other task is told only when the command runs, not when it is granted: on sp
 so the app never trusts one alone: it acts on `CommandRan` only when it matches a grant it recorded itself (same repo,
 command, other task and paths), and only then queues the note for the other task (*"… ran `<command>` with the
 developer's approval; your uncommitted changes in <paths> were committed into its commit / staged into its index /
-stashed / discarded"*) and writes both timeline entries. A line with no matching record does nothing. `git stash pop`
-and `git stash apply` are not caught: git refuses to overwrite dirty files, so they discard nothing. A Hold, on a command or an edit, is released only once the file is clean in `git status` (the
+stashed / discarded"*) and writes both timeline entries. A line with no matching record does nothing. The stash stack is
+shared by every task in the repo, so `git stash pop` and `apply` (which may apply or remove a stash another task
+made) and `drop` and `clear` (which may throw one away) are stopped like any stash, as discards, each with its own
+copy; only `stash list` and `stash show` pass. A Hold, on a command or an edit, is released only once the file is clean in `git status` (the
 other task committed it, or no uncommitted changes are left); a claimant that merely drops out of the claims file (a
 lost session, an archived task) releases nothing. Commits that name only the task's own files are never caught. A task's commit through the app's own Commit
 button already stages only the task's files (§6.6) and is unaffected.
