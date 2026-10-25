@@ -31,3 +31,5 @@ export { ViewCanvas } from "./components/ViewCanvas";
 export { TerminalPane } from "./components/TerminalPane";
 export type { TerminalPaneProps, TerminalPaneHandle } from "./components/TerminalPane";
 export { TaskPicker } from "./components/TaskPicker";
+export { terminalStore, useTerminal, startListening as startTerminalEvents } from "./terminalStore";
+export type { TerminalState, TerminalStatus } from "./terminalStore";
