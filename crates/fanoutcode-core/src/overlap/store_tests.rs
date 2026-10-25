@@ -178,6 +178,23 @@ fn taken_over_paths_reads_the_other_side() {
 }
 
 #[test]
+fn taken_over_by_rows_do_not_affect_done_paths() {
+    let conn = test_conn();
+    // t-a1 replaced t-b2's changes in src/a.ts: the replacer's row and the mirror on the side that lost the file
+    upsert(&conn, &row("t-a1", Some("t-b2"), "src/a.ts", Relation::TakenOver)).unwrap();
+    upsert(&conn, &row("t-b2", Some("t-a1"), "src/a.ts", Relation::TakenOverBy)).unwrap();
+    assert_eq!(
+        taken_over_paths(&conn, &id("t-b2"), Path::new("/r")).unwrap(),
+        vec!["src/a.ts".to_owned()]
+    );
+    // the mirror never drops the path from the replacer's own Done check
+    assert!(taken_over_paths(&conn, &id("t-a1"), Path::new("/r"))
+        .unwrap()
+        .is_empty());
+    assert_eq!(list(&conn, &id("t-b2")).unwrap()[0].relation, Relation::TakenOverBy);
+}
+
+#[test]
 fn mark_noted_sets_one_direction() {
     let conn = test_conn();
     let t = id("t-a1");

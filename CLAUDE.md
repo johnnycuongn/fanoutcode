@@ -106,7 +106,10 @@ Conventional Commits. Every commit passes the gates: typecheck, lint, vitest (le
 
 All ten plans are built and merged, and the final review's Important fixes have landed: the tests start on Test
 entry, a dead session or a failed commit draft hands back, workspace files save on ⌘S and close, and the native
-menu leaves the keymap alone. Nothing has been run in the GUI yet: `npm run tauri dev` end to end (a real `claude`
-session with the generated settings, every §10.5 chord against the menu, two windows, the quit dialog, the Jira
-keychain prompt) is the next step. The final review's Minor items (the automatic-Done toast, the Dock badge after a
-relaunch, `Notification` hooks, determinate canvas progress, launch replay off `setup`, and the rest) are still open.
+menu leaves the keymap alone. Plan 11 (cross-task file awareness: claims, the claim-check hook, the Overlap tab,
+"Others working here", Bring <base> in) is built too. Nothing has been run in the GUI yet: `npm run tauri dev` end to
+end (a real `claude` session with the generated settings, every §10.5 chord against the menu, two windows, the quit
+dialog, the Jira keychain prompt) is the next step, and for Plan 11 a real second session stopped by the hook, notes
+reaching a working session through `additionalContext`, and Bring <base> in end to end. The final review's Minor items
+(the automatic-Done toast, the Dock badge after a relaunch, `Notification` hooks, determinate canvas progress, launch
+replay off `setup`, and the rest) are still open.

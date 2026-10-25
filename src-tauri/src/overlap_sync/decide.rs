@@ -151,6 +151,11 @@ pub async fn decide(
             timeline(app, &state, &o.id, text, now)?;
         }
         append_log(&state, &o.id, &decided_line(&repo, path, Some(task_id), decision, now))?;
+        if let Some(relation) = out.other_relation {
+            // the mirror row: the other task's Overlap tab shows the path taken over by this one
+            let conn = state.db.lock().expect("db lock");
+            store::set_relation(&conn, &o.id, &repo, path, Some(task_id), relation, Some(now))?;
+        }
         if out.taken_over {
             take_over(&state, task_id, &o.id, &repo, path)?;
         }

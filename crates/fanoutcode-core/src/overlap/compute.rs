@@ -83,7 +83,7 @@ fn key(row: &OverlapRow) -> Key {
 /// - `Committed` for a stored `Claimed` or `Committed` row whose claim went because the other task's file is clean
 ///   in `status_by_repo` (a repo without a status there keeps the stored row: it is not known yet).
 ///
-/// Stored `GrantedOnTop` and `TakenOver` rows are kept as they are, and so is any stored row with an open decision
+/// Stored `GrantedOnTop`, `TakenOver` and `TakenOverBy` rows are kept as they are, and so is any stored row with an open decision
 /// (the shell answers it once the claim is released). A recomputed row keeps the stored decision, hold, notes and
 /// `decided_at`; its `updated_at` moves to `now` only when its relation changes. Sorted by repo, path, other task.
 pub fn overlaps_for(
@@ -124,11 +124,15 @@ pub fn overlaps_for(
     }
 
     for (k, row) in &stored {
-        if out.contains_key(k) && !matches!(row.relation, Relation::GrantedOnTop | Relation::TakenOver) {
+        let decided = matches!(
+            row.relation,
+            Relation::GrantedOnTop | Relation::TakenOver | Relation::TakenOverBy
+        );
+        if out.contains_key(k) && !decided {
             continue;
         }
         let kept = match row.relation {
-            Relation::GrantedOnTop | Relation::TakenOver => Some(row.relation),
+            Relation::GrantedOnTop | Relation::TakenOver | Relation::TakenOverBy => Some(row.relation),
             Relation::Claimed | Relation::Committed => released(row, others, status_by_repo),
             Relation::PlannedBy => None,
         };
