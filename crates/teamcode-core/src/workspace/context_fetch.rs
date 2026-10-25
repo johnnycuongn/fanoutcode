@@ -4,7 +4,10 @@ use super::context_docs::{ContextDoc, ContextDocKind};
 use crate::{Error, Result};
 
 /// The most text a fetched reference keeps (prompts point at the cache file, so this only bounds disk use).
-const MAX_TEXT_BYTES: usize = 2 * 1024 * 1024;
+pub const MAX_TEXT_BYTES: usize = 2 * 1024 * 1024;
+
+/// Appended when a reference was cut at the cap.
+pub const TRUNCATED_NOTE: &str = "\n\n[Team Code: truncated at the 2 MB limit]";
 
 /// One relative path per line for a folder: files to depth two, at most 200, sorted, hidden entries skipped and
 /// symlinks not followed.
@@ -41,11 +44,39 @@ pub async fn fetch_text(
     atlassian: Option<(&crate::jira::client::JiraSite, &str)>,
     http: &reqwest::Client,
 ) -> Result<String> {
+    fetch_text_capped(doc, atlassian, http, MAX_TEXT_BYTES).await
+}
+
+/// `bytes` as text, cut at `cap` (on a character boundary) with `TRUNCATED_NOTE` when longer.
+fn capped_text(mut bytes: Vec<u8>, cap: usize) -> String {
+    if bytes.len() <= cap {
+        return String::from_utf8_lossy(&bytes).into_owned();
+    }
+    bytes.truncate(cap);
+    let mut text = String::from_utf8_lossy(&bytes).into_owned();
+    if text.ends_with('\u{FFFD}') {
+        text.pop(); // a character split by the cut
+    }
+    text.push_str(TRUNCATED_NOTE);
+    text
+}
+
+/// As `fetch_text` with an explicit byte cap.
+pub(crate) async fn fetch_text_capped(
+    doc: &ContextDoc,
+    atlassian: Option<(&crate::jira::client::JiraSite, &str)>,
+    http: &reqwest::Client,
+    cap: usize,
+) -> Result<String> {
     use crate::jira::confluence::{html_to_text, page_id_from_url, site_of_url, ConfluenceClient};
     match doc.kind {
         ContextDocKind::File => {
-            let bytes = std::fs::read(&doc.target)?;
-            Ok(String::from_utf8_lossy(&bytes[..bytes.len().min(MAX_TEXT_BYTES)]).into_owned())
+            use std::io::Read;
+            let mut bytes = Vec::new();
+            std::fs::File::open(&doc.target)?
+                .take(cap as u64 + 1)
+                .read_to_end(&mut bytes)?;
+            Ok(capped_text(bytes, cap))
         }
         ContextDocKind::Folder => folder_listing(std::path::Path::new(&doc.target)),
         ContextDocKind::Url => {
@@ -53,7 +84,7 @@ pub async fn fetch_text(
             if !ok {
                 return Err(Error::Invalid("A link must start with http:// or https://".into()));
             }
-            let resp = http
+            let mut resp = http
                 .get(&doc.target)
                 .timeout(std::time::Duration::from_secs(15))
                 .send()
@@ -71,11 +102,26 @@ pub async fn fetch_text(
                 .get_all(reqwest::header::CONTENT_TYPE)
                 .iter()
                 .any(|v| v.to_str().is_ok_and(|v| v.contains("html")));
-            let bytes = resp
-                .bytes()
+            if resp.content_length().is_some_and(|n| n > cap as u64) {
+                return Err(Error::Precondition(format!(
+                    "{} is larger than the {} MB a reference may hold.",
+                    doc.target,
+                    cap / (1024 * 1024)
+                )));
+            }
+            // stream, and stop reading one byte past the cap
+            let mut bytes = Vec::new();
+            while let Some(chunk) = resp
+                .chunk()
                 .await
-                .map_err(|e| Error::Provider(format!("Fetching {}: {}", doc.target, e.without_url())))?;
-            let text = String::from_utf8_lossy(&bytes[..bytes.len().min(MAX_TEXT_BYTES)]).into_owned();
+                .map_err(|e| Error::Provider(format!("Fetching {}: {}", doc.target, e.without_url())))?
+            {
+                bytes.extend_from_slice(&chunk);
+                if bytes.len() > cap {
+                    break;
+                }
+            }
+            let text = capped_text(bytes, cap);
             Ok(if html { html_to_text(&text) } else { text })
         }
         ContextDocKind::Confluence => {
@@ -204,5 +250,84 @@ mod tests {
             .unwrap(),
             "a <b>"
         );
+    }
+
+    /// A one-shot HTTP server that sends `body` chunked (no Content-Length) and records how much it wrote.
+    async fn chunked_server(body: Vec<u8>) -> (String, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
+        use tokio::io::AsyncWriteExt;
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let written = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let w = written.clone();
+        tokio::spawn(async move {
+            let (mut sock, _) = listener.accept().await.unwrap();
+            let mut buf = [0u8; 1024];
+            let _ = tokio::io::AsyncReadExt::read(&mut sock, &mut buf).await;
+            let _ = sock
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nTransfer-Encoding: chunked\r\n\r\n")
+                .await;
+            for chunk in body.chunks(1024) {
+                if sock
+                    .write_all(format!("{:x}\r\n", chunk.len()).as_bytes())
+                    .await
+                    .is_err()
+                    || sock.write_all(chunk).await.is_err()
+                    || sock.write_all(b"\r\n").await.is_err()
+                {
+                    return;
+                }
+                w.fetch_add(chunk.len(), std::sync::atomic::Ordering::SeqCst);
+            }
+            let _ = sock.write_all(b"0\r\n\r\n").await;
+        });
+        (format!("http://{addr}/big"), written)
+    }
+
+    #[tokio::test]
+    async fn a_body_over_the_cap_is_truncated() {
+        let (url, _written) = chunked_server(vec![b'x'; 64 * 1024]).await;
+        let text = fetch_text_capped(
+            &doc("doc-6", ContextDocKind::Url, &url, None),
+            None,
+            &reqwest::Client::new(),
+            4096,
+        )
+        .await
+        .unwrap();
+        assert!(text.ends_with(TRUNCATED_NOTE));
+        assert_eq!(text.len(), 4096 + TRUNCATED_NOTE.len());
+    }
+
+    #[tokio::test]
+    async fn an_oversized_content_length_is_refused() {
+        use wiremock::matchers::path;
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+        let server = MockServer::start().await;
+        Mock::given(path("/huge"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("y".repeat(10_000)))
+            .mount(&server)
+            .await;
+        let d = doc("doc-7", ContextDocKind::Url, &format!("{}/huge", server.uri()), None);
+        assert!(matches!(
+            fetch_text_capped(&d, None, &reqwest::Client::new(), 4096).await,
+            Err(Error::Precondition(m)) if m.contains("larger than")
+        ));
+    }
+
+    #[tokio::test]
+    async fn a_large_file_is_read_only_to_the_cap() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("big.txt");
+        std::fs::write(&p, "é".repeat(5000)).unwrap(); // 10 000 bytes, two per character
+        let text = fetch_text_capped(
+            &doc("doc-8", ContextDocKind::File, p.to_str().unwrap(), None),
+            None,
+            &reqwest::Client::new(),
+            4095,
+        )
+        .await
+        .unwrap();
+        assert!(text.ends_with(TRUNCATED_NOTE) && !text.contains('\u{FFFD}'));
+        assert_eq!(text.trim_end_matches(TRUNCATED_NOTE).chars().count(), 2047);
     }
 }

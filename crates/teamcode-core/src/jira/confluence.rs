@@ -120,8 +120,11 @@ pub fn html_to_text(html: &str) -> String {
     let mut skip_until: Option<&str> = None;
     while let Some(c) = rest.chars().next() {
         if c == '<' {
-            let end = rest.find('>').map_or(rest.len(), |e| e + 1);
-            let tag = rest[1..end.saturating_sub(1).max(1)].trim();
+            // `find` results are char boundaries; an unterminated `<tag` takes the rest of the text
+            let (tag, end) = match rest.find('>') {
+                Some(e) => (rest[1..e].trim(), e + 1),
+                None => (rest[1..].trim(), rest.len()),
+            };
             let closing = tag.starts_with('/');
             let name: String = tag
                 .trim_start_matches('/')
@@ -149,7 +152,7 @@ pub fn html_to_text(html: &str) -> String {
             continue;
         }
         if c == '&' {
-            if let Some(semi) = rest[..rest.len().min(12)].find(';') {
+            if let Some(semi) = rest.find(';').filter(|semi| *semi <= 12) {
                 if let Some(ch) = decode_entity(&rest[1..semi]) {
                     raw.push(ch);
                     rest = &rest[semi + 1..];
@@ -254,5 +257,17 @@ mod tests {
                 .await,
             Err(Error::Precondition(_))
         ));
+    }
+
+    #[test]
+    fn html_to_text_never_splits_a_character() {
+        assert_eq!(html_to_text("<p>Café crème</p>"), "Café crème");
+        assert_eq!(html_to_text("a &😀 b; c"), "a &😀 b; c");
+        assert_eq!(
+            html_to_text("<h1>設計</h1><p>決済の流れ &amp; 返金</p>"),
+            "設計\n\n決済の流れ & 返金"
+        );
+        assert_eq!(html_to_text("text <unterminated é"), "text");
+        assert_eq!(html_to_text("&é;"), "&é;");
     }
 }
