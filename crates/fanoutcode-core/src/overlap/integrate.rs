@@ -1,8 +1,7 @@
 //! The pure pieces of "Bring <base> in" (§6.3): reading the session's `Stop` after the integrate prompt, and the
 //! other task's intent excerpted from its memory folder for each overlapping path.
 
-// TODO(merge): use prompts::INTEGRATE_SENTINEL
-const INTEGRATE_SENTINEL: &str = "FANOUTCODE: integrate done";
+use super::prompts::INTEGRATE_SENTINEL;
 
 /// What an integrating session's `Stop` means (§6.3).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
