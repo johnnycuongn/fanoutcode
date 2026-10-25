@@ -30,6 +30,19 @@ pub struct ContextDoc {
     pub order: u32,
 }
 
+/// `<app_data>/context`, where fetched reference text is cached (and added to `--add-dir`).
+pub fn context_dir(app_data: &std::path::Path) -> std::path::PathBuf {
+    app_data.join("context")
+}
+
+/// `<app_data>/context/<doc-id>.md`; the id must be a valid `doc-…` id.
+pub fn text_cache_path(app_data: &std::path::Path, doc_id: &str) -> Result<std::path::PathBuf> {
+    if !(crate::ids::valid_id(doc_id) && doc_id.starts_with("doc-")) {
+        return Err(crate::Error::Invalid("Unknown reference id.".into()));
+    }
+    Ok(context_dir(app_data).join(format!("{doc_id}.md")))
+}
+
 /// `(scope_kind, scope_id)` of a container in the `context_docs` table.
 pub(crate) fn scope_of(container: &Container) -> (&'static str, &str) {
     match container {

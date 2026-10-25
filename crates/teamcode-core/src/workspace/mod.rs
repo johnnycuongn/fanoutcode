@@ -2,8 +2,10 @@
 //! `--add-dir`, protected roots, the Bash guard), prompt fragments, context docs and container conversion. The
 //! database is the source of truth; the file is a mirror (write-through in app data, explicit save elsewhere).
 
+pub mod briefs;
 pub mod context_docs;
 pub mod file;
+pub mod fragments;
 pub mod guard;
 pub mod import;
 pub(crate) mod import_checks;
