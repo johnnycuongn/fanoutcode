@@ -203,3 +203,30 @@ fn remove_absent_keeps_only_the_listed_keys() {
     assert_eq!((left.len(), left[0].other_task.clone()), (1, None));
     assert_eq!(list(&conn, &id("t-c3")).unwrap().len(), 1);
 }
+
+#[test]
+fn fresh_session_clears_pending_and_unpins() {
+    use crate::domain::{AgentState, HandbackReason};
+    use crate::overlap::{pin_for, pinned};
+    use std::collections::HashMap;
+
+    let conn = test_conn();
+    let t = id("t-a1");
+    set_pending(&conn, &t, Path::new("/r"), "src/a.ts", Some(&id("t-b2")), Some(edit())).unwrap();
+    set_pending(&conn, &t, Path::new("/r"), "src/b.ts", None, Some(edit())).unwrap();
+    set_held(&conn, &t, Path::new("/r"), "src/b.ts", None, true).unwrap();
+    let titles = HashMap::new();
+    assert_eq!(
+        pin_for(&list(&conn, &t).unwrap(), &titles),
+        Some(HandbackReason::FileInUse { pending: 2 })
+    );
+    // Start fresh session (or Archive): every open decision goes, so nothing pins the new session
+    assert_eq!(clear_pending(&conn, &t).unwrap(), 2);
+    let left = pending(&conn, &t).unwrap();
+    assert!(left.is_empty());
+    assert_eq!(pin_for(&list(&conn, &t).unwrap(), &titles), None);
+    assert_eq!(
+        pinned(left.len() as u32, Some(AgentState::Working)),
+        Some(AgentState::Working)
+    );
+}

@@ -110,6 +110,14 @@ pub struct TestFinished {
     pub code: i32,
 }
 
+/// A task's overlap rows changed (Plan 11): `count` rows in all, `pending` of them waiting on the developer.
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type, tauri_specta::Event)]
+pub struct OverlapChanged {
+    pub task_id: TaskId,
+    pub count: u32,
+    pub pending: u32,
+}
+
 /// `task-changed` for `task`, then `needs-you` with the fresh count for its project and, when it has one, its
 /// workspace. Call it after the database lock is released by the caller's write (it takes `conn` only to count).
 pub fn emit_task_changed(app: &AppHandle, conn: &Connection, task: &Task) -> Result<()> {

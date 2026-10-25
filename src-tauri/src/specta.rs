@@ -13,8 +13,8 @@ use crate::commands::{
     views, windows, workspaces,
 };
 use crate::events::{
-    ContextDocsChanged, CostUpdated, GitChanges, NeedsYou, SessionAttached, SessionExited, SessionQueueChanged,
-    SpecWatcher, TaskChanged, TasksReloaded, TeamEvent, TestFinished, TestStarted, ViewsChanged,
+    ContextDocsChanged, CostUpdated, GitChanges, NeedsYou, OverlapChanged, SessionAttached, SessionExited,
+    SessionQueueChanged, SpecWatcher, TaskChanged, TasksReloaded, TeamEvent, TestFinished, TestStarted, ViewsChanged,
     WindowContainerChanged, WorkspaceChanged, WorkspaceFileChanged,
 };
 
@@ -155,6 +155,7 @@ pub fn builder() -> Builder<tauri::Wry> {
             TeamEvent,
             SpecWatcher,
             SessionQueueChanged,
+            OverlapChanged,
         ])
 }
 

@@ -202,6 +202,14 @@ impl Attributor {
         fresh
     }
 
+    /// Drops every agent's attribution of `path` in `repo` (another task took it over, Plan 11 §5.4); whether there
+    /// was one.
+    pub fn remove(&mut self, repo: &Path, path: &str) -> bool {
+        let before = self.files.len();
+        self.files.retain(|f| !(f.repo_root == repo && f.path == path));
+        self.files.len() != before
+    }
+
     pub fn files(&self) -> &[AttributedFile] {
         &self.files
     }
@@ -271,5 +279,34 @@ mod tests {
         assert_eq!(a.files().len(), 4);
         // seen once, never again
         assert!(a.observe_dirty(repo, &status, now).is_empty());
+    }
+
+    #[test]
+    fn remove_drops_every_agent_s_attribution_of_the_path() {
+        let repo = Path::new("/r");
+        let f = |path: &str, agent: &str, root: &str| AttributedFile {
+            repo_root: root.into(),
+            path: path.into(),
+            agent_id: agent.into(),
+            source: ChangeSource::Hook,
+            added_at: Utc::now(),
+        };
+        let mut a = Attributor::with_files(
+            vec![repo.into()],
+            vec![
+                f("src/a.ts", MAIN_AGENT, "/r"),
+                f("src/a.ts", "sub-1", "/r"),
+                f("src/a.ts", MAIN_AGENT, "/elsewhere"),
+                f("src/b.ts", MAIN_AGENT, "/r"),
+            ],
+        );
+        assert!(a.remove(repo, "src/a.ts"));
+        let left: Vec<(&str, &Path)> = a
+            .files()
+            .iter()
+            .map(|f| (f.path.as_str(), f.repo_root.as_path()))
+            .collect();
+        assert_eq!(left, vec![("src/a.ts", Path::new("/elsewhere")), ("src/b.ts", repo)]);
+        assert!(!a.remove(repo, "src/a.ts"));
     }
 }

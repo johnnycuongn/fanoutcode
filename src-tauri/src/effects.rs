@@ -8,7 +8,7 @@ use fanoutcode_core::pipeline::{Effect, StageAction};
 use tauri::AppHandle;
 
 use crate::state::AppState;
-use crate::{observation, observe, session_service};
+use crate::{observation, observe, overlap_sync, session_service};
 
 /// Forwards `external` in order and returns the toast texts. Call it with no lock held: a runner may need the
 /// database. A runner that changes the task (a new worktree) hands the later arms the updated task. The session
@@ -22,6 +22,13 @@ pub fn dispatch(
     external: Vec<Effect>,
 ) -> Vec<String> {
     observation::on_task_applied(app, state, task);
+    // Plan 11, Review Focus 5: a fresh session or an archive does not inherit open overlap decisions or the pin
+    if matches!(action, Some(StageAction::StartFresh | StageAction::Archive)) {
+        observe::log_err(
+            "clearing the task's overlaps",
+            overlap_sync::clear_task(app, state, task),
+        );
+    }
     let mut task = task.clone();
     let mut toasts = Vec::new();
     let mut session = Vec::new();

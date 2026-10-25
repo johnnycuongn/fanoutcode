@@ -5,6 +5,7 @@ pub mod check;
 pub mod claims;
 pub mod compute;
 pub mod decide;
+pub mod denial;
 pub mod footprint;
 pub mod git_rules;
 pub mod grants;
@@ -106,6 +107,16 @@ pub fn pin_for(rows: &[OverlapRow], titles: &HashMap<TaskId, String>) -> Option<
     Some(HandbackReason::FileInUse {
         pending: pending.len() as u32,
     })
+}
+
+/// Whether `state` is one an overlap pin set (`FileInUse` or `HoldingFor`), so releasing the pin may replace it.
+pub fn is_pin_state(state: &AgentState) -> bool {
+    matches!(
+        state,
+        AgentState::NeedsYou {
+            reason: HandbackReason::FileInUse { .. } | HandbackReason::HoldingFor { .. }
+        }
+    )
 }
 
 #[cfg(test)]
@@ -279,5 +290,17 @@ mod tests {
     fn none_pending_pins_nothing() {
         assert_eq!(pin_for(&[], &titles()), None);
         assert_eq!(pin_for(&[row(Some("t-b2"), false, true)], &titles()), None);
+    }
+
+    #[test]
+    fn only_file_in_use_and_holding_for_are_pin_states() {
+        assert!(is_pin_state(&AgentState::NeedsYou {
+            reason: HandbackReason::FileInUse { pending: 2 }
+        }));
+        assert!(is_pin_state(&AgentState::NeedsYou {
+            reason: HandbackReason::HoldingFor { other: "Login".into() }
+        }));
+        assert!(!is_pin_state(&replied()));
+        assert!(!is_pin_state(&AgentState::Working));
     }
 }

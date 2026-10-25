@@ -1076,6 +1076,7 @@ contextDocsChanged: ContextDocsChanged,
 costUpdated: CostUpdated,
 gitChanges: GitChanges,
 needsYou: NeedsYou,
+overlapChanged: OverlapChanged,
 sessionAttached: SessionAttached,
 sessionExited: SessionExited,
 sessionQueueChanged: SessionQueueChanged,
@@ -1094,6 +1095,7 @@ contextDocsChanged: "context-docs-changed",
 costUpdated: "cost-updated",
 gitChanges: "git-changes",
 needsYou: "needs-you",
+overlapChanged: "overlap-changed",
 sessionAttached: "session-attached",
 sessionExited: "session-exited",
 sessionQueueChanged: "session-queue-changed",
@@ -1306,6 +1308,10 @@ export type MemoryLocation = { type: "AppStorage" } | { type: "Folder"; path: st
  */
 export type ModelProvider = "ClaudeCli" | "Api" | "Local"
 export type NeedsYou = { container: Container; count: number }
+/**
+ * A task's overlap rows changed (Plan 11): `count` rows in all, `pending` of them waiting on the developer.
+ */
+export type OverlapChanged = { task_id: TaskId; count: number; pending: number }
 export type PaneContent = { type: "Empty" } | { type: "Task"; task_id: TaskId } | 
 /**
  * Rendered by Plan 06 through Plan 09's `CanvasPane` (A5).

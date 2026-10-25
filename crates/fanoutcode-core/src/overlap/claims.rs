@@ -118,6 +118,30 @@ pub fn add_unattributed(file: &mut ClaimsFile, observed: &[AttributedFile], stat
     sort(&mut file.claims);
 }
 
+/// The entries of `now` that became dirty (or changed status) since `prev` and that no attribution in `owned` names
+/// for `repo` (by path, or by a rename's old path): what a hookless session may have written (§4). `prev: None` is
+/// the first status seen, the baseline, so nothing is new.
+pub fn new_unowned_dirt(
+    repo: &Path,
+    prev: Option<&[StatusEntry]>,
+    now: &[StatusEntry],
+    owned: &[AttributedFile],
+) -> Vec<StatusEntry> {
+    let Some(prev) = prev else {
+        return Vec::new();
+    };
+    let owned: HashSet<&str> = owned
+        .iter()
+        .filter(|f| f.repo_root == repo)
+        .map(|f| f.path.as_str())
+        .collect();
+    now.iter()
+        .filter(|e| !prev.iter().any(|p| p.path == e.path && p.status == e.status))
+        .filter(|e| !owned.contains(e.path.as_str()) && !e.orig_path.as_deref().is_some_and(|o| owned.contains(o)))
+        .cloned()
+        .collect()
+}
+
 fn sort(claims: &mut [Claim]) {
     claims.sort_by(|a, b| (&a.path, &a.task_id).cmp(&(&b.path, &b.task_id)));
 }
@@ -355,5 +379,33 @@ mod tests {
         assert_eq!(read_claims(&path), None);
         std::fs::write(&path, "{\"repo_root\": 3").unwrap();
         assert_eq!(read_claims(&path), None);
+    }
+
+    #[test]
+    fn new_unowned_dirt_is_what_became_dirty_and_no_task_owns() {
+        let root = Path::new("/r");
+        let prev = dirty(&["src/old.ts", "src/both.ts"]);
+        let mut now = dirty(&[
+            "src/old.ts",
+            "src/both.ts",
+            "src/new.ts",
+            "src/owned.ts",
+            "src/moved.ts",
+        ]);
+        // a status change on an already dirty path counts as new dirt
+        now[1].status = FileStatus::Deleted;
+        now[4].orig_path = Some("src/was.ts".into());
+        let owned = [
+            file("/r", "src/owned.ts", ChangeSource::Hook, NOW),
+            file("/r", "src/was.ts", ChangeSource::Hook, NOW),
+            file("/elsewhere", "src/new.ts", ChangeSource::Hook, NOW),
+        ];
+        let fresh: Vec<String> = new_unowned_dirt(root, Some(&prev), &now, &owned)
+            .into_iter()
+            .map(|e| e.path)
+            .collect();
+        assert_eq!(fresh, vec!["src/both.ts".to_owned(), "src/new.ts".into()]);
+        // without an earlier status there is nothing to compare: the first one is the baseline
+        assert!(new_unowned_dirt(root, None, &now, &owned).is_empty());
     }
 }

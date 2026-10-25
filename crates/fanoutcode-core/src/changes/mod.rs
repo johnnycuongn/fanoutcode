@@ -4,7 +4,7 @@ pub mod attributor;
 pub mod repos;
 pub mod store;
 
-pub use repos::{done_paths, repos_of};
+pub use repos::{done_by_takeover, done_paths, repos_of};
 
 use std::path::{Component, Path, PathBuf};
 

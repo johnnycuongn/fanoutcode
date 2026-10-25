@@ -10,13 +10,16 @@ use fanoutcode_core::hooks::attribution::read_agent_meta;
 use fanoutcode_core::hooks::plan_steps::{dispatch_from_tool_input, Dispatch};
 use fanoutcode_core::hooks::{artifact, feed, HookEvent, TaskEvent};
 use fanoutcode_core::memory::TaskFolder;
-use fanoutcode_core::{db, git, pipeline, Result};
+use fanoutcode_core::overlap::check::EDIT_TOOLS;
+use fanoutcode_core::overlap::denial::{edit_target, EditCall};
+use fanoutcode_core::{changes, db, git, pipeline, Result};
 use serde_json::Value;
 use tauri::{AppHandle, Manager};
 
 use crate::events::{self, CostUpdated, TeamEvent};
 use crate::observation;
-use crate::observe;
+use crate::observe::{self, log_err};
+use crate::overlap_sync;
 use crate::state::AppState;
 
 /// The raw payload of a log line (the third field), for what `HookEvent` does not carry (`tool_use_id`, paths).
@@ -109,6 +112,24 @@ pub async fn handle(app: &AppHandle, mut ev: TaskEvent, line: &str, live: bool) 
                 let tool_use_id = raw.get("tool_use_id").and_then(Value::as_str).unwrap_or("");
                 state.with_correlator(&id, |c| c.note_dispatch(tool_use_id, d));
             }
+            if EDIT_TOOLS.contains(&tool.as_str()) {
+                let call = EditCall {
+                    tool: tool.clone(),
+                    input: input.clone(),
+                    cwd: raw.get("cwd").and_then(Value::as_str).unwrap_or("/").into(),
+                };
+                log_err(
+                    "noting an edit call",
+                    overlap_sync::note_edit_call(app, &state, &id, call),
+                );
+            }
+        }
+        // the denial opens decisions on this task only; a replayed one was handled before the relaunch
+        HookEvent::ClaimDenied { .. } if live => {
+            log_err(
+                "recording a denied write",
+                overlap_sync::on_claim_denied(app, &state, &ev),
+            );
         }
         HookEvent::SubagentStart {
             agent_id, description, ..
@@ -152,7 +173,8 @@ pub async fn handle(app: &AppHandle, mut ev: TaskEvent, line: &str, live: bool) 
     let main_or_prompt = ev.agent_id.is_none() || matches!(ev.event, HookEvent::PermissionRequest { .. });
     if main_or_prompt {
         if let Some(next) = feed::next_state(task.stage, &ev.event, artifact_changed) {
-            set_state(app, &state, &id, next)?;
+            // through the overlap pin: kept aside while a decision is open (Plan 11, §5.4)
+            overlap_sync::apply_derived(app, &state, &id, next)?;
         }
     }
     // the change set: edits attribute directly, Bash calls need a status before and after
@@ -162,6 +184,17 @@ pub async fn handle(app: &AppHandle, mut ev: TaskEvent, line: &str, live: bool) 
     } else if matches!(ev.event, HookEvent::PostToolUse { .. }) {
         let files = observe::with_attributor(&state, &id, &repos, |a| a.files().to_vec())?;
         observe::save_attributions(&state, &id, &files)?;
+    }
+    if live {
+        if let HookEvent::PostToolUse { tool, input, .. } = &ev.event {
+            if EDIT_TOOLS.contains(&tool.as_str()) {
+                let cwd = Path::new(raw.get("cwd").and_then(Value::as_str).unwrap_or("/"));
+                let repo = edit_target(input, cwd).and_then(|abs| changes::repo_for(&abs, &repos).map(Path::to_owned));
+                if let Some(repo) = repo {
+                    claims_after_edit(app, &repo).await;
+                }
+            }
+        }
     }
     crate::commands::activity::track(&state, &ev, &repos);
     if !matches!(ev.event, HookEvent::StatusLine { .. }) {
@@ -174,7 +207,33 @@ pub async fn handle(app: &AppHandle, mut ev: TaskEvent, line: &str, live: bool) 
         )?;
     }
     crate::hooks_tailer::publish(&id, &ev.event);
+    // the session went idle (its idle state was just updated by the publish): queued notes go in now
+    if live && ev.agent_id.is_none() && matches!(ev.event, HookEvent::Stop { .. }) {
+        log_err(
+            "delivering notes",
+            overlap_sync::deliver_notes_if_idle(app, &state, &id),
+        );
+    }
     Ok(())
+}
+
+/// An edit landed in `repo`: its claims file at once (the hook of another task reads it next, §5.7), then the overlaps
+/// of every task working there.
+async fn claims_after_edit(app: &AppHandle, repo: &Path) {
+    log_err(
+        "rebuilding a repo's claims",
+        overlap_sync::rebuild_claims(app, repo).await,
+    );
+    let state = app.state::<AppState>();
+    let Some(all) = log_err("listing the active tasks", overlap_sync::active(&state)) else {
+        return;
+    };
+    for a in all.iter().filter(|a| a.repos.iter().any(|r| r == repo)) {
+        log_err(
+            "rebuilding a task's overlaps",
+            overlap_sync::rebuild_overlaps(app, &a.task.id).await,
+        );
+    }
 }
 
 /// The task's main transcript: from this launch's `SessionStart`, else the ledger's registered one.

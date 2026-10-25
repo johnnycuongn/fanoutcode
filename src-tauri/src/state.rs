@@ -9,8 +9,8 @@ use fanoutcode_core::changes::attributor::Attributor;
 use fanoutcode_core::changes::ChangeSet;
 use fanoutcode_core::cost::LiveCost;
 use fanoutcode_core::db::Db;
-use fanoutcode_core::domain::TaskId;
 use fanoutcode_core::domain::WorkspaceId;
+use fanoutcode_core::domain::{AgentState, TaskId};
 use fanoutcode_core::helpers::livespec_run::RunSlots;
 use fanoutcode_core::helpers::HelperKind;
 use fanoutcode_core::hooks::attribution::Correlator;
@@ -32,6 +32,7 @@ use rusqlite::Connection;
 
 use crate::git_watcher::GitWatcher;
 use crate::hooks_tailer::HooksTailer;
+use crate::overlap_sync::OverlapCache;
 use crate::pty::PortablePtySpawner;
 
 /// A test run in flight: its task (aborting it kills the child) and its shared output.
@@ -95,6 +96,11 @@ pub struct AppState {
     pub session_open: Mutex<()>,
     /// Each Codex session's idle state at the last tick, so a change updates the task once.
     pub codex_idle: Mutex<HashMap<fanoutcode_core::domain::SessionId, bool>>,
+    /// Plan 11: the state the chip feed derived for a task while an overlap decision pinned it, applied when the
+    /// last decision is made.
+    pub pinned: Mutex<HashMap<TaskId, AgentState>>,
+    /// Plan 11's sync caches (recent edit calls, unattributed files, last statuses).
+    pub overlap: OverlapCache,
 }
 
 impl AppState {
@@ -141,6 +147,8 @@ impl AppState {
             driver: Arc::new(OwnedDriver),
             session_open: Mutex::new(()),
             codex_idle: Mutex::default(),
+            pinned: Mutex::default(),
+            overlap: OverlapCache::default(),
         })
     }
 

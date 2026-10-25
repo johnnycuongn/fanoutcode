@@ -48,6 +48,13 @@ pub fn done_paths(
         .collect()
 }
 
+/// Whether Commit-stage Done detection should advance with nothing left to commit: `remaining` (the `done_paths`
+/// with `taken_over` excluded) is empty because every path the task had went to another task (Plan 11, §5.4). A task
+/// that never touched anything (no taken-over path either) is not done this way.
+pub fn done_by_takeover(remaining: &[(PathBuf, Vec<String>)], taken_over: &[(PathBuf, Vec<String>)]) -> bool {
+    remaining.is_empty() && taken_over.iter().any(|(_, paths)| !paths.is_empty())
+}
+
 #[cfg(test)]
 mod tests {
     use chrono::Utc;
@@ -128,5 +135,17 @@ mod tests {
         );
         let all = [(PathBuf::from("/app"), vec!["a.rs".to_owned(), "b.rs".into()])];
         assert!(done_paths(&repos, &attributed, None, &all).is_empty());
+    }
+
+    #[test]
+    fn done_by_takeover_needs_nothing_left_and_something_taken() {
+        let taken = [(PathBuf::from("/app"), vec!["a.rs".to_owned()])];
+        let left = [(PathBuf::from("/app"), vec!["b.rs".to_owned()])];
+        // every path went to another task: nothing left to commit, so the task is done
+        assert!(done_by_takeover(&[], &taken));
+        // something still to commit, or nothing ever touched: not by takeover
+        assert!(!done_by_takeover(&left, &taken));
+        assert!(!done_by_takeover(&[], &[]));
+        assert!(!done_by_takeover(&[], &[(PathBuf::from("/app"), vec![])]));
     }
 }

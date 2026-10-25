@@ -13,12 +13,13 @@ use fanoutcode_core::git::{self, WatchHit};
 use fanoutcode_core::helpers::spec_watcher;
 use fanoutcode_core::helpers::HelperKind;
 use fanoutcode_core::pipeline::StageAction;
-use fanoutcode_core::{db, Result};
+use fanoutcode_core::{db, overlap, Result};
 use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use tauri::{AppHandle, Manager};
 
 use crate::events::{self, GitChanges};
 use crate::observe::{self, log_err};
+use crate::overlap_sync;
 use crate::state::AppState;
 
 /// Quiet time after the last tree change before the change set is rebuilt.
@@ -293,11 +294,33 @@ async fn on_settled(app: &AppHandle, task_id: &TaskId) -> Result<()> {
             Duration::from_millis(spec_watcher::DEBOUNCE_MS),
         );
     }
+    // Plan 11: hookless edits in shared repos, then the claims and overlaps around this task
+    for repo in overlap_sync::shared_repos_of(&state, &task)? {
+        log_err(
+            "observing hookless edits",
+            overlap_sync::observe_hookless(app, &repo).await,
+        );
+    }
+    log_err(
+        "rebuilding the overlaps",
+        overlap_sync::rebuild_around(app, &task).await,
+    );
     if task.stage == Stage::Commit {
         let repos = state.git_watcher.watched_repos(task_id).unwrap_or_default();
         let files = observe::with_attributor(&state, task_id, &repos, |a| a.files().to_vec())?;
-        let pending = changes::done_paths(&repos, &files, previous.as_ref(), &[]);
+        let taken_over = {
+            let conn = state.db.lock().expect("db lock");
+            repos
+                .iter()
+                .map(|r| Ok((r.clone(), overlap::store::taken_over_paths(&conn, task_id, r)?)))
+                .collect::<Result<Vec<_>>>()?
+        };
+        let pending = changes::done_paths(&repos, &files, previous.as_ref(), &taken_over);
         if pending.is_empty() {
+            // every path the task had went to another task: nothing is left to commit, so it is done
+            if changes::done_by_takeover(&pending, &taken_over) {
+                crate::commands::tasks::run_action(app, &state, task_id, StageAction::Advance)?;
+            }
             return Ok(());
         }
         for (repo, paths) in &pending {

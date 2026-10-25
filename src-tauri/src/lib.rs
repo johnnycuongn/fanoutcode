@@ -13,6 +13,7 @@ pub mod linking;
 pub mod menu;
 pub mod observation;
 pub mod observe;
+pub mod overlap_sync;
 pub mod provider;
 pub mod pty;
 pub mod secrets;
@@ -80,6 +81,7 @@ pub fn run() {
             // the first launch would otherwise wait for the login shell's PATH
             std::thread::spawn(livespec_core::shell_env::login_shell_path);
             git_watcher::GitWatcher::start(app.handle());
+            overlap_sync::start(app.handle());
             workspace_sync::start(app.handle());
             jira_transitions::install(app.handle());
             let state = app.state::<AppState>();
