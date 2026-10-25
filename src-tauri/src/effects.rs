@@ -1,7 +1,7 @@
 //! Runs the effects `pipeline::apply` hands back. Toasts return to the caller for the webview; every other effect
 //! goes to its runner: sessions (`StartSession`, `EndSession`, `InjectPrompt`) to Plan 04's
 //! `session_service::apply_effects`, worktrees, tests and helpers (`CreateWorktree`, `RunTest`, `RunHelper`) to
-//! Plan 05's.
+//! Plan 05's (`RunTest` starts the run, or attaches to the one in flight).
 
 use tauri::AppHandle;
 use teamcode_core::domain::Task;
@@ -36,8 +36,13 @@ pub fn dispatch(
                     task = t;
                 }
             }
-            // No-op by design: the task page's Test tab owns the run through `tests_run`.
-            Effect::RunTest => {}
+            // start-or-attach: a Test tab that opens later (or is open now) attaches to this run
+            Effect::RunTest => {
+                observe::log_err(
+                    "starting the tests",
+                    crate::commands::tests::start_or_attach(app, &task.id),
+                );
+            }
             Effect::RunHelper(kind) => crate::helpers::run(app, &task.id, kind),
             // apply consumes the persistence effects; none reaches here
             e @ (Effect::SetStage(_) | Effect::SetState(_) | Effect::SetArchived(_) | Effect::WriteIndex(_)) => {

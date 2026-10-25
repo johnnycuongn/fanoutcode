@@ -14,8 +14,8 @@ use crate::commands::{
 };
 use crate::events::{
     ContextDocsChanged, CostUpdated, GitChanges, NeedsYou, SessionAttached, SessionExited, SessionQueueChanged,
-    SpecWatcher, TaskChanged, TasksReloaded, TeamEvent, TestFinished, ViewsChanged, WindowContainerChanged,
-    WorkspaceChanged, WorkspaceFileChanged,
+    SpecWatcher, TaskChanged, TasksReloaded, TeamEvent, TestFinished, TestStarted, ViewsChanged,
+    WindowContainerChanged, WorkspaceChanged, WorkspaceFileChanged,
 };
 
 /// `@ts-nocheck`: the generated globals import `Channel` before any command takes one, which `noUnusedLocals` would
@@ -148,6 +148,7 @@ pub fn builder() -> Builder<tauri::Wry> {
             ViewsChanged,
             CostUpdated,
             GitChanges,
+            TestStarted,
             TestFinished,
             TeamEvent,
             SpecWatcher,
@@ -185,6 +186,7 @@ mod tests {
             "views-changed",
             "cost-updated",
             "git-changes",
+            "test-started",
             "test-finished",
             "team-event",
             "spec-watcher",

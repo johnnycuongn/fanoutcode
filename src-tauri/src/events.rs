@@ -98,6 +98,12 @@ pub struct TeamEvent {
     pub event: TaskEvent,
 }
 
+/// A test run started (by a stage action, a board drag or a Test tab), so an open Test tab attaches to it.
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type, tauri_specta::Event)]
+pub struct TestStarted {
+    pub task_id: TaskId,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type, tauri_specta::Event)]
 pub struct TestFinished {
     pub task_id: TaskId,

@@ -10,7 +10,7 @@ use teamcode_core::settings::{keys, resolve, Scope};
 use teamcode_core::testrun::{self, Attached, LiveOutput, TestCommand};
 use teamcode_core::{db, pipeline, Error, Result};
 
-use crate::events::{self, TestFinished};
+use crate::events::{self, TestFinished, TestStarted};
 use crate::observe::{self, log_err};
 use crate::state::AppState;
 
@@ -70,6 +70,11 @@ pub(crate) fn start_or_attach(app: &AppHandle, task_id: &TaskId) -> Result<Arc<L
         out2.finish(code);
     });
     runs.insert(task_id.clone(), (handle, out.clone()));
+    drop(runs);
+    let started = TestStarted {
+        task_id: task_id.clone(),
+    };
+    log_err("announcing the test run", events::emit(app, started));
     Ok(out)
 }
 

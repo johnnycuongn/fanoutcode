@@ -1063,6 +1063,7 @@ taskChanged: TaskChanged,
 tasksReloaded: TasksReloaded,
 teamEvent: TeamEvent,
 testFinished: TestFinished,
+testStarted: TestStarted,
 viewsChanged: ViewsChanged,
 windowContainerChanged: WindowContainerChanged,
 workspaceChanged: WorkspaceChanged,
@@ -1080,6 +1081,7 @@ taskChanged: "task-changed",
 tasksReloaded: "tasks-reloaded",
 teamEvent: "team-event",
 testFinished: "test-finished",
+testStarted: "test-started",
 viewsChanged: "views-changed",
 windowContainerChanged: "window-container-changed",
 workspaceChanged: "workspace-changed",
@@ -1430,6 +1432,10 @@ export type TerminalTheme =
  */
 export type TestCommand = { cwd: string; command: string }
 export type TestFinished = { task_id: TaskId; code: number }
+/**
+ * A test run started (by a stage action, a board drag or a Test tab), so an open Test tab attaches to it.
+ */
+export type TestStarted = { task_id: TaskId }
 /**
  * The `theme` setting. `System` follows macOS; the webview resolves it (`src/lib/theme.ts`).
  */

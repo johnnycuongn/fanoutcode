@@ -22,10 +22,16 @@ export function TestTab({
     if (task.stage === "Test" && !recorded) void store.attach(task.id);
   }, [store, task.id, task.stage, recorded]);
   useEffect(() => {
+    const offStarted = events.testStarted.listen((e) => {
+      if (e.payload.task_id === task.id) void store.onTestStarted(task.id);
+    });
     const off = events.testFinished.listen((e) => {
       if (e.payload.task_id === task.id) store.onTestFinished(task.id, e.payload.code);
     });
-    return () => void off.then((fn) => fn());
+    return () => {
+      void offStarted.then((fn) => fn());
+      void off.then((fn) => fn());
+    };
   }, [store, task.id]);
   useEffect(() => {
     if (run?.running && pre.current) pre.current.scrollTop = pre.current.scrollHeight;

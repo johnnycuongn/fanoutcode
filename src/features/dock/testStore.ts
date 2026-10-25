@@ -1,7 +1,7 @@
 // The Test tab's runs per task. Plan 05's `tests_run` is start-or-attach with replay (A15): it starts the test command
 // when nothing runs and otherwise attaches and replays the output so far, so a second window sees the whole run.
-// `RunTests` is only the pipeline's bookkeeping; this store owns the output channel (Plan 04: Effect::RunTest is a
-// no-op).
+// Entering Test (a board drag, Approve changes) and `RunTests` start the run in the shell (Effect::RunTest, the same
+// start-or-attach); `test-started` tells an open tab to attach to a run it did not start.
 import { Channel } from "@tauri-apps/api/core";
 import type { ProjectId, TaskId } from "@/lib/bindings";
 import { errorMessage, live } from "@/lib/ipcResult";
@@ -59,11 +59,17 @@ export function createTestStore(ipc: TestIpc, makeChannel: () => Channel<number[
     }
   }
 
+  function fresh(taskId: TaskId): Promise<void> {
+    store.set((s) => ({ ...s, [taskId]: started() }));
+    return attach(taskId);
+  }
+
   return {
     store,
-    attach(taskId: TaskId): Promise<void> {
-      store.set((s) => ({ ...s, [taskId]: started() }));
-      return attach(taskId);
+    attach: fresh,
+    /** A run started elsewhere: attach unless this store is already following one. */
+    onTestStarted(taskId: TaskId): Promise<void> {
+      return store.get()[taskId]?.running ? Promise.resolve() : fresh(taskId);
     },
     async run(taskId: TaskId): Promise<void> {
       store.set((s) => ({ ...s, [taskId]: started() }));

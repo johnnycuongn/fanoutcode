@@ -66,3 +66,17 @@ test("fix sends FixTests and addLinked calls tests_add_linked", async () => {
   expect(ipc.tasksAction).toHaveBeenCalledWith("task-1", { type: "FixTests" });
   expect(ipc.testsAddLinked).toHaveBeenCalledWith("task-1", "proj-2");
 });
+test("test-started from elsewhere attaches once; a run already followed is left alone", async () => {
+  vi.useFakeTimers();
+  const ipc = fakeIpc(0);
+  const s = createTestStore(ipc, channel);
+  s.onTestFinished("task-1", 1);
+  const p = s.onTestStarted("task-1");
+  expect(s.store.get()["task-1"]).toMatchObject({ lines: [], code: null, running: true });
+  void s.onTestStarted("task-1");
+  expect(ipc.testsRun).toHaveBeenCalledTimes(1);
+  await vi.runAllTimersAsync();
+  await p;
+  expect(s.store.get()["task-1"]).toMatchObject({ code: 0, running: false });
+  vi.useRealTimers();
+});
