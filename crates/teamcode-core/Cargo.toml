@@ -13,6 +13,8 @@ livespec-core = { path = "../livespec-core" }
 rusqlite = { version = "0.32", features = ["bundled"] }
 tokio = { workspace = true }
 specta = { version = "=2.0.0-rc.22", features = ["derive", "chrono", "serde_json"] }
+notify = "8"
+url = "2"
 
 [features]
 # exposes `sessions::fake` to the shell's tests

@@ -4617,6 +4617,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "livespec-core",
+ "notify",
  "reqwest 0.12.28",
  "rusqlite",
  "serde",
@@ -4626,6 +4627,7 @@ dependencies = [
  "tempfile",
  "thiserror 1.0.69",
  "tokio",
+ "url",
 ]
 
 [[package]]

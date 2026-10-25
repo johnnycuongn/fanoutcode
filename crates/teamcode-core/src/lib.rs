@@ -23,6 +23,7 @@ pub(crate) mod test_support;
 pub mod testrun;
 pub mod views;
 pub mod windows;
+pub mod workspace;
 pub mod worktree;
 
 pub use error::{Error, Result};
