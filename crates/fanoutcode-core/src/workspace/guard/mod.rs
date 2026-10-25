@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 mod protocol;
 pub(crate) mod rules;
 pub(crate) mod shell_words;
+mod writers;
 
 pub use protocol::{guard_hook_spec, prepare_guard, run_guard, write_roots_file};
 

@@ -6,16 +6,19 @@
 //! way past the guard. So the answer is allowed to name too much, never too little:
 //!
 //! - an include always matches ASCII case-insensitively;
-//! - `*` and `?` are matched (crossing `/`, git's default); a bracket expression or `:(glob)` magic names every claim
-//!   under the spec's literal directory prefix;
-//! - an exclude is honoured only when it is plain ASCII without wildcards, matched exactly; any other excludes
-//!   nothing;
+//! - `*` and `?` are matched (crossing `/`, git's default); a bracket expression, a `\` (git's escape) or `:(glob)`
+//!   magic names every claim under the spec's literal directory prefix;
+//! - an exclude is honoured only when it is plain ASCII without wildcards or escapes, already normalised (no trailing
+//!   or doubled `/`, no `.` or `..` component), matched exactly; any other excludes nothing;
 //! - unknown long-form magic, or a glob over `MAX_GLOB` chars, names every claim.
 
 use std::path::Path;
 
 use super::claims::Claim;
 use super::git_rules::{rel_in, resolve};
+
+/// The characters that make an include wild: git's wildcards and its escape.
+const WILD: [char; 4] = ['*', '?', '[', '\\'];
 
 /// A glob longer than this is not matched; it counts as naming every claim.
 const MAX_GLOB: usize = 256;
@@ -159,7 +162,7 @@ fn name_include(m: &Magic<'_>, dir: &Path, repo: &Path, claimed: &[&Claim]) -> V
         return every();
     }
     let base = if m.top { repo } else { dir };
-    let wild = !m.literal && m.rest.contains(['*', '?', '[']);
+    let wild = !m.literal && m.rest.contains(WILD);
     if !wild && !m.glob {
         let Some(rel) = rel_in(repo, &resolve(m.rest, base)) else {
             return Vec::new();
@@ -182,12 +185,9 @@ fn name_include(m: &Magic<'_>, dir: &Path, repo: &Path, claimed: &[&Claim]) -> V
         return Vec::new();
     };
     let full = fold(&full);
-    if m.glob || full.contains('[') {
-        // everything under the literal directories before the first wildcard
-        let literal: Vec<&str> = full
-            .split('/')
-            .take_while(|part| !part.contains(['*', '?', '[']))
-            .collect();
+    if m.glob || full.contains(['[', '\\']) {
+        // everything under the literal directories before the first wildcard or escape
+        let literal: Vec<&str> = full.split('/').take_while(|part| !part.contains(WILD)).collect();
         let dir_prefix = if literal.len() == full.split('/').count() {
             full.clone()
         } else {
@@ -207,10 +207,13 @@ fn name_include(m: &Magic<'_>, dir: &Path, repo: &Path, claimed: &[&Claim]) -> V
         .collect()
 }
 
-/// The claimed paths one exclude takes away: only a plain ASCII path without wildcards or other magic, matched
-/// exactly; any other exclude takes nothing away.
+/// The claimed paths one exclude takes away: only a plain ASCII path without wildcards, escapes or other magic, and
+/// already normalised (git's reading of `a/`, `a//b`, `./a` or `a/../b` is not modelled), matched exactly; any other
+/// exclude takes nothing away.
 fn name_exclude(m: &Magic<'_>, dir: &Path, repo: &Path, claimed: &[&Claim]) -> Vec<String> {
-    let plain = !m.unknown && !m.glob && m.rest.is_ascii() && !m.rest.contains(['*', '?', '[', '\\']);
+    let normalised =
+        !m.rest.ends_with('/') && !m.rest.contains("//") && !m.rest.split('/').any(|part| matches!(part, "." | ".."));
+    let plain = !m.unknown && !m.glob && m.rest.is_ascii() && !m.rest.contains(WILD) && normalised;
     if !plain {
         return Vec::new();
     }

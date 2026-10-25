@@ -3,14 +3,9 @@
 use std::path::{Component, Path, PathBuf};
 
 use super::shell_words::{segments, Segment};
+use super::writers::{self, WRITERS};
 use super::{deny_reason, GuardDecision, GuardRule};
 
-const WRITERS: &[&str] = &[
-    "rm", "rmdir", "mv", "cp", "ln", "mkdir", "touch", "tee", "truncate", "dd", "shred", "unlink", "chmod", "chown",
-    "chgrp", "install", "rsync", "patch",
-];
-/// For these only the destination (the last positional) decides.
-const DEST_ONLY: &[&str] = &["cp", "mv", "rsync", "install", "ln"];
 const WRAPPERS: &[&str] = &["sudo", "env", "command", "nohup", "time", "nice", "xargs"];
 const SHELLS: &[&str] = &["sh", "bash", "zsh", "dash"];
 const GIT_WRITES: &[&str] = &[
@@ -134,7 +129,7 @@ pub(super) struct Ctx<'a> {
 impl Ctx<'_> {
     /// `word` as a path: `~` expanded, relative ones joined to `cwd`. Not cleaned: `..` after a symlink means what
     /// the shell makes of it, which `forms` works out when comparing.
-    fn resolve(&self, word: &str, cwd: &Path) -> PathBuf {
+    pub(super) fn resolve(&self, word: &str, cwd: &Path) -> PathBuf {
         let expanded = if word == "~" {
             self.home.to_owned()
         } else if let Some(rest) = word.strip_prefix("~/") {
@@ -150,7 +145,7 @@ impl Ctx<'_> {
     }
 
     /// The protected root `path` lies in, if any (either of its `forms`).
-    fn root_of(&self, path: &Path) -> Option<&PathBuf> {
+    pub(super) fn root_of(&self, path: &Path) -> Option<&PathBuf> {
         forms(path).iter().find_map(|p| {
             let p = fold(p);
             self.roots.iter().find(|r| p.starts_with(fold(r)))
@@ -160,7 +155,7 @@ impl Ctx<'_> {
     /// The protected root a write, move or delete of `path` reaches: one `path` lies in, or one inside `path` (moving
     /// or removing a folder takes everything under it). Compared through both `forms`. A path beside a root, or a
     /// read, never counts.
-    fn target_root(&self, path: &Path) -> Option<&PathBuf> {
+    pub(super) fn target_root(&self, path: &Path) -> Option<&PathBuf> {
         forms(path).iter().find_map(|p| {
             let p = fold(p);
             self.roots.iter().find(|r| {
@@ -198,7 +193,7 @@ impl Ctx<'_> {
     }
 }
 
-fn deny(root: PathBuf, rule: GuardRule) -> GuardDecision {
+pub(super) fn deny(root: PathBuf, rule: GuardRule) -> GuardDecision {
     let reason = deny_reason(&root, &rule);
     GuardDecision::Deny { root, rule, reason }
 }
@@ -314,17 +309,12 @@ fn segment(ctx: &Ctx, seg: &Segment, cwd: &mut PathBuf, depth: u8) -> GuardDecis
                 .map_or(GuardDecision::Allow, |r| deny(r, rule))
         }
         "git" => git(ctx, args, cwd),
-        "tar" | "bsdtar" | "gtar" => extract(ctx, args, cwd, tar_extracts(args), &["-C", "--directory"], "tar -x"),
-        "unzip" => {
-            let lists = args
-                .iter()
-                .any(|a| matches!(a.as_str(), "-l" | "-t" | "-v" | "-Z" | "-p"));
-            extract(ctx, args, cwd, !lists, &["-d"], "unzip")
-        }
+        "tar" | "bsdtar" | "gtar" => writers::tar(ctx, args, cwd),
+        "unzip" => writers::unzip(ctx, args, cwd),
         "find" => find(ctx, args, cwd),
         _ => {
             if let Some(&name) = WRITERS.iter().find(|w| **w == program) {
-                return writer(ctx, name, args, cwd);
+                return writers::writer(ctx, name, args, cwd);
             }
             if let Some((tool, subs)) = PACKAGE_WRITES.iter().find(|(t, _)| *t == program) {
                 let sub = positionals(args)
@@ -339,76 +329,6 @@ fn segment(ctx: &Ctx, seg: &Segment, cwd: &mut PathBuf, depth: u8) -> GuardDecis
             GuardDecision::Allow
         }
     }
-}
-
-/// `tar` in extract mode: `x` in its first (bundled) word or a short cluster, or `--extract` / `--get`.
-fn tar_extracts(args: &[String]) -> bool {
-    let bundled = args.first().is_some_and(|a| !a.starts_with('-') && a.contains('x'));
-    bundled
-        || args.iter().any(|a| {
-            matches!(a.as_str(), "--extract" | "--get")
-                || (a.starts_with('-') && !a.starts_with("--") && a.contains('x'))
-        })
-}
-
-/// An archive unpacked into the folder named after one of `dir_flags` (`-C dir`, `--directory=dir`), else the cwd:
-/// denied when that folder is, holds or lies in a root.
-fn extract(
-    ctx: &Ctx,
-    args: &[String],
-    cwd: &Path,
-    extracting: bool,
-    dir_flags: &[&str],
-    rule: &'static str,
-) -> GuardDecision {
-    if !extracting {
-        return GuardDecision::Allow;
-    }
-    let mut dirs: Vec<&str> = Vec::new();
-    for (i, a) in args.iter().enumerate() {
-        for flag in dir_flags {
-            if a == flag {
-                dirs.extend(args.get(i + 1).map(String::as_str));
-            } else if let Some(v) = a.strip_prefix(&format!("{flag}=")) {
-                dirs.push(v);
-            }
-        }
-    }
-    let root = if dirs.is_empty() {
-        ctx.target_root(cwd)
-    } else {
-        dirs.iter().find_map(|d| ctx.target_root(&ctx.resolve(d, cwd)))
-    };
-    root.map_or(GuardDecision::Allow, |r| deny(r.clone(), GuardRule::Program(rule)))
-}
-
-fn writer(ctx: &Ctx, name: &'static str, args: &[String], cwd: &Path) -> GuardDecision {
-    let pos = positionals(args);
-    let root = if DEST_ONLY.contains(&name) {
-        // the destination: the last positional, `-t <dir>`, or any `--opt=value`; one that is, holds or lies in a
-        // root counts whatever the sources (where each lands is not worked out); `mv` also takes its sources away
-        let (dest, sources) = match pos.split_last() {
-            Some((d, s)) => (Some(*d), s),
-            None => (None, &[][..]),
-        };
-        let target_dir = args
-            .windows(2)
-            .filter(|w| matches!(w[0].as_str(), "-t" | "--target-directory"))
-            .map(|w| &w[1]);
-        let valued = args.iter().filter(|a| a.starts_with("--") && a.contains('='));
-        let moved = sources.iter().copied().filter(|_| name == "mv");
-        dest.into_iter()
-            .chain(target_dir)
-            .chain(valued)
-            .chain(moved)
-            .find_map(|w| ctx.word_target(w, cwd))
-            .cloned()
-    } else {
-        ctx.root_of(cwd)
-            .or_else(|| pos.iter().find_map(|p| ctx.word_target(p, cwd)))
-            .cloned()
-    };
-    root.map_or(GuardDecision::Allow, |r| deny(r, GuardRule::Program(name)))
 }
 
 fn git(ctx: &Ctx, args: &[String], cwd: &Path) -> GuardDecision {

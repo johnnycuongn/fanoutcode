@@ -228,3 +228,37 @@ fn a_non_ascii_or_wildcard_exclude_excludes_nothing() {
         Some(paths(&["README.md", "src/deep/b.ts"]))
     );
 }
+
+#[test]
+fn a_backslash_in_an_include_names_every_claim_under_its_prefix() {
+    // git reads `\` as an escape (`d\eep` is `deep`): the spec counts as wild from its first such segment
+    assert_eq!(
+        eval(r"git add 'src/d\eep/b.ts'", "/r", &claims()).map(|h| h.1),
+        Some(paths(&["src/a.ts", "src/deep/b.ts"]))
+    );
+    assert_eq!(
+        eval(r"git add 'R\EADME.md'", "/r", &claims()).map(|h| h.1.len()),
+        Some(3)
+    );
+    assert_eq!(
+        eval(r"git restore 'deep/b\.ts'", "/r/src", &claims()).map(|h| h.1),
+        Some(paths(&["src/deep/b.ts"]))
+    );
+    // `:(literal)` keeps it a plain character
+    assert_eq!(eval(r"git add ':(literal)src/d\eep/b.ts'", "/r", &claims()), None);
+}
+
+#[test]
+fn a_non_normalised_exclude_excludes_nothing() {
+    let all = paths(&["README.md", "src/a.ts", "src/deep/b.ts"]);
+    for cmd in [
+        "git add src README.md ':!src/a.ts/'",
+        "git add src README.md ':!src//a.ts'",
+        "git add src README.md ':!./src/a.ts'",
+        "git add src README.md ':!src/./a.ts'",
+        "git add src README.md ':!src/deep/../a.ts'",
+        "git add src README.md ':(exclude)src/deep/'",
+    ] {
+        assert_eq!(eval(cmd, "/r", &claims()).map(|h| h.1), Some(all.clone()), "{cmd}");
+    }
+}

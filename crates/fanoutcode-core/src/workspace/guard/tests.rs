@@ -91,7 +91,7 @@ fn moving_a_protected_folder_is_denied() {
 }
 
 /// `<tmp>/data/app` is app data with its overlap folders, guarded through `run_guard` as a launch writes it.
-fn app_data_guard() -> (tempfile::TempDir, PathBuf, PathBuf) {
+pub(super) fn app_data_guard() -> (tempfile::TempDir, PathBuf, PathBuf) {
     let dir = tempfile::tempdir().unwrap();
     let base = std::fs::canonicalize(dir.path()).unwrap().join("data");
     let app = base.join("app");
