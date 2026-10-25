@@ -15,6 +15,9 @@ export default tseslint.config(
       "crates/**",
       "docs/**",
       "src/lib/bindings.ts",
+      // Nested git worktrees (git-ignored) hold their own copy of the tree.
+      ".worktrees/**",
+      ".claude/worktrees/**",
     ],
   },
   { files: ["**/*.{ts,tsx}"], extends: [tseslint.configs.recommended] },
