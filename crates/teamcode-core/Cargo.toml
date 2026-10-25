@@ -16,6 +16,7 @@ specta = { version = "=2.0.0-rc.22", features = ["derive", "chrono", "serde_json
 notify = "8"
 getrandom = "0.3"
 url = "2"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls-native-roots"] }
 
 [features]
 # exposes `sessions::fake` to the shell's tests
@@ -26,3 +27,4 @@ tempfile = "3"
 tokio = { workspace = true, features = ["net"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls-native-roots"] }
 specta-typescript = "=0.0.9"
+wiremock = "0.6"
