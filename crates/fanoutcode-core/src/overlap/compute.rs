@@ -28,7 +28,7 @@ pub struct OtherTask<'a> {
 
 impl OtherTask<'_> {
     /// The repo a physical root of this task is a tree of: its worktree stands for its home root.
-    fn logical(&self, root: &Path) -> PathBuf {
+    pub(crate) fn logical(&self, root: &Path) -> PathBuf {
         if self.task.worktree_path.as_deref() == Some(root) {
             self.home_root.to_owned()
         } else {
@@ -37,7 +37,7 @@ impl OtherTask<'_> {
     }
 
     /// The tree this task works in for the logical repo `repo`: its worktree for its home root, else `repo` itself.
-    fn physical(&self, repo: &Path) -> PathBuf {
+    pub(crate) fn physical(&self, repo: &Path) -> PathBuf {
         match &self.task.worktree_path {
             Some(w) if repo == self.home_root && !self.task.linked_roots.iter().any(|r| r == repo) => w.clone(),
             _ => repo.to_owned(),
@@ -45,7 +45,7 @@ impl OtherTask<'_> {
     }
 
     /// Every (logical repo, path) of the change set and the footprint.
-    fn paths(&self) -> BTreeSet<(PathBuf, String)> {
+    pub(crate) fn paths(&self) -> BTreeSet<(PathBuf, String)> {
         let files = self.files.iter().map(|f| (self.logical(&f.repo_root), f.path.clone()));
         let planned = self
             .footprint

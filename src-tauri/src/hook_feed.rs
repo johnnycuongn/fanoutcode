@@ -165,6 +165,7 @@ pub async fn handle(app: &AppHandle, mut ev: TaskEvent, line: &str, live: bool) 
         let files = observe::with_attributor(&state, &id, &repos, |a| a.files().to_vec())?;
         observe::save_attributions(&state, &id, &files)?;
     }
+    crate::overlap_integrate::on_edit(&state, &task, &repos, &ev, live);
     crate::commands::activity::track(&state, &ev, &repos);
     if !matches!(ev.event, HookEvent::StatusLine { .. }) {
         events::emit(
