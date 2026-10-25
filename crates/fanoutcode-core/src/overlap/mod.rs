@@ -12,6 +12,7 @@ pub mod grants;
 pub mod integrate;
 pub mod notes;
 pub mod others;
+mod pathspec;
 pub mod prompts;
 pub mod store;
 

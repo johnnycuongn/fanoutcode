@@ -278,8 +278,11 @@ fn top_and_glob_pathspecs_name_claimed_paths() {
         Some((GitRule::RestorePath, paths(&["src/a.ts"])))
     );
     assert_eq!(eval("git add '*.rs'", "/r", &claims()), None);
-    // an exclude pathspec names nothing
-    assert_eq!(eval("git add ':!src/a.ts'", "/r", &claims()), None);
+    assert_eq!(
+        eval("git add 'src/[a-c].ts'", "/r", &claims()).map(|h| h.1),
+        Some(paths(&["src/a.ts"]))
+    );
+    assert_eq!(eval("git add 'src/[!a].ts'", "/r", &claims()), None);
 }
 
 #[test]
@@ -316,4 +319,126 @@ fn restore_source_and_clean_exclude_values_are_not_paths() {
         Some(GitRule::Clean)
     );
     assert_eq!(eval("git clean -n -e x", "/r", &claims()), None);
+}
+
+#[test]
+fn exclude_only_pathspec_still_matches_other_claims() {
+    // with no include, an exclude means "everything here but"
+    for cmd in [
+        "git add ':!src/a.ts'",
+        "git add ':^src/a.ts'",
+        "git add ':(exclude)src/a.ts'",
+        "git checkout -- ':!src/a.ts'",
+    ] {
+        assert_eq!(
+            eval(cmd, "/r", &claims()).map(|h| h.1),
+            Some(paths(&["README.md", "src/deep/b.ts"])),
+            "{cmd}"
+        );
+    }
+    // relative to where it runs
+    assert_eq!(
+        eval("git add ':!a.ts'", "/r/src", &claims()).map(|h| h.1),
+        Some(paths(&["src/deep/b.ts"]))
+    );
+    // an include minus an exclude
+    assert_eq!(
+        eval("git add src ':!src/deep'", "/r", &claims()).map(|h| h.1),
+        Some(paths(&["src/a.ts"]))
+    );
+    // an exclude that matches no claim leaves every claim here
+    assert_eq!(
+        eval("git add ':!nothing.ts'", "/r", &claims()).map(|h| h.1.len()),
+        Some(3)
+    );
+    // excluding every claim leaves nothing
+    assert_eq!(eval("git add ':!src' ':!README.md'", "/r", &claims()), None);
+}
+
+#[test]
+fn glob_with_dot_dot_segments_is_resolved() {
+    for (cmd, cwd) in [
+        ("git add './src/*.ts'", "/r"),
+        ("git add '../src/a*'", "/r/src"),
+        ("git add 'src//a.*'", "/r"),
+        ("git add 'deep/../a.*'", "/r/src"),
+    ] {
+        assert_eq!(
+            eval(cmd, cwd, &claims())
+                .map(|h| h.1)
+                .as_deref()
+                .map(|v| v.contains(&"src/a.ts".to_owned())),
+            Some(true),
+            "{cmd} in {cwd}"
+        );
+    }
+    // climbing out of the repo matches nothing in it
+    assert_eq!(eval("git add '../../*.ts'", "/r/src", &claims()), None);
+}
+
+#[test]
+fn commit_include_takes_staged_claims() {
+    let with_staged = vec![claim("src/a.ts"), staged("README.md")];
+    for cmd in [
+        "git commit -i -m x src/mine.ts",
+        "git commit --include -m x src/mine.ts",
+        "git commit -p -m x",
+        "git commit --patch -m x src/mine.ts",
+        "git commit --interactive",
+    ] {
+        assert_eq!(
+            eval(cmd, "/r", &with_staged).map(|h| h.1),
+            Some(paths(&["README.md"])),
+            "{cmd}"
+        );
+    }
+    assert_eq!(
+        eval("git commit -i -m x src/a.ts", "/r", &with_staged).map(|h| h.1),
+        Some(paths(&["README.md", "src/a.ts"]))
+    );
+}
+
+#[test]
+fn pathspec_from_file_is_conservative() {
+    let all = paths(&["README.md", "src/a.ts", "src/deep/b.ts"]);
+    for cmd in [
+        "git add --pathspec-from-file=list.txt",
+        "git add --pathspec-from-file list.txt",
+        "git commit -m x --pathspec-from-file=- --pathspec-file-nul",
+        "git restore --pathspec-from-file=list.txt",
+        "git rm --pathspec-from-file list.txt",
+        "git checkout --pathspec-from-file=list.txt",
+    ] {
+        assert_eq!(
+            eval(cmd, "/r", &claims()),
+            Some((GitRule::Unparsed, all.clone())),
+            "{cmd}"
+        );
+    }
+}
+
+#[test]
+fn pathological_glob_returns_fast() {
+    let pattern = "*a".repeat(30);
+    let text = format!("{}b", "a".repeat(60));
+    let start = std::time::Instant::now();
+    let hit = eval(&format!("git add '{pattern}'"), "/r", &[claim(&text)]);
+    assert!(
+        start.elapsed() < std::time::Duration::from_millis(50),
+        "{:?}",
+        start.elapsed()
+    );
+    assert_eq!(hit, None);
+    // over the length cap: counted as a match
+    let long = format!("git add '{}*'", "x".repeat(300));
+    assert_eq!(eval(&long, "/r", &claims()).map(|h| h.1.len()), Some(3));
+}
+
+#[test]
+fn nesting_past_the_cap_is_conservative() {
+    let all = paths(&["README.md", "src/a.ts", "src/deep/b.ts"]);
+    // three levels are followed; the fourth is not read, so the command is stopped
+    let deep = "sh -c \"bash -c 'zsh -c \\\"dash -c x\\\"'\"";
+    assert_eq!(eval(deep, "/r", &claims()), Some((GitRule::Unparsed, all)));
+    assert_eq!(eval("sh -c \"bash -c 'git status'\"", "/r", &claims()), None);
 }

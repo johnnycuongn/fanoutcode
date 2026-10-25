@@ -1,12 +1,13 @@
 //! The git guard's second rule set (§5.6): which shell commands would stage, commit, restore, stash, reset or clean
 //! paths another active task claims. Best effort, like the Bash guard: segment by segment with a running cwd
 //! (`cd`, `git -C`), into the string of `sh -c` / `bash -c` (and zsh, dash), but no script file or other interpreter
-//! is inspected. Pathspecs understand `:/`, `:(top)`, excludes and `*` / `?` / `[…]` globs; other magic is read as a
-//! plain path.
+//! is inspected. Pathspecs are read in `pathspec`. Where the parser cannot be sure (paths from a file, shells nested
+//! past the cap, an over-long glob) it stops the command rather than let it pass.
 
 use std::path::{Path, PathBuf};
 
 use super::claims::Claim;
+use super::pathspec::named;
 use crate::workspace::guard::rules::{clean, strip_prefixes};
 use crate::workspace::guard::shell_words::segments;
 
@@ -30,6 +31,9 @@ pub enum GitRule {
     Stash,
     ResetHard,
     Clean,
+    /// The parser cannot tell what the command touches (paths read from a file, shells nested past the cap, an
+    /// over-long glob): every claim counts. As bad as a discard for whoever owns them.
+    Unparsed,
 }
 
 /// `path` with the deepest existing ancestor canonicalised (so `/tmp/x/new.ts` becomes `/private/tmp/x/new.ts`).
@@ -63,18 +67,8 @@ pub(crate) fn rel_in(repo: &Path, path: &Path) -> Option<String> {
     p.strip_prefix(&r).ok().map(rel_string)
 }
 
-fn resolve(word: &str, cwd: &Path) -> PathBuf {
+pub(super) fn resolve(word: &str, cwd: &Path) -> PathBuf {
     clean(&cwd.join(word))
-}
-
-/// The claimed paths a repo-relative path names: the path itself, everything under it as a directory, or all at the
-/// root.
-fn matching<'a>(spec: &str, claimed: &[&'a Claim]) -> Vec<&'a str> {
-    claimed
-        .iter()
-        .map(|c| c.path.as_str())
-        .filter(|p| spec.is_empty() || *p == spec || p.strip_prefix(spec).is_some_and(|r| r.starts_with('/')))
-        .collect()
 }
 
 /// Splits `args` into flags and positionals, skipping the value of each flag in `valued` (short clusters like `-am`
@@ -133,93 +127,22 @@ fn all_paths(claimed: &[&Claim]) -> Vec<String> {
     claimed.iter().map(|c| c.path.clone()).collect()
 }
 
-/// Git's pathspec wildcard match, without `:(glob)` magic: `*` and `?` cross `/`, `[…]` is a set (`!` or `^`
-/// negates, `a-z` ranges).
-fn glob_match(pat: &[char], text: &[char]) -> bool {
-    match pat.split_first() {
-        None => text.is_empty(),
-        Some(('*', rest)) => (0..=text.len()).any(|i| glob_match(rest, &text[i..])),
-        Some(('?', rest)) => !text.is_empty() && glob_match(rest, &text[1..]),
-        Some(('[', rest)) => {
-            let Some(close) = rest.iter().skip(1).position(|c| *c == ']').map(|i| i + 1) else {
-                return text.first() == Some(&'[') && glob_match(rest, &text[1..]);
-            };
-            let Some(ch) = text.first() else { return false };
-            let (negate, set) = match rest[..close].split_first() {
-                Some(('!' | '^', set)) => (true, set),
-                _ => (false, &rest[..close]),
-            };
-            let mut hit = false;
-            let mut i = 0;
-            while i < set.len() {
-                if i + 2 < set.len() && set[i + 1] == '-' {
-                    hit |= (set[i]..=set[i + 2]).contains(ch);
-                    i += 3;
-                } else {
-                    hit |= set[i] == *ch;
-                    i += 1;
-                }
-            }
-            hit != negate && glob_match(&rest[close + 1..], &text[1..])
-        }
-        Some((c, rest)) => text.first() == Some(c) && glob_match(rest, &text[1..]),
-    }
-}
-
-/// One pathspec's magic: `(top, exclude, rest)`. `:/x` and `:(top)x` are relative to the repo root; `:!x`, `:^x`
-/// and `:(exclude)x` name nothing to change.
-fn magic(spec: &str) -> (bool, bool, &str) {
-    let Some(after) = spec.strip_prefix(':') else {
-        return (false, false, spec);
-    };
-    if let Some(long) = after.strip_prefix('(') {
-        let Some((words, rest)) = long.split_once(')') else {
-            return (false, false, spec);
-        };
-        let has = |w: &str| words.split(',').any(|x| x.trim() == w);
-        return (has("top"), has("exclude"), rest);
-    }
-    let shorts = after.find(|c| !matches!(c, '/' | '!' | '^')).unwrap_or(after.len());
-    let (flags, rest) = after.split_at(shorts);
-    (flags.contains('/'), flags.contains(['!', '^']), rest)
-}
-
-/// The claimed paths the given pathspecs (resolved against `dir`, or the repo root for `:/`) name in `repo`.
-fn named(specs: &[&str], dir: &Path, repo: &Path, claimed: &[&Claim]) -> Vec<String> {
-    let mut out = Vec::new();
-    for spec in specs {
-        let (top, exclude, rest) = magic(spec);
-        if exclude {
-            continue;
-        }
-        let base = if top { repo } else { dir };
-        if rest.contains(['*', '?', '[']) {
-            let Some(prefix) = rel_in(repo, base) else { continue };
-            let full = if prefix.is_empty() {
-                rest.to_owned()
-            } else {
-                format!("{prefix}/{rest}")
-            };
-            let pat: Vec<char> = full.trim_start_matches("./").chars().collect();
-            out.extend(
-                claimed
-                    .iter()
-                    .filter(|c| glob_match(&pat, &c.path.chars().collect::<Vec<_>>()))
-                    .map(|c| c.path.clone()),
-            );
-        } else if let Some(rel) = rel_in(repo, &resolve(rest, base)) {
-            out.extend(matching(&rel, claimed).into_iter().map(str::to_owned));
-        }
-    }
-    out
-}
-
 fn staged_paths(claimed: &[&Claim]) -> Vec<String> {
     claimed.iter().filter(|c| c.staged).map(|c| c.path.clone()).collect()
 }
 
+/// The subcommands whose pathspecs `--pathspec-from-file` can carry.
+const TAKES_PATHSPECS: &[&str] = &["commit", "add", "checkout", "restore", "rm", "reset", "stash"];
+
 /// One `git <sub> <args>` run in `dir`, inside `repo`.
 fn git_rule(sub: &str, args: &[String], dir: &Path, repo: &Path, claimed: &[&Claim]) -> Option<(GitRule, Vec<String>)> {
+    // paths read from a file (or stdin) cannot be seen: every claim counts
+    let from_file = args
+        .iter()
+        .any(|a| a.starts_with("--pathspec-from-file") || a == "--pathspec-file-nul");
+    if from_file && TAKES_PATHSPECS.contains(&sub) {
+        return Some((GitRule::Unparsed, sorted(all_paths(claimed))));
+    }
     let (rule, paths) = match sub {
         "commit" => {
             let a = split_args(
@@ -240,10 +163,16 @@ fn git_rule(sub: &str, args: &[String], dir: &Path, repo: &Path, claimed: &[&Cla
                 ],
             );
             let specs: Vec<&str> = a.positionals.iter().chain(&a.after_dashes).copied().collect();
+            // `-i` adds the named paths to what is staged; `-p` / `--interactive` pick hunks on top of the index
+            let with_index = has(&a, 'i', "--include") || has(&a, 'p', "--patch") || a.flags.contains(&"--interactive");
             if has(&a, 'a', "--all") {
                 (GitRule::CommitAll, all_paths(claimed))
             } else if specs.is_empty() {
                 (GitRule::CommitStaged, staged_paths(claimed))
+            } else if with_index {
+                let mut paths = named(&specs, dir, repo, claimed);
+                paths.extend(staged_paths(claimed));
+                (GitRule::CommitStaged, paths)
             } else {
                 (GitRule::CommitPath, named(&specs, dir, repo, claimed))
             }
@@ -282,7 +211,7 @@ fn git_rule(sub: &str, args: &[String], dir: &Path, repo: &Path, claimed: &[&Cla
             (GitRule::SwitchForce, all_paths(claimed))
         }
         "rm" => {
-            let a = split_args(args, "", &["pathspec-from-file"]);
+            let a = split_args(args, "", &[]);
             let specs: Vec<&str> = a.positionals.iter().chain(&a.after_dashes).copied().collect();
             (GitRule::Remove, named(&specs, dir, repo, claimed))
         }
@@ -321,7 +250,7 @@ fn sorted(mut paths: Vec<String>) -> Vec<String> {
 
 /// Shells whose `-c` string is read as a command of its own.
 const SHELLS: &[&str] = &["sh", "bash", "zsh", "dash"];
-/// How deep `sh -c 'bash -c …'` is followed.
+/// How deep `sh -c 'bash -c …'` is followed; a `-c` script deeper than this stops the command.
 const MAX_DEPTH: usize = 3;
 
 /// The first segment of `command` (run in `cwd`) that is a git command inside `repo` touching one of `claimed` (the
@@ -359,10 +288,15 @@ fn evaluate_in(
                 .iter()
                 .position(|a| a.starts_with('-') && !a.starts_with("--") && a.contains('c'))
                 .and_then(|i| rest.get(i + 1));
-            if let (Some(script), true) = (script, depth < MAX_DEPTH) {
-                if let Some(hit) = evaluate_in(script, &cwd, repo, claimed, depth + 1) {
-                    return Some(hit);
+            match script {
+                // nested past the cap: not read, so stopped
+                Some(_) if depth >= MAX_DEPTH => return Some((GitRule::Unparsed, sorted(all_paths(claimed)))),
+                Some(script) => {
+                    if let Some(hit) = evaluate_in(script, &cwd, repo, claimed, depth + 1) {
+                        return Some(hit);
+                    }
                 }
+                None => {}
             }
             continue;
         }
