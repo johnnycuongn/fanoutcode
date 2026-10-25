@@ -296,7 +296,7 @@ async fn on_settled(app: &AppHandle, task_id: &TaskId) -> Result<()> {
     if task.stage == Stage::Commit {
         let repos = state.git_watcher.watched_repos(task_id).unwrap_or_default();
         let files = observe::with_attributor(&state, task_id, &repos, |a| a.files().to_vec())?;
-        let pending = changes::done_paths(&repos, &files, previous.as_ref());
+        let pending = changes::done_paths(&repos, &files, previous.as_ref(), &[]);
         if pending.is_empty() {
             return Ok(());
         }
