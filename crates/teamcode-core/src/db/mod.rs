@@ -27,7 +27,17 @@ pub const MIGRATIONS: &[(u32, &str, &str)] = &[
     (3, "core", include_str!("../../migrations/0003_core.sql")),
     (5, "observation", include_str!("../../migrations/0005_observation.sql")),
     (9, "canvas", include_str!("../../migrations/0009_canvas.sql")),
+    (10, "workspaces", include_str!("../../migrations/0010_workspaces.sql")),
 ];
+
+/// One connection shared by the stores that lock it per call (`workspace::WorkspaceStore`, `ContextDocs`,
+/// `jira::IssueCache`); the shell's `AppState.db` is this handle.
+pub type Db = std::sync::Arc<std::sync::Mutex<Connection>>;
+
+/// Wraps a connection as a shared `Db`.
+pub fn shared(conn: Connection) -> Db {
+    std::sync::Arc::new(std::sync::Mutex::new(conn))
+}
 
 /// Opens (creating parent folders on first launch), enables WAL and foreign keys, then migrates.
 pub fn open(path: &Path) -> Result<Connection> {

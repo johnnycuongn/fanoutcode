@@ -4,3 +4,8 @@
 
 pub mod context_docs;
 pub mod file;
+pub(crate) mod rows;
+pub mod store;
+#[cfg(test)]
+pub(crate) mod test_support;
+pub mod watcher;
