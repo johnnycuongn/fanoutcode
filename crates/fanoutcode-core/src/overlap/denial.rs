@@ -6,11 +6,12 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 
 use super::claims::{Claim, ClaimsFile};
-use super::git_rules::{evaluate_git, rel_in};
+use super::git_rules::{evaluate_git, rel_in, GitRule};
 use super::grants::GrantsFile;
-use super::{OverlapRow, PendingDecision};
+use super::{CommandKind, OverlapRow, PendingDecision};
 use crate::domain::TaskId;
-use crate::workspace::guard::rules::clean;
+use crate::workspace::guard::rules::{clean, strip_prefixes};
+use crate::workspace::guard::shell_words::segments;
 
 /// One decision a denial opens: `path` of the denial's repo, held by `other_task`.
 #[derive(Debug, Clone, PartialEq)]
@@ -49,6 +50,67 @@ pub fn writes(call: &EditCall, repo: &Path, path: &str) -> bool {
 /// An `Edit` decision still waiting for its tool input (the denial's line came before the `PreToolUse` one).
 pub fn awaits_snapshot(row: &OverlapRow) -> bool {
     matches!(&row.pending, Some(PendingDecision::Edit { input, .. }) if input.is_null())
+}
+
+/// What a caught rule does to the other task's work.
+pub fn rule_kind(rule: GitRule) -> CommandKind {
+    match rule {
+        GitRule::CommitAll | GitRule::AddAll | GitRule::CommitPath | GitRule::AddPath => CommandKind::Commits,
+        GitRule::Stash | GitRule::ResetHard | GitRule::Clean | GitRule::CheckoutPath | GitRule::RestorePath => {
+            CommandKind::Discards
+        }
+    }
+}
+
+/// The `git` subcommands of `command` with their arguments, segment by segment (global options skipped).
+fn git_subcommands(command: &str) -> Vec<(String, Vec<String>)> {
+    let mut out = Vec::new();
+    for seg in segments(command) {
+        let words = strip_prefixes(&seg.words);
+        let Some((first, rest)) = words.split_first() else {
+            continue;
+        };
+        if first.rsplit('/').next() != Some("git") {
+            continue;
+        }
+        let mut i = 0;
+        while let Some(w) = rest.get(i).filter(|w| w.starts_with('-')) {
+            i += if matches!(w.as_str(), "-C" | "-c" | "--git-dir" | "--work-tree" | "--namespace") {
+                2
+            } else {
+                1
+            };
+        }
+        if let Some(sub) = rest.get(i) {
+            out.push((sub.clone(), rest[i + 1..].to_vec()));
+        }
+    }
+    out
+}
+
+/// Whether `command` stashes (any `git stash` but `list` and `show`): its changes leave the working tree but are
+/// kept, so the copy says "stashed" rather than "discarded".
+pub fn is_stash(command: &str) -> bool {
+    git_subcommands(command)
+        .iter()
+        .any(|(sub, args)| sub == "stash" && !matches!(args.first().map(String::as_str), Some("list" | "show")))
+}
+
+/// What a stopped `command` would do to the claims of `claimed` in `repo` (§5.6): the kind of the rule
+/// `evaluate_git` catches from the repo root, else (a command the root cannot place, such as relative paths from a
+/// subdirectory) the first git subcommand it names; a command it cannot read at all counts as discarding.
+pub fn command_kind(command: &str, repo: &Path, claimed: &[&Claim]) -> CommandKind {
+    if let Some((rule, _)) = evaluate_git(command, repo, repo, claimed) {
+        return rule_kind(rule);
+    }
+    git_subcommands(command)
+        .iter()
+        .find_map(|(sub, _)| match sub.as_str() {
+            "commit" | "add" => Some(CommandKind::Commits),
+            "stash" | "reset" | "clean" | "checkout" | "restore" => Some(CommandKind::Discards),
+            _ => None,
+        })
+        .unwrap_or(CommandKind::Discards)
 }
 
 /// The pending decisions one `ClaimDenied` of task `own` opens in `repo`:
@@ -97,14 +159,26 @@ pub fn denial_rows(
         Some((_, paths)) => others.iter().copied().filter(|c| paths.contains(&c.path)).collect(),
         None => others.iter().copied().filter(|c| c.task_id.as_ref() == other).collect(),
     };
+    let kind = command_kind(command, repo, &others);
     named
-        .into_iter()
-        .map(|c| Denied {
-            path: c.path.clone(),
-            other_task: c.task_id.clone(),
-            pending: PendingDecision::Command {
-                command: command.to_owned(),
-            },
+        .iter()
+        .map(|c| {
+            let mut paths: Vec<String> = named
+                .iter()
+                .filter(|o| o.task_id == c.task_id)
+                .map(|o| o.path.clone())
+                .collect();
+            paths.sort();
+            paths.dedup();
+            Denied {
+                path: c.path.clone(),
+                other_task: c.task_id.clone(),
+                pending: PendingDecision::Command {
+                    command: command.to_owned(),
+                    kind,
+                    paths,
+                },
+            }
         })
         .collect()
 }
@@ -236,7 +310,9 @@ mod tests {
         ));
         assert!(!awaits_snapshot(&OverlapRow {
             pending: Some(PendingDecision::Command {
-                command: "git stash".into()
+                command: "git stash".into(),
+                kind: CommandKind::Discards,
+                paths: vec![],
             }),
             ..row
         }));
@@ -285,7 +361,9 @@ mod tests {
         assert_eq!(keys, vec![("src/a.ts", Some("t-b2")), ("src/c.ts", Some("t-b2"))]);
         assert!(rows.iter().all(|d| d.pending
             == PendingDecision::Command {
-                command: "git add -A".into()
+                command: "git add -A".into(),
+                kind: CommandKind::Commits,
+                paths: vec!["src/a.ts".into(), "src/c.ts".into()],
             }));
     }
 
@@ -305,6 +383,14 @@ mod tests {
         );
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].path, "src/a.ts");
+        assert_eq!(
+            rows[0].pending,
+            PendingDecision::Command {
+                command: "git add a.ts".into(),
+                kind: CommandKind::Commits,
+                paths: vec!["src/a.ts".into()],
+            }
+        );
         assert!(denial_rows(
             &id("t-a1"),
             Path::new("/r"),
@@ -316,5 +402,67 @@ mod tests {
             &[]
         )
         .is_empty());
+    }
+
+    #[test]
+    fn command_kind_names_what_the_command_does_to_the_other_tasks_work() {
+        let held = [claim("src/a.ts", Some("t-b2"))];
+        let refs: Vec<&Claim> = held.iter().collect();
+        let kind = |c: &str| command_kind(c, Path::new("/r"), &refs);
+        for c in [
+            "git commit -am wip",
+            "git add -A",
+            "git commit src/a.ts -m x",
+            "git add src/a.ts",
+        ] {
+            assert_eq!(kind(c), CommandKind::Commits, "{c}");
+        }
+        for c in [
+            "git stash",
+            "git reset --hard",
+            "git clean -fd",
+            "git checkout -- src/a.ts",
+            "git restore src/a.ts",
+        ] {
+            assert_eq!(kind(c), CommandKind::Discards, "{c}");
+        }
+        // what the root cannot place is read from its words; what has no git command at all counts as discarding
+        assert_eq!(kind("cd src && git add a.ts"), CommandKind::Commits);
+        assert_eq!(kind("git -C sub restore a.ts"), CommandKind::Discards);
+        assert_eq!(kind("make tidy"), CommandKind::Discards);
+        for (rule, k) in [
+            (GitRule::CommitAll, CommandKind::Commits),
+            (GitRule::AddAll, CommandKind::Commits),
+            (GitRule::CommitPath, CommandKind::Commits),
+            (GitRule::AddPath, CommandKind::Commits),
+            (GitRule::Stash, CommandKind::Discards),
+            (GitRule::ResetHard, CommandKind::Discards),
+            (GitRule::Clean, CommandKind::Discards),
+            (GitRule::CheckoutPath, CommandKind::Discards),
+            (GitRule::RestorePath, CommandKind::Discards),
+        ] {
+            assert_eq!(rule_kind(rule), k, "{rule:?}");
+        }
+    }
+
+    #[test]
+    fn is_stash_reads_the_git_subcommand() {
+        for c in [
+            "git stash",
+            "git stash push -u",
+            "git -C /r stash",
+            "ls && git stash pop",
+        ] {
+            assert!(is_stash(c), "{c}");
+        }
+        for c in [
+            "git stash list",
+            "git stash show",
+            "git commit -m stash",
+            "git reset --hard",
+            "echo git stash",
+        ] {
+            assert!(!is_stash(c), "{c}");
+        }
     }
 }

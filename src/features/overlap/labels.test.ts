@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { OverlapRow, Relation } from "@/lib/bindings";
-import { fileRelationLabels, overlapsText, relationLabel } from "./labels";
+import { fileRelationLabels, isStash, overlapsText, relationLabel } from "./labels";
 
 function row(relation: string, held = false): OverlapRow {
   return {
@@ -50,5 +50,14 @@ describe("fileRelationLabels", () => {
     rows.push({ ...row("Committed"), repo_root: "/r/beta" }, { ...row("Committed"), path: "src/b.ts" });
     expect(fileRelationLabels(rows, "/r/alpha", "src/a.ts")).toEqual(["claimed", "planned by"]);
     expect(fileRelationLabels(rows, "/r/alpha", "src/z.ts")).toEqual([]);
+  });
+});
+
+describe("isStash", () => {
+  it("reads git stash from the command text, but not its list and show", () => {
+    for (const c of ["git stash", "git stash push -u", "git -C /r stash", "ls && git stash pop"])
+      expect(isStash(c), c).toBe(true);
+    for (const c of ["git stash list", "git stash show", "git commit -m stash", "git reset --hard"])
+      expect(isStash(c), c).toBe(false);
   });
 });

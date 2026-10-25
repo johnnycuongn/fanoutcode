@@ -1,5 +1,6 @@
 use super::*;
 use crate::domain::HandbackReason;
+use crate::overlap::CommandKind;
 
 fn s(v: &[&str]) -> Vec<String> {
     v.iter().map(|x| x.to_string()).collect()
@@ -219,4 +220,24 @@ pub(crate) fn internal() {}\n";
         s(&["build_claims", "Claim", "Grain", "Store", "method"])
     );
     assert!(export_names("").is_empty());
+}
+
+#[test]
+fn told_command_says_what_happened_to_the_other_sessions_files() {
+    let p = s(&["src/a.ts", "src/b.ts"]);
+    assert_eq!(
+        told_command("Checkout", "git commit -am wip", CommandKind::Commits, &p),
+        "Fanout Code: task Checkout ran `git commit -am wip` with the developer's approval; your uncommitted changes \
+in src/a.ts, src/b.ts were committed into its commit. Re-read those files before your next edit."
+    );
+    assert_eq!(
+        told_command("Checkout", "git reset --hard", CommandKind::Discards, &p[..1]),
+        "Fanout Code: task Checkout ran `git reset --hard` with the developer's approval; your uncommitted changes \
+in src/a.ts were discarded. Re-read those files before your next edit."
+    );
+    assert_eq!(
+        told_command("Checkout", "git stash -u", CommandKind::Discards, &p[..1]),
+        "Fanout Code: task Checkout ran `git stash -u` with the developer's approval; your uncommitted changes in \
+src/a.ts were stashed. Re-read those files before your next edit."
+    );
 }

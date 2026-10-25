@@ -254,7 +254,10 @@ fn a_git_command_over_another_tasks_claim_is_denied_and_logged() {
             path: None,
             command: Some("git add -A && git commit -m wip".into()),
             other: Some(claim("src/a.ts", Some("t-b2"), "Checkout")),
-            reason: git_deny_reason(&["src/a.ts".into()], &["Checkout".into()]),
+            reason: git_deny_reason(
+                crate::overlap::CommandKind::Commits,
+                &[&claim("src/a.ts", Some("t-b2"), "Checkout")]
+            ),
         }
     );
     // the task's own files never trip it

@@ -1,5 +1,5 @@
 // The words the overlap UI uses (§7): a row's relation label, the other task's title, a row key and an overlap count.
-import type { OverlapRow, Task, TaskId } from "@/lib/bindings";
+import type { CommandKind, OverlapRow, Task, TaskId } from "@/lib/bindings";
 
 // Keyed by string so a relation added in Rust before this map learns it still shows, under its raw name.
 const RELATION_LABELS: Record<string, string> = {
@@ -39,4 +39,21 @@ export function overlapsText(n: number): string {
 export function fileRelationLabels(rows: readonly OverlapRow[], repoRoot: string, path: string): string[] {
   const labels = rows.filter((r) => r.repo_root === repoRoot && r.path === path).map(relationLabel);
   return [...new Set(labels)];
+}
+
+/** Whether a shell command stashes (`git stash` in any form but `list` and `show`), read from its text. */
+export function isStash(command: string): boolean {
+  return /(^|[\s;&|(])git\s+(?:-\S+\s+(?:\S+\s+)?)*stash(?!\s+(?:list|show)\b)(?=\s|$|[;&|)])/.test(command);
+}
+
+/** The Proceed sub-line for a stopped command: what it does to the other task's uncommitted changes (§5.6). */
+export function commandEffect(command: string, kind: CommandKind, other: string, paths: readonly string[]): string {
+  const files = paths.join(", ");
+  const what =
+    kind === "Commits"
+      ? "go into this task's commit"
+      : isStash(command)
+        ? "are stashed and leave the working tree"
+        : "are discarded from the working tree";
+  return `Runs \`${command}\`: ${other}'s uncommitted changes in ${files} ${what}.`;
 }

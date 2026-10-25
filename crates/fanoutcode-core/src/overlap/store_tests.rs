@@ -93,6 +93,8 @@ fn set_pending_creates_a_claimed_row_and_closing_it_clears_the_hold() {
     let (t, repo) = (id("t-a1"), Path::new("/r"));
     let cmd = PendingDecision::Command {
         command: "git stash".into(),
+        kind: crate::overlap::CommandKind::Discards,
+        paths: vec!["src/a.ts".into()],
     };
     set_pending(&conn, &t, repo, "src/a.ts", None, Some(cmd.clone())).unwrap();
     set_held(&conn, &t, repo, "src/a.ts", None, true).unwrap();

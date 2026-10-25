@@ -6,6 +6,7 @@ use serde_json::json;
 use super::*;
 use crate::overlap::claims::write_claims;
 use crate::overlap::grants::{take_command, with_grants_lock, write_grants, Grant, GrantScope};
+use crate::overlap::CommandKind;
 
 fn id(s: &str) -> TaskId {
     TaskId::parse(s).unwrap()
@@ -237,4 +238,35 @@ fn a_failed_consume_denies() {
     std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).unwrap();
     assert!(still_denied, "a grant that could not be spent allows nothing");
     assert_eq!(read_grants(&args.grants_path).grants.len(), 1);
+}
+
+#[test]
+fn git_deny_reason_names_each_files_task_once_and_what_the_command_does() {
+    let (a, b, c) = (
+        claim("src/a.ts", "t-b2", "Login"),
+        claim("src/b.ts", "t-c3", "Billing"),
+        claim("src/c.ts", "t-b2", "Login"),
+    );
+    let tail = "The developer is being asked how to proceed. Do not run it or work around the block; finish anything \
+unrelated you were doing, then stop and wait for the developer's instruction.";
+    assert_eq!(
+        git_deny_reason(CommandKind::Commits, &[&a, &b, &c]),
+        format!(
+            "Fanout Code: this git command would commit other tasks' uncommitted changes into this task's commit: \
+Login has src/a.ts, src/c.ts; Billing has src/b.ts. {tail}"
+        )
+    );
+    assert_eq!(
+        git_deny_reason(CommandKind::Discards, &[&b]),
+        format!(
+            "Fanout Code: this git command would discard other tasks' uncommitted changes from the working tree: \
+Billing has src/b.ts. {tail}"
+        )
+    );
+    // the hook's reason for a command over Checkout's claim
+    assert!(matches!(
+        decide("git stash", &GrantsFile::default()),
+        CheckDecision::Deny { reason, .. } if reason == git_deny_reason(
+            CommandKind::Discards, &[&claim("src/a.ts", "t-b2", "Checkout")])
+    ));
 }

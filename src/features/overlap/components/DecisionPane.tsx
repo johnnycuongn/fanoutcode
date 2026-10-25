@@ -3,12 +3,12 @@
 // and the decision history instead.
 import { useState, type ReactElement } from "react";
 import { Button, RadioGroup, statusLabel, type RadioOption } from "@/components/ui";
-import type { Decision, OverlapRow, Task } from "@/lib/bindings";
+import type { Decision, OverlapRow, PendingDecision, Task } from "@/lib/bindings";
 import { agentStatus } from "@/lib/format";
 import { tasksStore } from "@/lib/stores/tasksStore";
 import { requestDockTab } from "@/features/shell";
 import { decide } from "../store";
-import { otherTitle, relationLabel } from "../labels";
+import { commandEffect, otherTitle, relationLabel } from "../labels";
 import { DiffBox } from "./DiffBox";
 import { WillWriteBox } from "./WillWriteBox";
 
@@ -19,16 +19,20 @@ export interface DecisionPaneProps {
 
 type Choice = Decision["type"];
 
-/** §5.4's four answers; a shell command can only go ahead (on top, for the pair) or wait. */
-function choices(other: string, task: string, command: boolean): RadioOption<Choice>[] {
-  if (command)
+/** §5.4's four answers; a shell command can only go ahead (granted for this one command) or wait. */
+function choices(other: string, task: string, pending: PendingDecision | null): RadioOption<Choice>[] {
+  if (pending?.type === "Command")
     return [
       {
         value: "OnTopAll",
         label: "Proceed",
-        description: `Run the command; ${other}'s uncommitted changes stay and no further files are asked about.`,
+        description: commandEffect(pending.command, pending.kind, other, pending.paths),
       },
-      { value: "Hold", label: "Hold", description: `Nothing runs; ${task} waits until ${other} commits the file.` },
+      {
+        value: "Hold",
+        label: "Hold",
+        description: `Don't run it; you are reminded when ${other} commits these files.`,
+      },
     ];
   return [
     {
@@ -57,7 +61,7 @@ function when(iso: string): string {
 }
 
 function Choices({ task, row, other }: DecisionPaneProps & { other: string }): ReactElement {
-  const options = choices(other, task.title, row.pending?.type === "Command");
+  const options = choices(other, task.title, row.pending);
   const [choice, setChoice] = useState<Choice>(options[0].value);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -80,7 +84,7 @@ function Choices({ task, row, other }: DecisionPaneProps & { other: string }): R
         value={choice}
         onValueChange={setChoice}
       />
-      <p className="text-xs text-mute">{`Whatever you choose, ${other}'s session is told.`}</p>
+      {choice !== "Hold" && row.other_task && <p className="text-xs text-mute">{`${other}'s session is told.`}</p>}
       {error && (
         <p role="alert" className="text-xs text-bad">
           {error}

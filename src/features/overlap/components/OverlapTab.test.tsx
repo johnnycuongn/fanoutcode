@@ -90,7 +90,7 @@ describe("OverlapTab", () => {
       "Hold",
     ])
       expect(screen.getByRole("radio", { name })).toBeInTheDocument();
-    expect(screen.getByText("Whatever you choose, Login's session is told.")).toBeInTheDocument();
+    expect(screen.getByText("Login's session is told.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open in Changes" })).toBeInTheDocument();
   });
 
@@ -136,7 +136,12 @@ describe("OverlapTab", () => {
   });
 
   it("a command row offers only Proceed and Hold", async () => {
-    const cmd: PendingDecision = { type: "Command", command: "git checkout -- src/a.ts" };
+    const cmd: PendingDecision = {
+      type: "Command",
+      command: "git checkout -- src/a.ts",
+      kind: "Discards",
+      paths: ["src/a.ts"],
+    };
     commands.overlapPendingInput.mockResolvedValue({ status: "ok", data: cmd });
     seed([row({ pending: cmd })]);
     renderTab();
@@ -150,6 +155,50 @@ describe("OverlapTab", () => {
         type: "OnTopAll",
       }),
     );
+  });
+
+  it("a stopped command says what it does to the other task's work", async () => {
+    const cmd = (command: string, kind: "Commits" | "Discards"): PendingDecision => ({
+      type: "Command",
+      command,
+      kind,
+      paths: ["src/a.ts", "src/b.ts"],
+    });
+    for (const [pending, line] of [
+      [
+        cmd("git commit -am wip", "Commits"),
+        "Runs `git commit -am wip`: Login's uncommitted changes in src/a.ts, src/b.ts go into this task's commit.",
+      ],
+      [
+        cmd("git reset --hard", "Discards"),
+        "Runs `git reset --hard`: Login's uncommitted changes in src/a.ts, src/b.ts are discarded from the working tree.",
+      ],
+      [
+        cmd("git stash -u", "Discards"),
+        "Runs `git stash -u`: Login's uncommitted changes in src/a.ts, src/b.ts are stashed and leave the working tree.",
+      ],
+    ] as const) {
+      commands.overlapPendingInput.mockResolvedValue({ status: "ok", data: pending });
+      seed([row({ pending })]);
+      const { unmount } = renderTab();
+      expect(screen.getByText(line)).toBeInTheDocument();
+      expect(screen.getByText("Don't run it; you are reminded when Login commits these files.")).toBeInTheDocument();
+      unmount();
+    }
+  });
+
+  it("the told line shows only when the choice tells another session", async () => {
+    seed([row({ pending: EDIT })]);
+    const { unmount } = renderTab();
+    expect(screen.getByText("Login's session is told.")).toBeInTheDocument();
+    await setupUser().click(screen.getByRole("radio", { name: "Hold" }));
+    expect(screen.queryByText("Login's session is told.")).toBeNull();
+    unmount();
+    // an unattributed session has no inbox: nobody is told
+    seed([row({ pending: EDIT, other_task: null })]);
+    renderTab();
+    expect(screen.getByRole("radio", { name: /Proceed on top of another session's changes/ })).toBeInTheDocument();
+    expect(screen.queryByText(/session is told/)).toBeNull();
   });
 
   it("a failed decide shows the error", async () => {

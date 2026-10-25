@@ -1249,6 +1249,12 @@ export type ChangedFile = { path: string; status: FileStatus; added: number; rem
  */
 owners: string[]; shared: boolean; source: ChangeSource }
 /**
+ * What a stopped command would do to the other task's uncommitted changes: put them into this task's commit
+ * (`commit -a`, `add -A`, `commit <path>`, `add <path>`), or take them out of the working tree (`stash`,
+ * `reset --hard`, `clean`, `checkout <path>`, `restore <path>`).
+ */
+export type CommandKind = "Commits" | "Discards"
+/**
  * One file the integrate prompt lists, with the other task that touched it on the base side and that task's
  * spec summary and plan excerpt (§6.3). Also what the merge hand-back pane shows (`overlap_integration_context`).
  */
@@ -1441,7 +1447,12 @@ export type PendingDecision =
 /**
  * An `Edit`, `Write`, `MultiEdit` or `NotebookEdit` and its tool input snapshot.
  */
-{ type: "Edit"; tool: string; input: JsonValue } | { type: "Command"; command: string }
+{ type: "Edit"; tool: string; input: JsonValue } | 
+/**
+ * A shell command the git guard stopped (§5.6): what it would do to the other task's work, and the other
+ * task's files it touches.
+ */
+{ type: "Command"; command: string; kind: CommandKind; paths: string[] }
 /**
  * `plan.md` as the Team canvas reads it.
  */

@@ -2,7 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::Decision;
+use super::denial::is_stash;
+use super::{CommandKind, Decision};
 use crate::domain::{AgentState, Stage};
 use crate::pipeline::handback::chip_text;
 use crate::settings::Integration;
@@ -149,6 +150,21 @@ pub fn go_ahead_command(other_title: &str, command: &str) -> String {
     format!(
         "Fanout Code: the developer says go ahead with `{command}`, although it touches files {other_title} has \
 uncommitted changes in (the developer approved it). Run it now."
+    )
+}
+
+/// The message to the other session once the developer let this task run a command the git guard stopped (§5.5,
+/// §5.6): what the command did to that session's uncommitted changes in `paths`.
+pub fn told_command(my_title: &str, command: &str, kind: CommandKind, paths: &[String]) -> String {
+    let what = match kind {
+        CommandKind::Commits => "committed into its commit",
+        CommandKind::Discards if is_stash(command) => "stashed",
+        CommandKind::Discards => "discarded",
+    };
+    format!(
+        "Fanout Code: task {my_title} ran `{command}` with the developer's approval; your uncommitted changes in {} \
+were {what}. Re-read those files before your next edit.",
+        paths.join(", ")
     )
 }
 

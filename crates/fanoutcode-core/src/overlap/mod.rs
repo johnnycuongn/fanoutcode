@@ -46,13 +46,23 @@ pub enum Relation {
 #[serde(tag = "type")]
 pub enum PendingDecision {
     /// An `Edit`, `Write`, `MultiEdit` or `NotebookEdit` and its tool input snapshot.
-    Edit {
-        tool: String,
-        input: serde_json::Value,
-    },
+    Edit { tool: String, input: serde_json::Value },
+    /// A shell command the git guard stopped (§5.6): what it would do to the other task's work, and the other
+    /// task's files it touches.
     Command {
         command: String,
+        kind: CommandKind,
+        paths: Vec<String>,
     },
+}
+
+/// What a stopped command would do to the other task's uncommitted changes: put them into this task's commit
+/// (`commit -a`, `add -A`, `commit <path>`, `add <path>`), or take them out of the working tree (`stash`,
+/// `reset --hard`, `clean`, `checkout <path>`, `restore <path>`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
+pub enum CommandKind {
+    Commits,
+    Discards,
 }
 
 /// The developer's answer to a pending decision (§5.4): on top for this file, on top for every file the other task
@@ -161,10 +171,16 @@ mod tests {
         assert_eq!(rt(edit)["type"], "Edit");
         assert_eq!(
             rt(PendingDecision::Command {
-                command: "git add -A".into()
+                command: "git add -A".into(),
+                kind: CommandKind::Commits,
+                paths: vec!["src/a.ts".into()],
             }),
-            json!({"type": "Command", "command": "git add -A"})
+            json!({"type": "Command", "command": "git add -A", "kind": "Commits", "paths": ["src/a.ts"]})
         );
+        for k in [CommandKind::Commits, CommandKind::Discards] {
+            rt(k);
+        }
+        assert_eq!(rt(CommandKind::Discards), json!("Discards"));
     }
 
     #[test]
@@ -190,6 +206,8 @@ mod tests {
             relation: Relation::Claimed,
             pending: Some(PendingDecision::Command {
                 command: "git stash".into(),
+                kind: CommandKind::Discards,
+                paths: vec!["src/a.ts".into()],
             }),
             held: true,
             noted_out: true,
@@ -219,6 +237,8 @@ mod tests {
             relation: Relation::Claimed,
             pending: pending.then(|| PendingDecision::Command {
                 command: "git add -A".into(),
+                kind: CommandKind::Commits,
+                paths: vec!["src/a.ts".into()],
             }),
             held,
             noted_out: false,

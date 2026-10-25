@@ -10,9 +10,11 @@ use chrono::Utc;
 use serde::Deserialize;
 
 use super::claims::{read_claims, Claim, ClaimsFile};
+use super::denial::rule_kind;
 use super::git_rules::{evaluate_git, rel_in};
 use super::grants::{read_grants, take_commands, GrantsFile};
 use super::notes::drain_notes;
+use super::CommandKind;
 use crate::domain::TaskId;
 use crate::hooks::{sh_single_quote, HookSpec};
 use crate::workspace::guard::rules::clean;
@@ -56,14 +58,32 @@ pub fn deny_reason(path: &str, other_title: &str) -> String {
     )
 }
 
-/// The §5.6 reason: the files and the tasks holding them.
-pub fn git_deny_reason(paths: &[String], titles: &[String]) -> String {
+/// The §5.6 reason: what the command would do to the other tasks' work, and each task with its files (`named`, in
+/// order; a task named once however many of its files are listed).
+pub fn git_deny_reason(kind: CommandKind, named: &[&Claim]) -> String {
+    let mut tasks: Vec<(Option<&TaskId>, &str, Vec<&str>)> = Vec::new();
+    for c in named {
+        match tasks
+            .iter_mut()
+            .find(|(t, title, _)| *t == c.task_id.as_ref() && *title == c.title)
+        {
+            Some((_, _, paths)) => paths.push(&c.path),
+            None => tasks.push((c.task_id.as_ref(), &c.title, vec![&c.path])),
+        }
+    }
+    let holders: Vec<String> = tasks
+        .iter()
+        .map(|(_, title, paths)| format!("{title} has {}", paths.join(", ")))
+        .collect();
+    let would = match kind {
+        CommandKind::Commits => "commit other tasks' uncommitted changes into this task's commit",
+        CommandKind::Discards => "discard other tasks' uncommitted changes from the working tree",
+    };
     format!(
-        "Fanout Code: this git command touches files with another task's uncommitted changes ({}): {}. The developer \
-         is being asked how to proceed. Do not run it or work around the block; finish anything unrelated you were \
-         doing, then stop and wait for the developer's instruction.",
-        titles.join(", "),
-        paths.join(", ")
+        "Fanout Code: this git command would {would}: {}. The developer is being asked how to proceed. Do not run it \
+         or work around the block; finish anything unrelated you were doing, then stop and wait for the developer's \
+         instruction.",
+        holders.join("; ")
     )
 }
 
@@ -130,18 +150,16 @@ fn check_bash(input: &CheckInput, own: &TaskId, claims: &[ClaimsFile], grants: &
             .filter(|c| c.task_id.as_ref() != Some(own))
             .filter(|c| !grants.allows_command(command, &file.repo_root, c.task_id.as_ref()))
             .collect();
-        let Some((_, paths)) = evaluate_git(command, &input.cwd, &file.repo_root, &others) else {
+        let Some((rule, paths)) = evaluate_git(command, &input.cwd, &file.repo_root, &others) else {
             continue;
         };
         let named: Vec<&Claim> = others.iter().copied().filter(|c| paths.contains(&c.path)).collect();
-        let mut titles: Vec<String> = named.iter().map(|c| c.title.clone()).collect();
-        titles.dedup();
         return CheckDecision::Deny {
             repo: file.repo_root.clone(),
             path: None,
             command: Some(command.to_owned()),
             other: named.first().map(|c| (*c).clone()),
-            reason: git_deny_reason(&paths, &titles),
+            reason: git_deny_reason(rule_kind(rule), &named),
         };
     }
     CheckDecision::Allow

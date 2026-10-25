@@ -8,7 +8,7 @@ use chrono::{DateTime, Utc};
 
 use super::claims::ClaimsFile;
 use super::grants::{Grant, GrantScope, GrantsFile};
-use super::prompts::{go_ahead, go_ahead_command, told};
+use super::prompts::{go_ahead, go_ahead_command, told, told_command};
 use super::{Decision, OverlapRow, PendingDecision, Relation};
 
 /// Everything one decision writes. `my_prompt` goes into this task's session, `other_prompt` to the other task's
@@ -52,7 +52,7 @@ pub fn outcome(
         path: path.to_owned(),
     };
     let told_other = |d: Decision| row.other_task.as_ref().map(|_| told(d, my_title, path));
-    if let Some(PendingDecision::Command { command }) = &row.pending {
+    if let Some(PendingDecision::Command { command, kind, paths }) = &row.pending {
         if decision != Decision::Hold {
             return DecisionOutcome {
                 grant: grant(GrantScope::Command {
@@ -62,7 +62,10 @@ pub fn outcome(
                 relation: Relation::GrantedOnTop,
                 other_relation: None,
                 my_prompt: Some(go_ahead_command(other_title, command)),
-                other_prompt: told_other(Decision::OnTopAll),
+                other_prompt: row
+                    .other_task
+                    .as_ref()
+                    .map(|_| told_command(my_title, command, *kind, paths)),
                 my_timeline: format!("proceed with `{command}` over {other_title}'s changes"),
                 other_timeline: row
                     .other_task
@@ -179,6 +182,7 @@ mod tests {
     use crate::hooks::parse::parse_line;
     use crate::hooks::HookEvent;
     use crate::overlap::claims::Claim;
+    use crate::overlap::CommandKind;
 
     fn id(s: &str) -> TaskId {
         TaskId::parse(s).unwrap()
@@ -320,7 +324,13 @@ mod tests {
 
     #[test]
     fn a_command_proceed_answers_that_commands_rows_on_the_same_task_only() {
-        let cmd = |c: &str| Some(PendingDecision::Command { command: c.into() });
+        let cmd = |c: &str| {
+            Some(PendingDecision::Command {
+                command: c.into(),
+                kind: CommandKind::Discards,
+                paths: vec![],
+            })
+        };
         let decided = row("src/a.ts", Some("t-b2"), cmd("git stash"), false);
         let rows = [
             decided.clone(),
@@ -346,6 +356,8 @@ mod tests {
     fn a_command_proceeds_with_a_command_grant_and_an_unattributed_other_is_told_nothing() {
         let cmd = Some(PendingDecision::Command {
             command: "git add -A".into(),
+            kind: CommandKind::Commits,
+            paths: vec!["src/a.ts".into()],
         });
         for d in [Decision::OnTopFile, Decision::OnTopAll, Decision::Replace] {
             let out = outcome(
@@ -363,6 +375,15 @@ mod tests {
                 }
             );
             assert_eq!(out.my_prompt, Some(go_ahead_command("Login", "git add -A")));
+            assert_eq!(
+                out.other_prompt,
+                Some(told_command(
+                    "Checkout",
+                    "git add -A",
+                    CommandKind::Commits,
+                    &["src/a.ts".into()]
+                ))
+            );
             assert!(!out.taken_over);
         }
         assert!(
