@@ -3,7 +3,7 @@
 import type { DockPosition, Stage } from "@/lib/bindings";
 
 /** The same union as the shell's `DockTab` (its `requestDockTab` names one of these). */
-export type DockTab = "memory" | "team" | "changes" | "ticket" | "test" | "commit";
+export type DockTab = "memory" | "team" | "changes" | "overlap" | "ticket" | "test" | "commit";
 
 export interface WatcherEntry {
   at: string;

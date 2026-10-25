@@ -1,7 +1,7 @@
 // The dock's tab strip: the stage's visible tabs, and the grow toggle.
 import { Maximize2, Minimize2 } from "lucide-react";
 import type { ReactElement, ReactNode } from "react";
-import { IconButton, TabsList, TabsTrigger } from "@/components/ui";
+import { IconButton, TabsList, TabsTrigger, type Tone } from "@/components/ui";
 import { DOCK_TABS } from "../tabRules";
 import type { DockTab } from "../types";
 
@@ -11,15 +11,29 @@ export interface DockTabStripProps {
   onToggleGrow(): void;
   /** Extra content per tab label, e.g. the Changes count. */
   counts?: Partial<Record<DockTab, number>>;
+  /** The count badge's tone per tab; amber when unset. */
+  tones?: Partial<Record<DockTab, Tone>>;
   trailing?: ReactNode;
 }
 
-export function DockTabStrip({ tabs, grown, onToggleGrow, counts = {}, trailing }: DockTabStripProps): ReactElement {
+export function DockTabStrip({
+  tabs,
+  grown,
+  onToggleGrow,
+  counts = {},
+  tones = {},
+  trailing,
+}: DockTabStripProps): ReactElement {
   return (
     <div className="flex shrink-0 items-center gap-1 border-b border-line bg-bar pr-1">
       <TabsList variant="bar" size="sm" aria-label="Dock" className="flex-1">
         {DOCK_TABS.filter((t) => tabs.includes(t.id)).map((t) => (
-          <TabsTrigger key={t.id} value={t.id} {...(counts[t.id] ? { count: counts[t.id] } : {})}>
+          <TabsTrigger
+            key={t.id}
+            value={t.id}
+            {...(counts[t.id] ? { count: counts[t.id] } : {})}
+            {...(tones[t.id] ? { countTone: tones[t.id] } : {})}
+          >
             {t.label}
           </TabsTrigger>
         ))}

@@ -6,6 +6,7 @@ export const DOCK_TABS: { id: DockTab; label: string }[] = [
   { id: "memory", label: "Memory" },
   { id: "team", label: "Team" },
   { id: "changes", label: "Changes" },
+  { id: "overlap", label: "Overlap" },
   { id: "ticket", label: "Ticket" },
   { id: "test", label: "Test" },
   { id: "commit", label: "Commit" },
@@ -14,8 +15,9 @@ export const DOCK_TABS: { id: DockTab; label: string }[] = [
 export const DEFAULT_HEIGHT = 0.34;
 export const GROWN_HEIGHT = 0.67;
 
-export function visibleTabs(stage: Stage, hasTestCommand: boolean): DockTab[] {
-  const tabs: DockTab[] = ["memory", "team", "changes", "ticket"];
+/** Overlap shows in every stage while the task has an overlap (§7), so single-task projects never see it. */
+export function visibleTabs(stage: Stage, hasTestCommand: boolean, hasOverlap = false): DockTab[] {
+  const tabs: DockTab[] = ["memory", "team", "changes", ...(hasOverlap ? (["overlap"] as const) : []), "ticket"];
   if (hasTestCommand) tabs.push("test");
   if (stage === "Commit") tabs.push("commit");
   return tabs;

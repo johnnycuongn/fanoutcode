@@ -8,4 +8,6 @@ export {
   pendingRows,
   viewOverlapCount,
 } from "./store";
+export { OverlapTab } from "./components/OverlapTab";
+export type { OverlapTabProps } from "./components/OverlapTab";
 export type { OverlapState, OverlapCounts } from "./types";

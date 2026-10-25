@@ -30,6 +30,7 @@ vi.mock("@/lib/bindings", async () => {
     memoryWrite: vi.fn(async () => null),
     memoryMissing: vi.fn(async () => []),
     gitChanges: vi.fn(async () => []),
+    overlapList: vi.fn(async () => ({ status: "ok", data: [] })),
     tasksAction: vi.fn(async () => {}),
     sessionsOpen: vi.fn(async () => "sess-1"),
     costSummary: vi.fn(async () => ({})),
