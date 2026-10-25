@@ -8,12 +8,13 @@ use crate::domain::{Stage, TaskId};
 use crate::memory::{IndexEntry, TimelineKind};
 use crate::{Error, Result};
 
-/// Appends one entry; `kind` is the timeline word, `detail` the chip or the commit as JSON.
+/// Appends one entry; `kind` is the timeline word, `detail` the chip, commit, spec reason or overlap detail as JSON.
 pub fn append(conn: &Connection, task: &TaskId, e: &IndexEntry) -> Result<()> {
     let detail = match &e.kind {
         TimelineKind::Handback { chip } => Some(json!({ "chip": chip })),
         TimelineKind::Commit { repo, sha } => Some(json!({ "repo": repo, "sha": sha })),
         TimelineKind::Spec { reason } => Some(json!({ "reason": reason })),
+        TimelineKind::Overlap { detail } => Some(json!({ "detail": detail })),
         _ => None,
     };
     conn.execute(
@@ -50,6 +51,9 @@ fn entry(at: String, kind: String, stage: Option<String>, detail: Option<String>
         },
         "spec" => TimelineKind::Spec {
             reason: field("reason")?,
+        },
+        "overlap" => TimelineKind::Overlap {
+            detail: field("detail")?,
         },
         word => TimelineKind::unit_from_word(word).ok_or_else(bad)?,
     };
@@ -157,5 +161,31 @@ mod tests {
         )
         .unwrap();
         assert_eq!(list(&c, &t.id).unwrap()[0].kind, kind);
+    }
+
+    #[test]
+    fn overlap_entries_keep_their_detail() {
+        let c = test_conn();
+        insert_project(&c, "p-1a-1");
+        let t = task_fixture("t-1a-1", "p-1a-1");
+        crate::db::tasks::insert(&c, &t).unwrap();
+        let kind = TimelineKind::Overlap {
+            detail: "on top of Login in src/a.ts".into(),
+        };
+        let e = IndexEntry {
+            at: Utc::now(),
+            stage: Stage::Build,
+            kind: kind.clone(),
+        };
+        append(&c, &t.id, &e).unwrap();
+        assert_eq!(list(&c, &t.id).unwrap()[0].kind, kind);
+        let raw: String = c
+            .query_row(
+                "SELECT detail FROM task_timeline WHERE task_id = ?1",
+                [t.id.as_str()],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(raw, r#"{"detail":"on top of Login in src/a.ts"}"#);
     }
 }

@@ -8,6 +8,11 @@ describe("events", () => {
     expect(kindOf(fx.pre(2, "a1", "Read", { file_path: "/x" }))).toBe("pre-tool");
     expect(kindOf(fx.agentStart(3, "a1", "frontend"))).toBe("agent-start");
     expect(kindOf(fx.unknown(4, "Fancy"))).toBe("unknown");
+    const denied = {
+      ...fx.unknown(5, "x"),
+      event: { type: "ClaimDenied", repo: "/r", path: "a.ts", command: null, other_task: "t-b2" },
+    } as const;
+    expect(kindOf(denied)).toBe("overlap");
   });
   it("attributes events without an agent id to main", () => {
     expect(agentOf(fx.prompt(1))).toBe("main");

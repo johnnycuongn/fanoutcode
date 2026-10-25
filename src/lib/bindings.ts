@@ -1209,7 +1209,20 @@ export type HandbackReason =
  * What a hook reported. Internally tagged (A1): `{ "type": "Stop", "last_assistant_message": "…", … }`. The tag is
  * the IPC shape only; the parser picks the variant from the log line's first field, never from the payload.
  */
-export type HookEvent = { type: "SessionStart"; session_id: string; transcript_path: string } | { type: "UserPromptSubmit" } | { type: "PreToolUse"; tool: string; input: JsonValue } | { type: "PostToolUse"; tool: string; input: JsonValue; response: JsonValue } | { type: "SubagentStart"; agent_id: string; agent_type: string; description: string | null } | { type: "SubagentStop"; agent_id: string } | { type: "PermissionRequest"; tool: string } | { type: "Notification"; message: string } | { type: "Stop"; last_assistant_message: string; background_tasks: number } | { type: "StopFailure"; message: string } | { type: "StatusLine"; cost_usd: number; input_tokens: number; output_tokens: number; context_used_pct: number } | { type: "Unknown"; name: string }
+export type HookEvent = { type: "SessionStart"; session_id: string; transcript_path: string } | { type: "UserPromptSubmit" } | { type: "PreToolUse"; tool: string; input: JsonValue } | { type: "PostToolUse"; tool: string; input: JsonValue; response: JsonValue } | { type: "SubagentStart"; agent_id: string; agent_type: string; description: string | null } | { type: "SubagentStop"; agent_id: string } | { type: "PermissionRequest"; tool: string } | { type: "Notification"; message: string } | { type: "Stop"; last_assistant_message: string; background_tasks: number } | { type: "StopFailure"; message: string } | { type: "StatusLine"; cost_usd: number; input_tokens: number; output_tokens: number; context_used_pct: number } | 
+/**
+ * Written by the `claim-check` hook itself (Plan 11): a write to `path`, or the shell `command`, was denied
+ * because `other_task` (or an unattributed session, `None`) has uncommitted changes there.
+ */
+{ type: "ClaimDenied"; repo: string; path: string | null; command: string | null; other_task: TaskId | null } | 
+/**
+ * Written by the app when the developer decides a pending overlap; `decision` is the `Decision` variant name.
+ */
+{ type: "OverlapDecided"; repo: string; path: string; other_task: TaskId | null; decision: string } | 
+/**
+ * Written by the app when a note about `path` is sent to (`"out"`) or received from (`"in"`) `other_task`.
+ */
+{ type: "OverlapNoted"; repo: string; path: string; other_task: TaskId; direction: string } | { type: "Unknown"; name: string }
 /**
  * One reference the file lists, as the prompts would name it.
  */

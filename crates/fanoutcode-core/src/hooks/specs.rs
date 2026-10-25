@@ -208,6 +208,24 @@ mod tests {
                 output_tokens: 2,
                 context_used_pct: 8.0,
             },
+            HookEvent::ClaimDenied {
+                repo: "/r".into(),
+                path: Some("a.ts".into()),
+                command: None,
+                other_task: Some(crate::domain::TaskId::parse("t-b2").unwrap()),
+            },
+            HookEvent::OverlapDecided {
+                repo: "/r".into(),
+                path: "a.ts".into(),
+                other_task: None,
+                decision: "Hold".into(),
+            },
+            HookEvent::OverlapNoted {
+                repo: "/r".into(),
+                path: "a.ts".into(),
+                other_task: crate::domain::TaskId::parse("t-b2").unwrap(),
+                direction: "in".into(),
+            },
             HookEvent::Unknown { name: "X".into() },
         ] {
             let back: HookEvent = serde_json::from_str(&serde_json::to_string(&e).unwrap()).unwrap();

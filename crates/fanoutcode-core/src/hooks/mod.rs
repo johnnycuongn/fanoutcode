@@ -79,6 +79,28 @@ pub enum HookEvent {
         output_tokens: u64,
         context_used_pct: f32,
     },
+    /// Written by the `claim-check` hook itself (Plan 11): a write to `path`, or the shell `command`, was denied
+    /// because `other_task` (or an unattributed session, `None`) has uncommitted changes there.
+    ClaimDenied {
+        repo: PathBuf,
+        path: Option<String>,
+        command: Option<String>,
+        other_task: Option<TaskId>,
+    },
+    /// Written by the app when the developer decides a pending overlap; `decision` is the `Decision` variant name.
+    OverlapDecided {
+        repo: PathBuf,
+        path: String,
+        other_task: Option<TaskId>,
+        decision: String,
+    },
+    /// Written by the app when a note about `path` is sent to (`"out"`) or received from (`"in"`) `other_task`.
+    OverlapNoted {
+        repo: PathBuf,
+        path: String,
+        other_task: TaskId,
+        direction: String,
+    },
     Unknown {
         name: String,
     },

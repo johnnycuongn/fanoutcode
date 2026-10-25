@@ -106,6 +106,10 @@ pub enum TimelineKind {
     Spec {
         reason: String,
     },
+    /// An overlap decided, a note sent or received, a file taken over (Plan 11): `· overlap: <detail>`.
+    Overlap {
+        detail: String,
+    },
     Archived,
     Restored,
 }
@@ -121,6 +125,7 @@ impl TimelineKind {
             TimelineKind::Handback { .. } => "handback",
             TimelineKind::Commit { .. } => "commit",
             TimelineKind::Spec { .. } => "spec",
+            TimelineKind::Overlap { .. } => "overlap",
             TimelineKind::Archived => "archived",
             TimelineKind::Restored => "restored",
         }
@@ -229,6 +234,7 @@ pub fn render_entry(e: &IndexEntry) -> String {
         TimelineKind::Handback { chip } => format!("handback: {chip}"),
         TimelineKind::Commit { repo, sha } => format!("commit: {repo} {sha}"),
         TimelineKind::Spec { reason } => format!("spec: {reason}"),
+        TimelineKind::Overlap { detail } => format!("overlap: {detail}"),
         other => other.word().to_owned(),
     };
     format!("- {} · {} · {kind}", e.at.format(MINUTE_FORMAT), e.stage.as_str())
@@ -246,6 +252,10 @@ fn parse_entry(line: &str) -> Option<IndexEntry> {
     } else if let Some(reason) = kind.strip_prefix("spec: ") {
         TimelineKind::Spec {
             reason: reason.to_owned(),
+        }
+    } else if let Some(detail) = kind.strip_prefix("overlap: ") {
+        TimelineKind::Overlap {
+            detail: detail.to_owned(),
         }
     } else if let Some(rest) = kind.strip_prefix("commit: ") {
         let (repo, sha) = rest.rsplit_once(' ')?;
@@ -458,16 +468,32 @@ mod tests {
     }
 
     #[test]
-    fn a_spec_watcher_line_renders_and_parses_back() {
-        let e = IndexEntry {
-            at: "2026-10-24T05:12:33Z".parse().unwrap(),
-            stage: Stage::Review,
-            kind: TimelineKind::Spec {
-                reason: "rows are now collapsible".into(),
-            },
-        };
-        let line = render_entry(&e);
-        assert_eq!(line, "- 2026-10-24T05:12Z · review · spec: rows are now collapsible");
-        assert_eq!(parse_entry(&line).unwrap().kind, e.kind);
+    fn spec_watcher_and_overlap_lines_render_and_parse_back() {
+        for (stage, kind, want) in [
+            (
+                Stage::Review,
+                TimelineKind::Spec {
+                    reason: "rows are now collapsible".into(),
+                },
+                "- 2026-10-24T05:12Z · review · spec: rows are now collapsible",
+            ),
+            (
+                Stage::Build,
+                TimelineKind::Overlap {
+                    detail: "on top of Login in src/a.ts".into(),
+                },
+                "- 2026-10-24T05:12Z · build · overlap: on top of Login in src/a.ts",
+            ),
+        ] {
+            let e = IndexEntry {
+                at: "2026-10-24T05:12:33Z".parse().unwrap(),
+                stage,
+                kind,
+            };
+            let line = render_entry(&e);
+            assert_eq!(line, want);
+            assert_eq!(parse_entry(&line).unwrap().kind, e.kind);
+        }
+        assert_eq!(TimelineKind::Overlap { detail: String::new() }.word(), "overlap");
     }
 }

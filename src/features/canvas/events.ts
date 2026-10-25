@@ -17,6 +17,7 @@ export type HookKind =
   | "stop"
   | "stop-failure"
   | "status-line"
+  | "overlap"
   | "unknown";
 
 export function kindOf(e: TaskEvent): HookKind {
@@ -43,6 +44,11 @@ export function kindOf(e: TaskEvent): HookKind {
       return "stop-failure";
     case "StatusLine":
       return "status-line";
+    // Plan 11: the claim-check hook's denials and the app's own overlap lines; Team view rows come in Task 20
+    case "ClaimDenied":
+    case "OverlapDecided":
+    case "OverlapNoted":
+      return "overlap";
     case "Unknown":
       return "unknown";
   }

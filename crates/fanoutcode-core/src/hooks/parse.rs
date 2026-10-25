@@ -23,6 +23,15 @@ fn field(v: &Value, key: &str) -> Value {
     v.get(key).cloned().unwrap_or(Value::Null)
 }
 
+fn opt_text(v: &Value, key: &str) -> Option<String> {
+    v.get(key).and_then(Value::as_str).map(str::to_owned)
+}
+
+/// A task id field; absent, null or not a valid id is `None`.
+fn task_id(v: &Value, key: &str) -> Option<TaskId> {
+    v.get(key).and_then(Value::as_str).and_then(|s| TaskId::parse(s).ok())
+}
+
 /// The event the line's first field names, read from `payload`. Missing fields default to `""`, `Null` or `0`.
 fn event_from(name: &str, p: &Value) -> HookEvent {
     match name {
@@ -74,6 +83,27 @@ fn event_from(name: &str, p: &Value) -> HookEvent {
                 context_used_pct: window("used_percentage").and_then(Value::as_f64).unwrap_or(0.0) as f32,
             }
         }
+        "ClaimDenied" => HookEvent::ClaimDenied {
+            repo: text(p, "repo").into(),
+            path: opt_text(p, "path"),
+            command: opt_text(p, "command"),
+            other_task: task_id(p, "other_task"),
+        },
+        "OverlapDecided" => HookEvent::OverlapDecided {
+            repo: text(p, "repo").into(),
+            path: text(p, "path"),
+            other_task: task_id(p, "other_task"),
+            decision: text(p, "decision"),
+        },
+        "OverlapNoted" => match task_id(p, "other_task") {
+            Some(other_task) => HookEvent::OverlapNoted {
+                repo: text(p, "repo").into(),
+                path: text(p, "path"),
+                other_task,
+                direction: text(p, "direction"),
+            },
+            None => HookEvent::Unknown { name: name.to_owned() },
+        },
         other => HookEvent::Unknown { name: other.to_owned() },
     }
 }
@@ -226,6 +256,57 @@ mod tests {
     fn a_payload_that_is_not_json_is_preserved_as_unknown() {
         let e = parse_line(&tid(), 1, "Stop\t2026-10-24T05:15:00Z\t{\"half").unwrap();
         assert!(matches!(e.event, HookEvent::Unknown { ref name } if name == "Stop"));
+    }
+
+    #[test]
+    fn parses_claim_denied_and_overlap_lines() {
+        let a = TaskId::parse("t-a1").unwrap();
+        let b = TaskId::parse("t-b2").unwrap();
+        let line = "ClaimDenied\t2026-10-25T10:00:00Z\t{\"repo\":\"/r\",\"path\":\"src/a.ts\",\"other_task\":\"t-b2\"}";
+        let ev = parse_line(&a, 1, line).unwrap();
+        assert_eq!(
+            ev.event,
+            HookEvent::ClaimDenied {
+                repo: "/r".into(),
+                path: Some("src/a.ts".into()),
+                command: None,
+                other_task: Some(b.clone()),
+            }
+        );
+        let line =
+            "ClaimDenied\t2026-10-25T10:00:00Z\t{\"repo\":\"/r\",\"command\":\"git add -A\",\"other_task\":null}";
+        assert!(matches!(parse_line(&a, 2, line).unwrap().event,
+            HookEvent::ClaimDenied { path: None, command: Some(ref c), other_task: None, .. } if c == "git add -A"));
+        let line = "OverlapDecided\t2026-10-25T10:01:00Z\t{\"repo\":\"/r\",\"path\":\"src/a.ts\",\"other_task\":\"t-b2\",\"decision\":\"OnTopFile\"}";
+        assert_eq!(
+            parse_line(&a, 3, line).unwrap().event,
+            HookEvent::OverlapDecided {
+                repo: "/r".into(),
+                path: "src/a.ts".into(),
+                other_task: Some(b.clone()),
+                decision: "OnTopFile".into(),
+            }
+        );
+        let line = "OverlapNoted\t2026-10-25T10:02:00Z\t{\"repo\":\"/r\",\"path\":\"src/a.ts\",\"other_task\":\"t-b2\",\"direction\":\"out\"}";
+        assert_eq!(
+            parse_line(&a, 4, line).unwrap().event,
+            HookEvent::OverlapNoted {
+                repo: "/r".into(),
+                path: "src/a.ts".into(),
+                other_task: b,
+                direction: "out".into(),
+            }
+        );
+        // a bad other_task id on a noted line is no event of ours
+        let line = "OverlapNoted\t2026-10-25T10:02:00Z\t{\"repo\":\"/r\",\"path\":\"a\",\"other_task\":\"../x\"}";
+        assert!(
+            matches!(parse_line(&a, 5, line).unwrap().event, HookEvent::Unknown { ref name } if name == "OverlapNoted")
+        );
+        let line = "Whatever\t2026-10-25T10:02:00Z\t{}";
+        assert!(matches!(
+            parse_line(&a, 6, line).unwrap().event,
+            HookEvent::Unknown { .. }
+        ));
     }
 
     #[test]
