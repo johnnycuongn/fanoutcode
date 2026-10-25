@@ -9,8 +9,8 @@ use tauri_specta::{collect_commands, collect_events, Builder};
 
 use crate::commands::tests as test_runs;
 use crate::commands::{
-    activity, canvas, context_docs, cost, git, hooks, jira, livespec, memory, projects, sessions, settings, tasks,
-    views, windows, workspaces,
+    activity, canvas, context_docs, cost, git, hooks, jira, livespec, memory, overlap, projects, sessions, settings,
+    tasks, views, windows, workspaces,
 };
 use crate::events::{
     ContextDocsChanged, CostUpdated, GitChanges, NeedsYou, OverlapChanged, SessionAttached, SessionExited,
@@ -136,6 +136,9 @@ pub fn builder() -> Builder<tauri::Wry> {
             jira::jira_create_task,
             jira::jira_transitions,
             jira::jira_transition,
+            overlap::overlap_list,
+            overlap::overlap_decide,
+            overlap::overlap_pending_input,
         ])
         .events(collect_events![
             TaskChanged,

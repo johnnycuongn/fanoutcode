@@ -142,6 +142,14 @@ approval; your change set marks it as taken over. Re-read it before touching it 
     }
 }
 
+/// The go-ahead for a shell command the git guard stopped (§5.6), once the developer chose Proceed.
+pub fn go_ahead_command(other_title: &str, command: &str) -> String {
+    format!(
+        "Fanout Code: the developer says go ahead with `{command}`, although it touches files {other_title} has \
+uncommitted changes in (the developer approved it). Run it now."
+    )
+}
+
 /// The once-per-file note to a worktree session editing a file in another task's footprint (§6.2).
 pub fn soft_note(other_title: &str, path: &str, branch: &str) -> String {
     format!(
@@ -336,6 +344,15 @@ the change narrow. Reuse what they added rather than duplicating it. List every 
     #[test]
     fn others_working_here_is_empty_with_no_others() {
         assert_eq!(others_working_here(&[]), "");
+    }
+
+    #[test]
+    fn go_ahead_command_names_the_command_and_the_task() {
+        assert_eq!(
+            go_ahead_command("Login", "git add -A"),
+            "Fanout Code: the developer says go ahead with `git add -A`, although it touches files Login has \
+uncommitted changes in (the developer approved it). Run it now."
+        );
     }
 
     #[test]

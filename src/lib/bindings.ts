@@ -1065,6 +1065,39 @@ async jiraTransition(projectId: ProjectId, key: string, transitionId: string) : 
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+/**
+ * Every overlap of the task, by repo, path and other task.
+ */
+async overlapList(taskId: TaskId) : Promise<Result<OverlapRow[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("overlap_list", { taskId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * The developer's answer to the open decision on `path` of `repo` against `other_task` (`None`: another session).
+ */
+async overlapDecide(taskId: TaskId, repo: string, path: string, otherTask: TaskId | null, decision: Decision) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("overlap_decide", { taskId, repo, path, otherTask, decision }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * What the session was about to do when it stopped on `path` of `repo`: the edit's tool input, or the command.
+ */
+async overlapPendingInput(taskId: TaskId, repo: string, path: string) : Promise<Result<PendingDecision | null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("overlap_pending_input", { taskId, repo, path }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
@@ -1172,6 +1205,11 @@ export type ContextDocsChanged = { container: Container }
 export type CostLine = { key: string; cost_usd: number; input_tokens: number; output_tokens: number; estimated: boolean }
 export type CostSummary = { cost_usd: number; input_tokens: number; output_tokens: number; estimated: boolean; live: LiveCost | null; by_project: CostLine[]; by_task: CostLine[]; by_stage: CostLine[]; by_day: CostLine[]; by_model: CostLine[]; by_agent: CostLine[] }
 export type CostUpdated = { task_id: TaskId }
+/**
+ * The developer's answer to a pending decision (§5.4): on top for this file, on top for every file the other task
+ * touches, replace the other task's changes in this file, or hold off.
+ */
+export type Decision = { type: "OnTopFile" } | { type: "OnTopAll" } | { type: "Replace" } | { type: "Hold" }
 export type DetailLevel = "Simple" | "Medium" | "Detailed"
 export type DockPosition = "Bottom" | "Right"
 /**
@@ -1312,12 +1350,25 @@ export type NeedsYou = { container: Container; count: number }
  * A task's overlap rows changed (Plan 11): `count` rows in all, `pending` of them waiting on the developer.
  */
 export type OverlapChanged = { task_id: TaskId; count: number; pending: number }
+/**
+ * One `task_overlaps` row: `path` in `repo_root` of `task_id` overlaps `other_task` (`None`: an unattributed
+ * session). `held` is set while the developer chose Hold; `pending` stays until the claim is released.
+ */
+export type OverlapRow = { task_id: TaskId; other_task: TaskId | null; repo_root: string; path: string; relation: Relation; pending: PendingDecision | null; held: boolean; noted_out: boolean; noted_in: boolean; decided_at: string | null; updated_at: string }
 export type PaneContent = { type: "Empty" } | { type: "Task"; task_id: TaskId } | 
 /**
  * Rendered by Plan 06 through Plan 09's `CanvasPane` (A5).
  */
 { type: "TeamCanvas"; task_id: TaskId } | { type: "Terminal"; project_id: ProjectId; session_id: SessionId }
 export type PaneId = string
+/**
+ * A stop waiting on the developer: the write the hook denied, or the shell command (§5.4, §5.6).
+ */
+export type PendingDecision = 
+/**
+ * An `Edit`, `Write`, `MultiEdit` or `NotebookEdit` and its tool input snapshot.
+ */
+{ type: "Edit"; tool: string; input: JsonValue } | { type: "Command"; command: string }
 /**
  * `plan.md` as the Team canvas reads it.
  */
@@ -1368,6 +1419,30 @@ path: string; opened_at: string;
  */
 missing?: boolean }
 export type RecentKind = "Project" | "Workspace"
+/**
+ * How a file in this task's footprint or change set relates to the other task's work on it (§7).
+ */
+export type Relation = 
+/**
+ * The other task has uncommitted changes in it (a shared working tree).
+ */
+"Claimed" | 
+/**
+ * The developer let this task edit on top of the other task's changes.
+ */
+"GrantedOnTop" | 
+/**
+ * This task replaced the other task's changes; the path left the other task's change set.
+ */
+"TakenOver" | 
+/**
+ * The other task lists it under `## Files` in its plan (worktree mode).
+ */
+"PlannedBy" | 
+/**
+ * The other task committed its changes to it.
+ */
+"Committed"
 export type RepoBase = { repo_root: string; commit: string }
 /**
  * One repo's part: the task's `files` and the unattributed `other` changes.
