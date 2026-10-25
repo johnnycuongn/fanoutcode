@@ -89,6 +89,12 @@ fn event_from(name: &str, p: &Value) -> HookEvent {
             command: opt_text(p, "command"),
             other_task: task_id(p, "other_task"),
         },
+        "ClaimNoted" => HookEvent::ClaimNoted {
+            repo: text(p, "repo").into(),
+            path: opt_text(p, "path"),
+            command: opt_text(p, "command"),
+            other_task: task_id(p, "other_task"),
+        },
         "OverlapDecided" => HookEvent::OverlapDecided {
             repo: text(p, "repo").into(),
             path: text(p, "path"),
@@ -277,6 +283,16 @@ mod tests {
             "ClaimDenied\t2026-10-25T10:00:00Z\t{\"repo\":\"/r\",\"command\":\"git add -A\",\"other_task\":null}";
         assert!(matches!(parse_line(&a, 2, line).unwrap().event,
             HookEvent::ClaimDenied { path: None, command: Some(ref c), other_task: None, .. } if c == "git add -A"));
+        let line = "ClaimNoted\t2026-10-25T10:00:30Z\t{\"repo\":\"/r\",\"path\":\"src/a.ts\",\"command\":null,\"other_task\":\"t-b2\"}";
+        assert_eq!(
+            parse_line(&a, 2, line).unwrap().event,
+            HookEvent::ClaimNoted {
+                repo: "/r".into(),
+                path: Some("src/a.ts".into()),
+                command: None,
+                other_task: Some(b.clone()),
+            }
+        );
         let line = "OverlapDecided\t2026-10-25T10:01:00Z\t{\"repo\":\"/r\",\"path\":\"src/a.ts\",\"other_task\":\"t-b2\",\"decision\":\"OnTopFile\"}";
         assert_eq!(
             parse_line(&a, 3, line).unwrap().event,

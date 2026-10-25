@@ -61,6 +61,10 @@ struct Hook {
 }
 
 fn hook(guard_git: bool) -> Hook {
+    hook_with(true, guard_git)
+}
+
+fn hook_with(ask_before: bool, guard_git: bool) -> Hook {
     let dir = tempfile::tempdir().unwrap();
     let data = std::fs::canonicalize(dir.path()).unwrap();
     let root = data.join("repo");
@@ -72,6 +76,7 @@ fn hook(guard_git: bool) -> Hook {
         grants_path: data.join("grants/t-a1.json"),
         notes_path: data.join("notes/t-a1.json"),
         log_path: data.join("events/t-a1.jsonl"),
+        ask_before,
         guard_git,
     };
     Hook { _dir: dir, root, args }
@@ -417,6 +422,7 @@ fn args_round_trip_through_the_hook_command() {
         grants_path: "/d/grants/t-a1.json".into(),
         notes_path: "/d/notes/t-a1.json".into(),
         log_path: "/d/events/t-a1.jsonl".into(),
+        ask_before: false,
         guard_git: true,
     };
     let spec = check_hook_spec(Path::new("/Apps/Fanout Code/fanoutcode"), &args);
@@ -425,13 +431,14 @@ fn args_round_trip_through_the_hook_command() {
     assert_eq!(
         spec.command,
         "'/Apps/Fanout Code/fanoutcode' claim-check 't-a1' '/d/grants/t-a1.json' '/d/notes/t-a1.json' \
-         '/d/events/t-a1.jsonl' 1 '/d/claims/1.json' '/d/claims/it'\\''s.json'"
+         '/d/events/t-a1.jsonl' 0 1 '/d/claims/1.json' '/d/claims/it'\\''s.json'"
     );
     let argv: Vec<String> = [
         "t-a1",
         "/d/grants/t-a1.json",
         "/d/notes/t-a1.json",
         "/d/events/t-a1.jsonl",
+        "0",
         "1",
         "/d/claims/1.json",
         "/d/claims/it's.json",
@@ -439,11 +446,51 @@ fn args_round_trip_through_the_hook_command() {
     .map(String::from)
     .to_vec();
     assert_eq!(CheckArgs::parse(&argv), Some(args));
-    assert_eq!(CheckArgs::parse(&argv[..4]), None);
+    assert_eq!(CheckArgs::parse(&argv[..5]), None);
     let mut bad = argv.clone();
     bad[0] = "../x".into();
     assert_eq!(CheckArgs::parse(&bad), None);
-    bad = argv;
-    bad[4] = "yes".into();
-    assert_eq!(CheckArgs::parse(&bad), None);
+    for flag in [4, 5] {
+        let mut bad = argv.clone();
+        bad[flag] = "yes".into();
+        assert_eq!(CheckArgs::parse(&bad), None, "flag {flag}");
+    }
+    // ask on, guard off
+    let mut on = argv;
+    on[4] = "1".into();
+    on[5] = "0".into();
+    let parsed = CheckArgs::parse(&on).unwrap();
+    assert!(parsed.ask_before && !parsed.guard_git);
+    assert!(check_hook_spec(Path::new("/x"), &parsed)
+        .command
+        .contains("'/d/events/t-a1.jsonl' 1 0 "));
+}
+
+#[test]
+fn ask_off_allows_and_logs_claim_noted() {
+    let h = hook_with(false, false);
+    push_note(&h.args.notes_path, "Fanout Code: a note.").unwrap();
+    let payload = json!({"tool_name": "Edit", "tool_input": {"file_path": h.root.join("src/a.ts")}, "cwd": h.root});
+    // allowed: no decision, only the queued notes
+    let out = run(&h, &payload.to_string()).unwrap();
+    assert_eq!(out["hookSpecificOutput"].get("permissionDecision"), None);
+    assert_eq!(out["hookSpecificOutput"]["additionalContext"], "Fanout Code: a note.");
+    // and the overlap logged, under a name nothing pins on
+    let lines = log_lines(&h);
+    assert_eq!(lines.len(), 1);
+    assert!(lines[0].starts_with("ClaimNoted\t"), "{}", lines[0]);
+    let ev = crate::hooks::parse::parse_line(&id("t-a1"), 1, &lines[0]).unwrap();
+    assert_eq!(
+        ev.event,
+        crate::hooks::HookEvent::ClaimNoted {
+            repo: h.root.clone(),
+            path: Some("src/a.ts".into()),
+            command: None,
+            other_task: Some(id("t-b2")),
+        }
+    );
+    // a free file logs nothing
+    let free = json!({"tool_name": "Edit", "tool_input": {"file_path": h.root.join("src/free.ts")}, "cwd": h.root});
+    assert_eq!(run(&h, &free.to_string()), None);
+    assert_eq!(log_lines(&h).len(), 1);
 }

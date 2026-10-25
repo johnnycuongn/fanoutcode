@@ -1,7 +1,9 @@
 //! The `fanoutcode claim-check` hook (§5.3, §5.6): a `PreToolUse` hook that stops this task's session before it
 //! writes a file another task has uncommitted changes in (unless a grant covers it), and, with the git guard on,
-//! before a shell command stages, commits, restores, stashes, resets or cleans such files. It fails open, never
-//! waits on the developer, and on an allowed call delivers the task's queued notes as `additionalContext` (§5.5).
+//! before a shell command stages, commits, restores, stashes, resets or cleans such files. With "Ask before editing
+//! another task's files" off it allows such a write and logs it as `ClaimNoted` (§8). Unreadable claims allow;
+//! unreadable grants count as none. It never waits on the developer, and on an allowed call delivers the task's
+//! queued notes as `additionalContext` (§5.5).
 
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -162,7 +164,7 @@ pub fn evaluate(
     }
 }
 
-/// What the hook command line carries: `claim-check <task-id> <grants> <notes> <log> <0|1> <claims…>`.
+/// What the hook command line carries: `claim-check <task-id> <grants> <notes> <log> <ask 0|1> <git 0|1> <claims…>`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CheckArgs {
     pub task_id: TaskId,
@@ -170,13 +172,23 @@ pub struct CheckArgs {
     pub grants_path: PathBuf,
     pub notes_path: PathBuf,
     pub log_path: PathBuf,
+    /// "Ask before editing another task's files": off, an overlapping edit is allowed and logged as `ClaimNoted`.
+    pub ask_before: bool,
     pub guard_git: bool,
+}
+
+fn flag(word: &str) -> Option<bool> {
+    match word {
+        "1" => Some(true),
+        "0" => Some(false),
+        _ => None,
+    }
 }
 
 impl CheckArgs {
     /// The arguments after `claim-check`; `None` when they do not parse (the caller then allows).
     pub fn parse(args: &[String]) -> Option<CheckArgs> {
-        let [task, grants, notes, log, guard, claims @ ..] = args else {
+        let [task, grants, notes, log, ask, guard, claims @ ..] = args else {
             return None;
         };
         Some(CheckArgs {
@@ -185,27 +197,25 @@ impl CheckArgs {
             grants_path: grants.into(),
             notes_path: notes.into(),
             log_path: log.into(),
-            guard_git: match guard.as_str() {
-                "1" => true,
-                "0" => false,
-                _ => return None,
-            },
+            ask_before: flag(ask)?,
+            guard_git: flag(guard)?,
         })
     }
 }
 
-/// `'<exe>' claim-check '<task-id>' '<grants>' '<notes>' '<log>' <0|1> '<claims>'…` on `PreToolUse` for the file
-/// tools and Bash, five-second timeout.
+/// `'<exe>' claim-check '<task-id>' '<grants>' '<notes>' '<log>' <0|1> <0|1> '<claims>'…` on `PreToolUse` for the
+/// file tools and Bash, five-second timeout.
 pub fn check_hook_spec(exe: &Path, args: &CheckArgs) -> HookSpec {
     let q = |p: &Path| sh_single_quote(&p.display().to_string());
     let mut command = format!(
-        "{} claim-check {} {} {} {} {}",
+        "{} claim-check {} {} {} {} {} {}",
         q(exe),
         sh_single_quote(args.task_id.as_str()),
         q(&args.grants_path),
         q(&args.notes_path),
         q(&args.log_path),
-        if args.guard_git { 1 } else { 0 },
+        u8::from(args.ask_before),
+        u8::from(args.guard_git),
     );
     for c in &args.claims_paths {
         command.push(' ');
@@ -226,15 +236,16 @@ struct HookInput {
     cwd: Option<PathBuf>,
 }
 
-/// Appends `ClaimDenied<TAB><rfc3339><TAB>{repo, path, command, other_task}` to the task's event log in one write.
-fn log_denied(log: &Path, repo: &Path, path: Option<&str>, command: Option<&str>, other: Option<&Claim>) {
+/// Appends `<event><TAB><rfc3339><TAB>{repo, path, command, other_task}` to the task's event log in one write;
+/// `event` is `ClaimDenied` for a stop, `ClaimNoted` for an overlap allowed with "Ask before editing" off.
+fn log_claim(log: &Path, event: &str, repo: &Path, path: Option<&str>, command: Option<&str>, other: Option<&Claim>) {
     let payload = serde_json::json!({
         "repo": repo,
         "path": path,
         "command": command,
         "other_task": other.and_then(|c| c.task_id.as_ref()),
     });
-    let line = format!("ClaimDenied\t{}\t{payload}\n", Utc::now().format("%Y-%m-%dT%H:%M:%SZ"));
+    let line = format!("{event}\t{}\t{payload}\n", Utc::now().format("%Y-%m-%dT%H:%M:%SZ"));
     let written = log
         .parent()
         .map_or(Ok(()), std::fs::create_dir_all)
@@ -267,7 +278,20 @@ pub fn run_check(stdin: &mut dyn Read, stdout: &mut dyn Write, args: &CheckArgs)
     };
     let claims: Vec<ClaimsFile> = args.claims_paths.iter().filter_map(|p| read_claims(p)).collect();
     let grants = read_grants(&args.grants_path);
-    let out = match evaluate(&input, &args.task_id, &claims, &grants, args.guard_git) {
+    let decision = match evaluate(&input, &args.task_id, &claims, &grants, args.guard_git) {
+        // "Ask before editing" off (§8): the overlapping edit is logged and allowed
+        CheckDecision::Deny {
+            repo,
+            path: Some(path),
+            other,
+            ..
+        } if !args.ask_before => {
+            log_claim(&args.log_path, "ClaimNoted", &repo, Some(&path), None, other.as_ref());
+            CheckDecision::Allow
+        }
+        d => d,
+    };
+    let out = match decision {
         CheckDecision::Deny {
             repo,
             path,
@@ -275,8 +299,9 @@ pub fn run_check(stdin: &mut dyn Read, stdout: &mut dyn Write, args: &CheckArgs)
             other,
             reason,
         } => {
-            log_denied(
+            log_claim(
                 &args.log_path,
+                "ClaimDenied",
                 &repo,
                 path.as_deref(),
                 command.as_deref(),

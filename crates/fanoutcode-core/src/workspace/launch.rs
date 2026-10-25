@@ -129,8 +129,10 @@ pub struct LaunchExtras {
     pub guard: Option<HookSpec>,
     /// Beyond the linked roots (which the launch adds itself): the context-doc cache when a reference is cached.
     pub add_dirs: Vec<PathBuf>,
-    /// The claim-check hook (Plan 11 §5.3, §5.6), unless both `ask_before_other_tasks_files` and
-    /// `guard_git_for_other_tasks` are off; Bash only when just the git guard is on.
+    /// The claim-check hook (Plan 11 §5.3, §5.6, §8), on the file tools and Bash for every Claude Code task. With
+    /// `ask_before_other_tasks_files` off it logs an overlapping edit (`ClaimNoted`) and allows it; with
+    /// `guard_git_for_other_tasks` off it leaves Bash alone. With both off it never denies but still runs, so the
+    /// overlap is logged and queued notes reach a working session through `additionalContext`.
     pub claim_check: Option<HookSpec>,
 }
 
@@ -154,9 +156,6 @@ fn claim_check_hook(
     ask_before: bool,
     guard_git: bool,
 ) -> Result<Option<HookSpec>> {
-    if !ask_before && !guard_git {
-        return Ok(None);
-    }
     let home_root = db::projects::get(conn, &task.project_id)?.map(|p| p.root);
     let repos = match &home_root {
         Some(root) => repos_of(task, root),
@@ -169,13 +168,10 @@ fn claim_check_hook(
         grants_path: grants_path(app_data, &task.id),
         notes_path: notes_path(app_data, &task.id),
         log_path: event_log_path(app_data, &task.id),
+        ask_before,
         guard_git,
     };
-    let mut spec = check_hook_spec(exe, &args);
-    if !ask_before {
-        spec.matcher = Some("Bash".into());
-    }
-    Ok(Some(spec))
+    Ok(Some(check_hook_spec(exe, &args)))
 }
 
 /// Refuses the launch (`Precondition`) when a protected root cannot be expressed as a safe deny rule. `ask_before`

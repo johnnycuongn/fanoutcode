@@ -1329,6 +1329,11 @@ export type HookEvent = { type: "SessionStart"; session_id: string; transcript_p
  */
 { type: "ClaimDenied"; repo: string; path: string | null; command: string | null; other_task: TaskId | null } | 
 /**
+ * Written by the `claim-check` hook with "Ask before editing another task's files" off (§8): the write to `path`
+ * overlapped `other_task`'s uncommitted changes and was allowed. Nothing pins on it.
+ */
+{ type: "ClaimNoted"; repo: string; path: string | null; command: string | null; other_task: TaskId | null } | 
+/**
  * Written by the app when the developer decides a pending overlap; `decision` is the `Decision` variant name.
  */
 { type: "OverlapDecided"; repo: string; path: string; other_task: TaskId | null; decision: string } | 

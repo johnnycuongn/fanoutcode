@@ -46,6 +46,7 @@ export function kindOf(e: TaskEvent): HookKind {
       return "status-line";
     // Plan 11: the claim-check hook's denials and the app's own overlap lines
     case "ClaimDenied":
+    case "ClaimNoted":
     case "OverlapDecided":
     case "OverlapNoted":
       return "overlap";
@@ -107,9 +108,10 @@ export function asHookDetail(e: TaskEvent): { tool?: string; message?: string } 
   }
 }
 
-/** An overlap line (Plan 11): a held edit or command, a decision, or a note sent or received about another task. */
+/** An overlap line (Plan 11): a held edit or command, an edit made over another task's changes, a decision, or a note. */
 export type OverlapDetail =
   | { kind: "held"; path: string | null; command: string | null; otherTask: string | null }
+  | { kind: "overlapped"; path: string | null; otherTask: string | null }
   | { kind: "decided"; path: string; otherTask: string | null; decision: string }
   | { kind: "noted"; path: string; otherTask: string; direction: string };
 
@@ -118,6 +120,9 @@ export function asOverlap(e: TaskEvent): OverlapDetail | null {
   switch (v.type) {
     case "ClaimDenied":
       return { kind: "held", path: v.path, command: v.command, otherTask: v.other_task };
+    // "Ask before editing" off: the edit went ahead on top of the other task's changes
+    case "ClaimNoted":
+      return { kind: "overlapped", path: v.path, otherTask: v.other_task };
     case "OverlapDecided":
       return { kind: "decided", path: v.path, otherTask: v.other_task, decision: v.decision };
     case "OverlapNoted":

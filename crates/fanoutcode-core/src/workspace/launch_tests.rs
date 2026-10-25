@@ -210,7 +210,11 @@ fn launch_extras_adds_the_claim_check_hook() {
         spec.command
     );
     assert_eq!(spec.matcher.as_deref(), Some("Edit|Write|MultiEdit|NotebookEdit|Bash"));
-    assert!(spec.command.contains(" 0 "), "git guard off: {}", spec.command);
+    assert!(
+        spec.command.contains(" 1 0 "),
+        "ask on, git guard off: {}",
+        spec.command
+    );
     // the home root's claims file, then the linked root's
     let data = fx.app_data.path();
     let tail = format!(
@@ -228,10 +232,18 @@ fn launch_extras_adds_the_claim_check_hook() {
     assert!(spec
         .command
         .contains(&format!("'{}'", event_log_path(data, &task.id).display())));
+    // with "Ask before editing" off the edit tools stay matched, so the hook logs the overlap (§8)
     let git_only = extras(false, true).claim_check.expect("the git guard alone");
-    assert_eq!(git_only.matcher.as_deref(), Some("Bash"));
-    assert!(git_only.command.contains(" 1 "));
-    assert_eq!(extras(false, false).claim_check, None);
+    assert_eq!(
+        git_only.matcher.as_deref(),
+        Some("Edit|Write|MultiEdit|NotebookEdit|Bash")
+    );
+    assert!(git_only.command.contains(" 0 1 "), "{}", git_only.command);
+    // both off: still there, to log overlaps and deliver notes; it never denies
+    let neither = extras(false, false)
+        .claim_check
+        .expect("the hook for logging and notes");
+    assert!(neither.command.contains(" 0 0 "), "{}", neither.command);
     let mut shell = task.clone();
     shell.agent_kind = AgentKind::Shell;
     let none = launch_extras(&fx.db.lock().unwrap(), &shell, data, exe, Path::new("/h"), true, true).unwrap();
