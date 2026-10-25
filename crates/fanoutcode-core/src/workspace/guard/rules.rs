@@ -98,17 +98,23 @@ pub(crate) fn clean(p: &Path) -> PathBuf {
     out
 }
 
-/// `path` with the deepest existing ancestor canonicalised; `None` when nothing of it exists.
-fn canonical_lenient(path: &Path) -> Option<PathBuf> {
-    let mut rest = Vec::new();
-    let mut base = path;
-    loop {
-        if let Ok(c) = std::fs::canonicalize(base) {
-            return Some(rest.iter().rev().fold(c, |acc: PathBuf, part| acc.join(part)));
-        }
-        rest.push(base.file_name()?.to_owned());
-        base = base.parent()?;
-    }
+/// `path` as the shell reaches it: its deepest existing prefix canonicalised with every `..` still in place (so
+/// `link/..` is the link target's parent, not the link's), the rest cleaned on top. `None` when nothing exists.
+fn physical(path: &Path) -> Option<PathBuf> {
+    let parts: Vec<Component> = path.components().collect();
+    (1..=parts.len()).rev().find_map(|n| {
+        let prefix: PathBuf = parts[..n].iter().collect();
+        let canonical = std::fs::canonicalize(&prefix).ok()?;
+        let rest: PathBuf = parts[n..].iter().collect();
+        Some(clean(&canonical.join(rest)))
+    })
+}
+
+/// The forms of a resolved path compared against the roots: its text cleaned, and its physical form.
+fn forms(path: &Path) -> Vec<PathBuf> {
+    let mut out = vec![clean(path)];
+    out.extend(physical(path).filter(|p| p != &out[0]));
+    out
 }
 
 /// Case-insensitive on macOS, whose default file system ignores case.
@@ -126,7 +132,8 @@ pub(super) struct Ctx<'a> {
 }
 
 impl Ctx<'_> {
-    /// `word` as a path: `~` expanded, relative ones joined to `cwd`, cleaned.
+    /// `word` as a path: `~` expanded, relative ones joined to `cwd`. Not cleaned: `..` after a symlink means what
+    /// the shell makes of it, which `forms` works out when comparing.
     fn resolve(&self, word: &str, cwd: &Path) -> PathBuf {
         let expanded = if word == "~" {
             self.home.to_owned()
@@ -135,25 +142,26 @@ impl Ctx<'_> {
         } else {
             PathBuf::from(word)
         };
-        clean(&if expanded.is_absolute() {
+        if expanded.is_absolute() {
             expanded
         } else {
             cwd.join(expanded)
+        }
+    }
+
+    /// The protected root `path` lies in, if any (either of its `forms`).
+    fn root_of(&self, path: &Path) -> Option<&PathBuf> {
+        forms(path).iter().find_map(|p| {
+            let p = fold(p);
+            self.roots.iter().find(|r| p.starts_with(fold(r)))
         })
     }
 
-    /// The protected root `path` lies in, if any.
-    fn root_of(&self, path: &Path) -> Option<&PathBuf> {
-        let p = fold(path);
-        self.roots.iter().find(|r| p.starts_with(fold(r)))
-    }
-
     /// The protected root a write, move or delete of `path` reaches: one `path` lies in, or one inside `path` (moving
-    /// or removing a folder takes everything under it). Compared lexically and through the canonical form of
-    /// `path`. A path beside a root, or a read, never counts.
+    /// or removing a folder takes everything under it). Compared through both `forms`. A path beside a root, or a
+    /// read, never counts.
     fn target_root(&self, path: &Path) -> Option<&PathBuf> {
-        let forms = [Some(path.to_owned()), canonical_lenient(path)];
-        forms.iter().flatten().find_map(|p| {
+        forms(path).iter().find_map(|p| {
             let p = fold(p);
             self.roots.iter().find(|r| {
                 let r = fold(r);
@@ -180,20 +188,6 @@ impl Ctx<'_> {
             .filter(|w| !w.is_empty())
             .map(|w| self.resolve(w, cwd))
             .collect()
-    }
-
-    /// A copy-like destination: into an existing folder that holds a root, only the names the sources land on count
-    /// (`cp x ~/` does not write the app data under `~/Library`; `cp -r grants <app_data>/` does).
-    fn dest_target(&self, dest: &str, sources: &[&String], cwd: &Path) -> Option<&PathBuf> {
-        let d = self.resolve(dest, cwd);
-        let strict_ancestor = self.root_of(&d).is_none() && self.target_root(&d).is_some();
-        if !(strict_ancestor && d.is_dir()) {
-            return self.target_root(&d);
-        }
-        sources.iter().find_map(|s| {
-            let name = Path::new(s.as_str()).file_name()?;
-            self.target_root(&d.join(name))
-        })
     }
 
     /// The segment names a root in any word, or runs inside one.
@@ -320,6 +314,13 @@ fn segment(ctx: &Ctx, seg: &Segment, cwd: &mut PathBuf, depth: u8) -> GuardDecis
                 .map_or(GuardDecision::Allow, |r| deny(r, rule))
         }
         "git" => git(ctx, args, cwd),
+        "tar" | "bsdtar" | "gtar" => extract(ctx, args, cwd, tar_extracts(args), &["-C", "--directory"], "tar -x"),
+        "unzip" => {
+            let lists = args
+                .iter()
+                .any(|a| matches!(a.as_str(), "-l" | "-t" | "-v" | "-Z" | "-p"));
+            extract(ctx, args, cwd, !lists, &["-d"], "unzip")
+        }
         "find" => find(ctx, args, cwd),
         _ => {
             if let Some(&name) = WRITERS.iter().find(|w| **w == program) {
@@ -340,19 +341,67 @@ fn segment(ctx: &Ctx, seg: &Segment, cwd: &mut PathBuf, depth: u8) -> GuardDecis
     }
 }
 
+/// `tar` in extract mode: `x` in its first (bundled) word or a short cluster, or `--extract` / `--get`.
+fn tar_extracts(args: &[String]) -> bool {
+    let bundled = args.first().is_some_and(|a| !a.starts_with('-') && a.contains('x'));
+    bundled
+        || args.iter().any(|a| {
+            matches!(a.as_str(), "--extract" | "--get")
+                || (a.starts_with('-') && !a.starts_with("--") && a.contains('x'))
+        })
+}
+
+/// An archive unpacked into the folder named after one of `dir_flags` (`-C dir`, `--directory=dir`), else the cwd:
+/// denied when that folder is, holds or lies in a root.
+fn extract(
+    ctx: &Ctx,
+    args: &[String],
+    cwd: &Path,
+    extracting: bool,
+    dir_flags: &[&str],
+    rule: &'static str,
+) -> GuardDecision {
+    if !extracting {
+        return GuardDecision::Allow;
+    }
+    let mut dirs: Vec<&str> = Vec::new();
+    for (i, a) in args.iter().enumerate() {
+        for flag in dir_flags {
+            if a == flag {
+                dirs.extend(args.get(i + 1).map(String::as_str));
+            } else if let Some(v) = a.strip_prefix(&format!("{flag}=")) {
+                dirs.push(v);
+            }
+        }
+    }
+    let root = if dirs.is_empty() {
+        ctx.target_root(cwd)
+    } else {
+        dirs.iter().find_map(|d| ctx.target_root(&ctx.resolve(d, cwd)))
+    };
+    root.map_or(GuardDecision::Allow, |r| deny(r.clone(), GuardRule::Program(rule)))
+}
+
 fn writer(ctx: &Ctx, name: &'static str, args: &[String], cwd: &Path) -> GuardDecision {
     let pos = positionals(args);
     let root = if DEST_ONLY.contains(&name) {
+        // the destination: the last positional, `-t <dir>`, or any `--opt=value`; one that is, holds or lies in a
+        // root counts whatever the sources (where each lands is not worked out); `mv` also takes its sources away
         let (dest, sources) = match pos.split_last() {
-            Some((d, s)) => (Some(d), s),
+            Some((d, s)) => (Some(*d), s),
             None => (None, &[][..]),
         };
-        // `mv` also takes its sources away
-        let moved = (name == "mv")
-            .then(|| sources.iter().find_map(|s| ctx.word_target(s, cwd)))
-            .flatten();
-        moved
-            .or_else(|| dest.and_then(|d| ctx.dest_target(d, sources, cwd)))
+        let target_dir = args
+            .windows(2)
+            .filter(|w| matches!(w[0].as_str(), "-t" | "--target-directory"))
+            .map(|w| &w[1]);
+        let valued = args.iter().filter(|a| a.starts_with("--") && a.contains('='));
+        let moved = sources.iter().copied().filter(|_| name == "mv");
+        dest.into_iter()
+            .chain(target_dir)
+            .chain(valued)
+            .chain(moved)
+            .find_map(|w| ctx.word_target(w, cwd))
             .cloned()
     } else {
         ctx.root_of(cwd)

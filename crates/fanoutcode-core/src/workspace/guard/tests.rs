@@ -146,17 +146,74 @@ fn writing_a_sibling_of_app_data_is_allowed() {
         format!("rm -rf {parent}/other"),
         format!("touch {parent}/app-backup"),
         format!("mkdir {parent}/app2"),
-        format!("cp /tmp/x {parent}/"),
-        format!("cp /tmp/x {parent}"),
+        format!("cp /tmp/x {parent}/notes.txt"),
         format!("ls {parent}"),
         format!("cat {}/grants/t-1.json", app.display()),
     ] {
         assert!(!guard_says_deny(&roots, &cmd), "{cmd}");
     }
-    // but a copy whose name lands on a guarded folder is a write to it
-    assert!(guard_says_deny(
+}
+
+#[test]
+fn copying_into_app_data_is_denied_whatever_the_source() {
+    let (_d, app, roots) = app_data_guard();
+    let a = app.display();
+    let parent = app.parent().unwrap().display().to_string();
+    for cmd in [
+        format!("cp -r x/ {a}"),
+        format!("cp -rT x {a}/grants"),
+        format!("mv x/. {a}"),
+        format!("cp x {parent}/"),
+        format!("rsync -a x/ {a}/claims/"),
+        format!("cp -t {a}/grants x"),
+        format!("cp --target-directory={a} x"),
+        format!("install -D x {a}/grants/t-1.json"),
+        format!("ln -sf /tmp/evil {a}/grants"),
+        format!("tar -xf x.tar -C {a}"),
+        format!("tar xf x.tar --directory={parent}"),
+        format!("cd {a} && tar -xzf /tmp/x.tgz"),
+        format!("unzip x.zip -d {a}"),
+    ] {
+        assert!(guard_says_deny(&roots, &cmd), "{cmd}");
+    }
+}
+
+#[test]
+fn copying_next_to_app_data_is_allowed() {
+    let (_d, app, roots) = app_data_guard();
+    let parent = app.parent().unwrap().display().to_string();
+    for cmd in [
+        format!("cp -r x/ {parent}/sibling"),
+        format!("mv x {parent}/app-old"),
+        format!("rsync -a x/ {parent}/backup/"),
+        format!("tar -xf x.tar -C {parent}/sibling"),
+        format!("cp {}/grants/t-1.json /tmp/copy.json", app.display()),
+        format!("tar -tf {}/x.tar", app.display()),
+    ] {
+        assert!(!guard_says_deny(&roots, &cmd), "{cmd}");
+    }
+}
+
+#[test]
+fn dot_dot_through_a_symlink_is_resolved_like_the_shell() {
+    let (d, app, roots) = app_data_guard();
+    // `<tmp>/links/to-grants` points at app data's grants; `to-grants/..` is app data, as the shell reads it, though
+    // its text cleans to `<tmp>/links`
+    let links = std::fs::canonicalize(d.path()).unwrap().join("links");
+    std::fs::create_dir_all(&links).unwrap();
+    let link = links.join("to-grants");
+    std::os::unix::fs::symlink(app.join("grants"), &link).unwrap();
+    let l = link.display();
+    for cmd in [
+        format!("echo x > {l}/../grants/t-1.json"),
+        format!("rm -rf {l}/../claims"),
+        format!("cd {l}/.. && echo x > claims/k.json"),
+    ] {
+        assert!(guard_says_deny(&roots, &cmd), "{cmd}");
+    }
+    assert!(!guard_says_deny(
         &roots,
-        &format!("cp -r /tmp/grants {}/", app.display())
+        &format!("echo x > {}/other.txt", links.display())
     ));
 }
 
