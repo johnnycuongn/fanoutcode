@@ -183,7 +183,9 @@ fn git_rule(sub: &str, args: &[String], dir: &Path, repo: &Path, claimed: &[&Cla
             let names_root = specs
                 .iter()
                 .any(|s| rel_in(repo, &resolve(s, dir)).as_deref() == Some(""));
-            if has(&a, 'A', "--all") || has(&a, 'u', "--update") || names_root {
+            // `-A` / `-u` reach the whole tree only without a pathspec; with one they are limited to it
+            let whole = specs.is_empty() && (has(&a, 'A', "--all") || has(&a, 'u', "--update"));
+            if whole || names_root {
                 (GitRule::AddAll, all_paths(claimed))
             } else {
                 (GitRule::AddPath, named(&specs, dir, repo, claimed))

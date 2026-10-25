@@ -384,3 +384,24 @@ fn stash_list_and_show_pass() {
         assert_eq!(eval(c, "/r", &claims()), None, "{c}");
     }
 }
+
+#[test]
+fn add_all_or_update_with_a_pathspec_is_limited_to_those_paths() {
+    for c in [
+        "git add -A src/deep",
+        "git add --all src/deep",
+        "git add -u src/deep/b.ts",
+        "git add --update -- src/deep",
+    ] {
+        assert_eq!(
+            eval(c, "/r", &claims()),
+            Some((GitRule::AddPath, vec!["src/deep/b.ts".into()])),
+            "{c}"
+        );
+    }
+    assert_eq!(eval("git add -A lib", "/r", &claims()), None, "names no claimed path");
+    // with no pathspec, or naming the root, every claim counts
+    for c in ["git add -A", "git add -u", "git add -A ."] {
+        assert_eq!(eval(c, "/r", &claims()).map(|(r, _)| r), Some(GitRule::AddAll), "{c}");
+    }
+}
