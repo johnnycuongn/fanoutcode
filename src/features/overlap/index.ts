@@ -9,5 +9,6 @@ export {
   viewOverlapCount,
 } from "./store";
 export { OverlapTab } from "./components/OverlapTab";
+export { relationLabel } from "./labels";
 export type { OverlapTabProps } from "./components/OverlapTab";
 export type { OverlapState, OverlapCounts } from "./types";

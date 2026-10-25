@@ -34,6 +34,8 @@ export * from "./Panel";
 export * from "./Resizable";
 export * from "./Slider";
 export * from "./AppMark";
+export * from "./RadioGroup";
+export * from "./DiffText";
 
 export const PRIMITIVES = {
   Button: ["Button", "buttonVariants"],
@@ -119,6 +121,8 @@ export const PRIMITIVES = {
   Resizable: ["Resizable"],
   Slider: ["Slider"],
   AppMark: ["AppMark"],
+  RadioGroup: ["RadioGroup"],
+  DiffText: ["DiffText"],
 } as const satisfies Record<string, readonly string[]>;
 
 export type PrimitiveName = keyof typeof PRIMITIVES;

@@ -41,4 +41,6 @@ export const pages: ExamplePage[] = [
   page("Resizable", "Draggable, keyboard-operable split", () => import("./pages/ResizablePage")),
   page("Slider", "One-thumb range with keyboard steps", () => import("./pages/SliderPage")),
   page("AppMark", "The Fanout Code brand mark, spinning while agents work", () => import("./pages/AppMarkPage")),
+  page("RadioGroup", "Vertical exactly-one choices with sub-lines", () => import("./pages/RadioGroupPage")),
+  page("DiffText", "Read-only line diff of two texts", () => import("./pages/DiffTextPage")),
 ];
