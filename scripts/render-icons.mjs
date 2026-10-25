@@ -1,8 +1,8 @@
 // `npm run icons`: rasterises the app icon from src-tauri/icons/source/ and regenerates every bundle icon.
 //
 // 1. Renders the full art (icon.svg) to a 1024 px src-tauri/icons/icon.png with the project's Playwright WebKit.
-// 2. Runs Tauri's own generator on it for the full platform set (`tauri icon`), then restores the 1024 px icon.png
-//    (the generator overwrites it with a 512 px copy).
+// 2. Runs Tauri's own generator on it (`tauri icon`), deletes the iOS and Android sets it always writes (the app is
+//    desktop only), then restores the 1024 px icon.png (the generator overwrites it with a 512 px copy).
 // 3. Builds the macOS icon.icns with `iconutil` from an .iconset: the simplified art (icon-small.svg) for 16x16,
 //    16x16@2x and 32x32, the full art for 32x32@2x and every larger size. It replaces the generated icon.icns, and
 //    the small art at 32 px replaces the generated 32x32.png.
@@ -84,6 +84,8 @@ try {
   expectSize(master, 1024);
   copyFileSync(master, iconPng);
   execFileSync("npx", ["--no-install", "tauri", "icon", iconPng, "-o", icons], { cwd: root, stdio: "inherit" });
+  // The app ships for desktop only; drop the mobile sets the generator always writes.
+  for (const mobile of ["ios", "android"]) rmSync(join(icons, mobile), { recursive: true, force: true });
   copyFileSync(master, iconPng);
   expectSize(iconPng, 1024);
 
