@@ -11,9 +11,8 @@ import {
   toast,
   type ComboboxListItem,
 } from "@/components/ui";
-import type { Project, Task } from "@/lib/bindings";
+import { commands, type Project, type Task } from "@/lib/bindings";
 import { agentStatus, asSwatch, stageToken } from "@/lib/format";
-import { sessionsTerminal } from "@/lib/pendingCommands";
 import { projectsStore, selectProjectList } from "@/lib/stores/projectsStore";
 import { selectTaskList, tasksStore } from "@/lib/stores/tasksStore";
 import { shellStore } from "@/features/shell";
@@ -85,7 +84,7 @@ export function TaskPicker(): ReactElement | null {
     }
     if (!entry.project) return;
     closePicker();
-    const r = await sessionsTerminal(entry.project.id);
+    const r = await commands.sessionsTerminal(entry.project.id);
     if (r.status === "ok") setPaneContent(viewId, pane, terminalContent(entry.project.id, r.data));
     else toast.error(`Couldn't open a terminal: ${r.error}`);
   };

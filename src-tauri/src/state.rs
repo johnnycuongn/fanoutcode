@@ -18,12 +18,15 @@ use teamcode_core::helpers::livespec_run::RunSlots;
 use teamcode_core::helpers::HelperKind;
 use teamcode_core::hooks::attribution::Correlator;
 use teamcode_core::pipeline::TestRun;
+use teamcode_core::sessions::{OwnedDriver, PtySpawner, SessionDriver, SessionRegistry};
+use teamcode_core::settings::{keys, resolve, Scope};
 use teamcode_core::testrun::{LiveOutput, TestResult};
 use teamcode_core::windows::WindowRegistry;
 use teamcode_core::{db, Result};
 
 use crate::git_watcher::GitWatcher;
 use crate::hooks_tailer::HooksTailer;
+use crate::pty::PortablePtySpawner;
 
 /// A test run in flight: its task (aborting it kills the child) and its shared output.
 pub type TestRunSlot = (tauri::async_runtime::JoinHandle<()>, Arc<LiveOutput>);
@@ -68,13 +71,24 @@ pub struct AppState {
     pub livespec_indexes: Mutex<HashMap<PathBuf, Arc<ProjectIndex>>>,
     /// Each task's board-card activity, fed every hook event.
     pub activity: Mutex<HashMap<TaskId, ActivityTracker>>,
+    /// Every live session (Plan 04). Its lock is taken by the PTY threads for each frame, so hold it briefly and never
+    /// while taking `db`.
+    pub sessions: Arc<Mutex<SessionRegistry>>,
+    pub spawner: Arc<dyn PtySpawner>,
+    pub driver: Arc<dyn SessionDriver>,
+    /// Serialises session launches, so two callers opening one task's session get the same one.
+    pub session_open: Mutex<()>,
+    /// Each Codex session's idle state at the last tick, so a change updates the task once.
+    pub codex_idle: Mutex<HashMap<teamcode_core::domain::SessionId, bool>>,
 }
 
 impl AppState {
     /// Opens (and on first launch creates) `<app_data>/teamcode.db`.
     pub fn new(data_dir: &Path, config_dir: &Path) -> Result<Self> {
+        let conn = db::open(&data_dir.join("teamcode.db"))?;
+        let lines = scrollback_lines(&conn)?;
         Ok(Self {
-            db: Mutex::new(db::open(&data_dir.join("teamcode.db"))?),
+            db: Mutex::new(conn),
             windows: Mutex::new(WindowRegistry::new()),
             data_dir: data_dir.to_owned(),
             config_dir: config_dir.to_owned(),
@@ -96,7 +110,17 @@ impl AppState {
             livespec_last: Mutex::default(),
             livespec_indexes: Mutex::default(),
             activity: Mutex::default(),
+            sessions: Arc::new(Mutex::new(SessionRegistry::new(lines))),
+            spawner: Arc::new(PortablePtySpawner),
+            driver: Arc::new(OwnedDriver),
+            session_open: Mutex::new(()),
+            codex_idle: Mutex::default(),
         })
+    }
+
+    /// Locks the session registry.
+    pub fn registry(&self) -> std::sync::MutexGuard<'_, SessionRegistry> {
+        self.sessions.lock().expect("sessions lock")
     }
 
     /// Persists the open windows (app setting `open_windows`) for the next launch.
@@ -132,4 +156,10 @@ impl AppState {
             .get(task)
             .map(TestResult::as_test_run)
     }
+}
+
+/// The app-level `scrollback_lines` setting.
+pub fn scrollback_lines(conn: &Connection) -> Result<usize> {
+    let values = db::settings::load(conn, &Scope::app())?;
+    Ok(resolve::<keys::ScrollbackLines>(&values, &Scope::app()) as usize)
 }

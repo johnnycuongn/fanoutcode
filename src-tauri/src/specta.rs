@@ -8,10 +8,12 @@ use tauri_specta::{collect_commands, collect_events, Builder};
 use teamcode_core::{Error, Result};
 
 use crate::commands::tests as test_runs;
-use crate::commands::{activity, cost, git, hooks, livespec, memory, projects, settings, tasks, views, windows};
+use crate::commands::{
+    activity, cost, git, hooks, livespec, memory, projects, sessions, settings, tasks, views, windows,
+};
 use crate::events::{
-    CostUpdated, GitChanges, NeedsYou, SessionAttached, SessionExited, SpecWatcher, TaskChanged, TasksReloaded,
-    TeamEvent, TestFinished, ViewsChanged, WorkspaceChanged,
+    CostUpdated, GitChanges, NeedsYou, SessionAttached, SessionExited, SessionQueueChanged, SpecWatcher, TaskChanged,
+    TasksReloaded, TeamEvent, TestFinished, ViewsChanged, WorkspaceChanged,
 };
 
 /// `@ts-nocheck`: the generated globals import `Channel` before any command takes one, which `noUnusedLocals` would
@@ -78,6 +80,16 @@ pub fn builder() -> Builder<tauri::Wry> {
             livespec::livespec_analyze,
             livespec::livespec_cancel,
             activity::tasks_activity,
+            sessions::sessions_open,
+            sessions::sessions_terminal,
+            sessions::sessions_attach,
+            sessions::sessions_detach,
+            sessions::sessions_write,
+            sessions::sessions_resize,
+            sessions::sessions_bring,
+            sessions::sessions_ack,
+            sessions::sessions_get,
+            sessions::sessions_list,
         ])
         .events(collect_events![
             TaskChanged,
@@ -92,6 +104,7 @@ pub fn builder() -> Builder<tauri::Wry> {
             TestFinished,
             TeamEvent,
             SpecWatcher,
+            SessionQueueChanged,
         ])
 }
 
@@ -128,6 +141,7 @@ mod tests {
             "test-finished",
             "team-event",
             "spec-watcher",
+            "session-queue-changed",
         ] {
             assert!(ts.contains(&format!("\"{name}\"")), "{name}");
         }
@@ -159,6 +173,12 @@ mod tests {
             "testsRun",
             "costSummary",
             "livespecAnalyze",
+            "sessionsOpen",
+            "sessionsTerminal",
+            "sessionsAttach",
+            "sessionsBring",
+            "sessionsAck",
+            "sessionsGet",
         ] {
             assert!(ts.contains(&format!("async {command}(")), "{command}");
         }

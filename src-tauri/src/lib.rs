@@ -13,6 +13,7 @@ pub mod observe;
 pub mod provider;
 pub mod pty;
 pub mod secrets;
+pub mod session_service;
 pub mod specta;
 pub mod state;
 pub mod windows;
@@ -39,7 +40,15 @@ pub fn run() {
                 )
                 .build(),
         )
-        .on_window_event(windows::on_window_event)
+        .on_window_event(|window, event| {
+            windows::on_window_event(window, event);
+            // a closed window's panes are gone; their sessions keep running, detached (Review Focus 2)
+            if let tauri::WindowEvent::Destroyed = event {
+                if let Ok(id) = teamcode_core::ids::WindowId::parse(window.label()) {
+                    window.app_handle().state::<AppState>().registry().detach_window(&id);
+                }
+            }
+        })
         .setup(move |app| {
             specta.mount_events(app);
             let data_dir = app.path().app_data_dir()?;

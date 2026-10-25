@@ -14,6 +14,7 @@ use crate::domain::{
 use crate::{Error, Result};
 
 pub mod projects;
+pub mod sessions;
 pub mod settings;
 pub mod tasks;
 pub mod timeline;

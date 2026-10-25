@@ -31,6 +31,13 @@ pub struct SessionExited {
     pub code: Option<i32>,
 }
 
+/// How many prompts wait for the session to go idle (Plan 04).
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type, tauri_specta::Event)]
+pub struct SessionQueueChanged {
+    pub session_id: SessionId,
+    pub pending: u32,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type, tauri_specta::Event)]
 pub struct SessionAttached {
     pub session_id: SessionId,

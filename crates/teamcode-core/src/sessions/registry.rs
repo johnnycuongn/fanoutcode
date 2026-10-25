@@ -105,6 +105,11 @@ impl SessionRegistry {
         }
     }
 
+    /// The ring size for sessions inserted from now on (the `scrollback_lines` setting).
+    pub fn set_scrollback_lines(&mut self, lines: usize) {
+        self.scrollback_lines = lines;
+    }
+
     pub fn insert(&mut self, session: Session, pty: Box<dyn Pty>, size: (u16, u16)) {
         let live = LiveSession {
             idle: IdleTracker::for_kind(session.kind),

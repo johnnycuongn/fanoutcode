@@ -2,7 +2,7 @@
 // looks its command up on the generated `commands` object, so it works unchanged once the binding lands (and in
 // tests, where the bindings mock supplies every name); until then it answers with an empty result. When the owning
 // plan merges, delete the wrapper and the STUB type, and import the generated ones instead.
-import { commands, type ProjectId, type Result, type Scope, type SessionId, type TaskId } from "@/lib/bindings";
+import { commands, type ProjectId, type Result, type Scope, type TaskId } from "@/lib/bindings";
 import type { WorkspaceId, Workspace } from "@/lib/bindings";
 
 // STUB(plan 05): Plan 05's `cost::CostLine`, `LiveCost` and `CostSummary` (A6, A19).
@@ -38,7 +38,6 @@ export type Issue = { key: string; summary: string; status: string; url: string 
 type Pending = {
   costSummary?(scope: Scope): Promise<Result<CostSummary, string>>;
   gitChanges?(taskId: TaskId): Promise<Result<RepoChanges[], string>>;
-  sessionsTerminal?(projectId: ProjectId): Promise<Result<SessionId, string>>;
   jiraSearch?(projectId: ProjectId, query: string): Promise<Result<Issue[], string>>;
   workspacesCreate?(name: string, projectIds: ProjectId[]): Promise<Result<Workspace, string>>;
   workspacesAddProject?(id: WorkspaceId, path: string): Promise<Result<Workspace, string>>;
@@ -56,11 +55,6 @@ export function costSummary(scope: Scope): Promise<Result<CostSummary, string>> 
 /** STUB(plan 05): `git_changes(task_id) -> Vec<RepoChanges>`. */
 export function gitChanges(taskId: TaskId): Promise<Result<RepoChanges[], string>> {
   return pending().gitChanges?.(taskId) ?? Promise.resolve({ status: "ok", data: [] });
-}
-
-/** STUB(plan 04): `sessions_terminal(project_id) -> SessionId`. */
-export function sessionsTerminal(projectId: ProjectId): Promise<Result<SessionId, string>> {
-  return pending().sessionsTerminal?.(projectId) ?? Promise.resolve(missing("sessions_terminal"));
 }
 
 /** STUB(plan 10): `jira_search(project_id, query) -> Vec<Issue>`. */

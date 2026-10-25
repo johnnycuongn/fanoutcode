@@ -543,6 +543,103 @@ async tasksActivity(container: Container) : Promise<Result<TaskActivity[], strin
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+/**
+ * The task's primary session, started (or resumed) when none is live.
+ */
+async sessionsOpen(taskId: TaskId) : Promise<Result<SessionId, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("sessions_open", { taskId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * A plain shell in the project root.
+ */
+async sessionsTerminal(projectId: ProjectId) : Promise<Result<SessionId, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("sessions_terminal", { projectId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Attaches this pane: the scrollback is replayed on `on_data`, then live output follows. Another pane holding the
+ * session is `attached-elsewhere:<window>:<pane>`.
+ */
+async sessionsAttach(sessionId: SessionId, windowId: WindowId, paneId: PaneId, onData: TAURI_CHANNEL<TerminalBytes>) : Promise<Result<Scrollback, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("sessions_attach", { sessionId, windowId, paneId, onData }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async sessionsDetach(sessionId: SessionId) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("sessions_detach", { sessionId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async sessionsWrite(sessionId: SessionId, bytes: number[]) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("sessions_write", { sessionId, bytes }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async sessionsResize(sessionId: SessionId, cols: number, rows: number) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("sessions_resize", { sessionId, cols, rows }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Moves the session to this pane from wherever it is attached.
+ */
+async sessionsBring(sessionId: SessionId, windowId: WindowId, paneId: PaneId, onData: TAURI_CHANNEL<TerminalBytes>) : Promise<Result<Scrollback, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("sessions_bring", { sessionId, windowId, paneId, onData }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * The pane has drawn `bytes` more bytes (flow control).
+ */
+async sessionsAck(sessionId: SessionId, bytes: number) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("sessions_ack", { sessionId, bytes }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * A live session, else its stored row.
+ */
+async sessionsGet(sessionId: SessionId) : Promise<Result<Session, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("sessions_get", { sessionId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Every session this launch has started, exited ones included.
+ */
+async sessionsList() : Promise<Session[]> {
+    return await TAURI_INVOKE("sessions_list");
 }
 }
 
@@ -555,6 +652,7 @@ gitChanges: GitChanges,
 needsYou: NeedsYou,
 sessionAttached: SessionAttached,
 sessionExited: SessionExited,
+sessionQueueChanged: SessionQueueChanged,
 specWatcher: SpecWatcher,
 taskChanged: TaskChanged,
 tasksReloaded: TasksReloaded,
@@ -568,6 +666,7 @@ gitChanges: "git-changes",
 needsYou: "needs-you",
 sessionAttached: "session-attached",
 sessionExited: "session-exited",
+sessionQueueChanged: "session-queue-changed",
 specWatcher: "spec-watcher",
 taskChanged: "task-changed",
 tasksReloaded: "tasks-reloaded",
@@ -621,6 +720,7 @@ export type DockPosition = "Bottom" | "Right"
  */
 export type DraftCommit = { message: string; files: string[] }
 export type DrillInLens = "ByFile" | "EventStream"
+export type DriverKind = "Owned" | "Background"
 /**
  * Both sides of one file for the diff editor; `before` is the base version (empty when absent there).
  */
@@ -737,9 +837,18 @@ export type ResolvedSettings = { theme: ThemePreference; accent: Accent; detail_
  * The layers a setting is resolved through. The contract's `app` layer is implicit and always present.
  */
 export type Scope = { workspace: WorkspaceId | null; project: ProjectId | null; task: TaskId | null }
+/**
+ * What `sessions_attach` and `sessions_bring` return. The bytes themselves are replayed first on the channel.
+ */
+export type Scrollback = { lines: number; dropped: number; bytes: number; cols: number; rows: number }
+export type Session = { id: SessionId; task_id: TaskId | null; kind: AgentKind; cwd: string; driver: DriverKind; attached_to: [WindowId, PaneId] | null; started_at: string; exited: number | null }
 export type SessionAttached = { session_id: SessionId; window_id: WindowId; pane_id: PaneId }
 export type SessionExited = { session_id: SessionId; code: number | null }
 export type SessionId = string
+/**
+ * How many prompts wait for the session to go idle (Plan 04).
+ */
+export type SessionQueueChanged = { session_id: SessionId; pending: number }
 /**
  * The spec watcher rewrote `spec.md` (A15), once per applied change.
  */
@@ -813,6 +922,11 @@ export type TeamRole = { role: string; steps: number[] }
  * One member of the task's team: the main session, or a subagent named by its type.
  */
 export type TeamRow = { name: string; state: AgentState }
+/**
+ * Terminal output on a channel. It is sent as raw bytes (an `ArrayBuffer` in the webview), not a JSON array; the
+ * generated type says `number[]`, and `terminalStore.toBytes` accepts both.
+ */
+export type TerminalBytes = number[]
 /**
  * One command and the folder it runs in.
  */

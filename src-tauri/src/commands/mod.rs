@@ -12,6 +12,7 @@ pub mod hooks;
 pub mod livespec;
 pub mod memory;
 pub mod projects;
+pub mod sessions;
 pub mod settings;
 pub mod tasks;
 pub mod tests;
