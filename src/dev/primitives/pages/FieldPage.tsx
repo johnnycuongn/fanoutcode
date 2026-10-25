@@ -14,13 +14,28 @@ export default function FieldPage(): ReactElement {
       <Field label="Branch" error="That branch already exists.">
         <Input mono defaultValue="fo/rate-limit" />
       </Field>
-      <section className="flex flex-col gap-3 rounded-well bg-well p-3">
-        <Field label="Test command" layout="row" hint="Run from the project root.">
-          <Input mono defaultValue="npm test" />
-        </Field>
-        <Field label="Notes" layout="row" error="Too long.">
-          <Textarea rows={2} />
-        </Field>
+      <p className="text-xs text-mute">
+        layout=&quot;row&quot; stacks until an ancestor is an @container at least 28rem wide.
+      </p>
+      <section className="@container w-64 rounded-well bg-well p-3" aria-label="Narrow container">
+        <div className="flex flex-col gap-3">
+          <Field label="Test command" layout="row" hint="Run from the project root.">
+            <Input mono defaultValue="npm test" />
+          </Field>
+          <Field label="Notes" layout="row" error="Too long.">
+            <Textarea rows={2} />
+          </Field>
+        </div>
+      </section>
+      <section className="@container rounded-well bg-well p-3" aria-label="Wide container">
+        <div className="flex flex-col gap-3">
+          <Field label="Test command" layout="row" hint="Run from the project root.">
+            <Input mono defaultValue="npm test" />
+          </Field>
+          <Field label="Notes" layout="row" error="Too long.">
+            <Textarea rows={2} />
+          </Field>
+        </div>
       </section>
     </div>
   );

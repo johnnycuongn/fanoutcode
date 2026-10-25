@@ -15,6 +15,13 @@ test("renders a radiogroup with the selected option checked", () => {
   expect(screen.getByRole("radio", { name: "Simple" })).toHaveAttribute("aria-checked", "true");
 });
 
+test("the group wraps its options instead of overflowing a narrow parent", () => {
+  render(<Segmented aria-label="LiveSpec" options={opts} value="simple" onValueChange={() => {}} />);
+  const group = screen.getByRole("radiogroup", { name: "LiveSpec" });
+  expect(group).toHaveClass("flex-wrap", "max-w-full");
+  expect(screen.getByRole("radio", { name: "Simple" })).toHaveClass("whitespace-nowrap");
+});
+
 // Radix selects on arrow focus only while the arrow key is still down, and user-event releases it instantly, so
 // these tests hold the key (as a person does) while the roving focus settles.
 test("ArrowRight selects the next option", async () => {

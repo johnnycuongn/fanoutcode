@@ -20,7 +20,7 @@ export type FieldProps = ComponentProps<"div"> & {
   hint?: ReactNode;
   error?: ReactNode;
   required?: boolean;
-  /** "row" puts the label left and the control right (settings panes). */
+  /** "row" puts the label left and the control right once the nearest `@container` ancestor is wide enough; narrower, or with no container, it stacks. */
   layout?: "stack" | "row";
   /** Base id; default `useId()`. */
   id?: string;
@@ -77,13 +77,15 @@ export function Field({
     <FieldContext.Provider value={attrs}>
       <div
         className={cx(
-          layout === "row" ? "grid grid-cols-[minmax(8rem,1fr)_2fr] items-start gap-x-4" : "flex flex-col gap-1",
+          layout === "row"
+            ? "grid grid-cols-1 items-start gap-y-1 @md:grid-cols-[minmax(8rem,1fr)_2fr] @md:gap-x-4"
+            : "flex flex-col gap-1",
           className,
         )}
         {...props}
       >
         {labelNode}
-        {layout === "row" ? <div className="flex flex-col gap-1">{rest}</div> : rest}
+        {layout === "row" ? <div className="flex min-w-0 flex-col gap-1">{rest}</div> : rest}
       </div>
     </FieldContext.Provider>
   );

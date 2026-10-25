@@ -1,5 +1,5 @@
-// One view tab: its name, the amber needs-you count, the home-project dots (workspace windows), double-click or the
-// context menu to rename, and Close view (confirmed when the view shows tasks). Dragging reorders.
+// One view tab: a beating status dot and a stage icon, its name, the amber needs-you count, the home-project dots
+// (workspace windows), double-click or the context menu to rename, and Close view (confirmed when the view shows tasks). Dragging reorders.
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useState, type ReactElement } from "react";
@@ -17,16 +17,33 @@ import {
   DialogHeader,
   DialogTitle,
   Input,
+  StatusDot,
   TabsTrigger,
   cx,
+  statusLabel,
+  type AgentStatus,
 } from "@/components/ui";
 import type { View } from "@/lib/bindings";
 import { useReducedMotion } from "@/lib/motion";
 import { swatchClass } from "@/lib/theme";
 import { deleteView, renameView, viewTaskIds } from "@/features/views";
 import { setActiveTab } from "../store";
+import { StageIcon, type StageIconKind } from "./StageIcon";
 
-export type TabItemProps = { view: View; active: boolean; count: number; colors: string[] };
+export type TabItemProps = {
+  view: View;
+  active: boolean;
+  count: number;
+  colors: string[];
+  /** The view's aggregate task state and stage; null while it shows no task. */
+  status: AgentStatus | null;
+  stage: StageIconKind | null;
+};
+
+function tooltip(status: AgentStatus | null, stage: StageIconKind | null): string | undefined {
+  if (!status || !stage) return undefined;
+  return `${stage === "many" ? "Several stages" : stage} · ${statusLabel(status)}`;
+}
 
 function RenameInput({ view, onDone }: { view: View; onDone(): void }): ReactElement {
   const [name, setName] = useState(view.name);
@@ -51,7 +68,7 @@ function RenameInput({ view, onDone }: { view: View; onDone(): void }): ReactEle
   );
 }
 
-export function TabItem({ view, active, count, colors }: TabItemProps): ReactElement {
+export function TabItem({ view, active, count, colors, status, stage }: TabItemProps): ReactElement {
   const [renaming, setRenaming] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const reduced = useReducedMotion();
@@ -74,7 +91,10 @@ export function TabItem({ view, active, count, colors }: TabItemProps): ReactEle
             aria-selected={active}
             onClick={() => setActiveTab(view.id)}
             onDoubleClick={() => setRenaming(true)}
+            title={tooltip(status, stage)}
           >
+            {status && <StatusDot status={status} pulse={status !== "idle"} size="sm" aria-hidden />}
+            {stage && <StageIcon stage={stage} />}
             {colors.map((c, i) => (
               <span key={`${i}-${c}`} aria-hidden className={cx("size-1.5 rounded-full", swatchClass(c, "bg"))} />
             ))}

@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, act } from "@testing-library/react";
 vi.mock("@/lib/bindings", () => mockBindings());
 import { mockBindings, commands } from "@/test/mockBindings";
 import { makeTask, makeView, needsYou } from "@/test/fixtures";
 import { tasksStore, projectContainer } from "@/lib/stores/tasksStore";
-import { viewsStore, leaf, EMPTY_PANE, taskContent } from "@/features/views";
+import { viewsStore, leaf, split, EMPTY_PANE, taskContent, reorderViews } from "@/features/views";
 import { shellStore, initWindow, setTabOrder } from "../store";
 import { TabStrip } from "./TabStrip";
 
@@ -60,5 +60,73 @@ describe("TabStrip", () => {
     fireEvent.change(input, { target: { value: "Login" } });
     fireEvent.keyDown(input, { key: "Enter" });
     await vi.waitFor(() => expect(commands.viewsRename).toHaveBeenCalledWith("view-c3", "Login"));
+  });
+  it("beats a status dot and shows the stage icon on a view with tasks, and neither on an empty view or Board", () => {
+    render(<TabStrip />);
+    const [board, auth, docs] = screen.getAllByRole("tab");
+    const dot = auth.querySelector("[data-pulse]");
+    expect(dot).toHaveAttribute("data-pulse", "true");
+    expect(auth.querySelector("[data-stage]")).toHaveAttribute("data-stage", "spec");
+    expect(auth).toHaveAttribute("title", "Spec · Needs you");
+    for (const tab of [board, docs]) {
+      expect(tab.querySelector("[data-pulse]")).toBeNull();
+      expect(tab.querySelector("[data-stage]")).toBeNull();
+    }
+  });
+  it("shows the several-stages icon when a view's tasks sit in more than one stage", () => {
+    tasksStore.set({
+      ...tasksStore.get(),
+      byId: {
+        "task-b2": makeTask({ id: "task-b2", stage: "Spec" }),
+        "task-b3": makeTask({ id: "task-b3", stage: "Build" }),
+      },
+    });
+    viewsStore.set({
+      ...viewsStore.get(),
+      views: [
+        makeView({
+          id: "view-c3",
+          name: "Auth",
+          layout: split(
+            "Horizontal",
+            0.5,
+            leaf("pane-aa", taskContent("task-b2")),
+            leaf("pane-ab", taskContent("task-b3")),
+          ),
+        }),
+      ],
+    });
+    render(<TabStrip />);
+    const auth = screen.getByRole("tab", { name: /Auth/ });
+    expect(auth.querySelector("[data-stage]")).toHaveAttribute("data-stage", "many");
+    expect(auth).toHaveAttribute("title", "Several stages · Idle");
+    expect(auth.querySelector("[data-pulse]")).toHaveAttribute("data-pulse", "false");
+  });
+  it("gives Board a kanban icon beside its label", () => {
+    render(<TabStrip />);
+    const board = screen.getByRole("tab", { name: "Board" });
+    expect(board).toBe(screen.getAllByRole("tab")[0]);
+    expect(board.querySelector("svg")).not.toBeNull();
+    expect(board).toHaveAttribute("aria-controls", "tc-board");
+  });
+  it("keeps Board first and fixed when the views are reordered", async () => {
+    commands.viewsReorder.mockResolvedValue({ status: "ok", data: null });
+    render(<TabStrip />);
+    await act(() => reorderViews(["view-c4", "view-c3"]));
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Board", "Docs", "Auth1"]);
+  });
+  it("offers Board no rename or close, by context menu or double-click", () => {
+    render(<TabStrip />);
+    // Control: a view tab does open the menu, so the absence below means something.
+    fireEvent.contextMenu(screen.getByRole("tab", { name: /Docs/ }));
+    expect(screen.getByRole("menuitem", { name: /Rename/ })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /Close view/ })).toBeInTheDocument();
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+    const board = screen.getByRole("tab", { name: /Board/ });
+    fireEvent.contextMenu(board);
+    expect(screen.queryByRole("menuitem", { name: /Rename/ })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: /Close view/ })).toBeNull();
+    fireEvent.doubleClick(board);
+    expect(screen.queryByRole("textbox")).toBeNull();
   });
 });

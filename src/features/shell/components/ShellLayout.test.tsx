@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, act } from "@testing-library/react";
 import type { BoardProps } from "@/features/board";
 vi.mock("@/lib/bindings", () => mockBindings());
 const board = vi.hoisted(() => ({ props: null as unknown as BoardProps, openNewTask: vi.fn() }));
+const setTitle = vi.hoisted(() => vi.fn(async () => {}));
 vi.mock("@/features/board", () => ({
   Board: (p: BoardProps) => {
     board.props = p;
@@ -12,7 +13,7 @@ vi.mock("@/features/board", () => ({
   openNewTask: board.openNewTask,
 }));
 vi.mock("@tauri-apps/api/window", () => ({
-  getCurrentWindow: () => ({ setTitle: vi.fn(), setBadgeCount: vi.fn(), isFocused: async () => true }),
+  getCurrentWindow: () => ({ setTitle, setBadgeCount: vi.fn(), isFocused: async () => true }),
 }));
 import { mockBindings, commands } from "@/test/mockBindings";
 import { makeProject, makeView } from "@/test/fixtures";
@@ -25,6 +26,7 @@ const container = projectContainer("proj-a1");
 describe("ShellLayout", () => {
   beforeEach(() => {
     localStorage.clear();
+    setTitle.mockClear();
     commands.windowsCurrent.mockResolvedValue({
       status: "ok",
       data: { window_id: "w-1", title: "Alpha", container, project_ids: ["proj-a1"] },
@@ -48,9 +50,10 @@ describe("ShellLayout", () => {
     });
     commands.windowsFocus.mockResolvedValue({ status: "ok", data: null });
   });
-  it("shows the project name, Board first, and the board by default with Plan 07's props", async () => {
+  it("titles the native window with the project name, Board first, and the board by default with Plan 07's props", async () => {
     render(<ShellLayout />);
-    expect(await screen.findByText("Alpha")).toBeInTheDocument();
+    await vi.waitFor(() => expect(setTitle).toHaveBeenCalledWith("Alpha"));
+    expect(await screen.findByTestId("board")).toBeInTheDocument();
     expect(screen.getByTestId("board")).toHaveTextContent("all");
     expect(screen.getAllByRole("tab")[0]).toHaveTextContent("Board");
     expect(board.props).toMatchObject({ container, focusedProject: "all", currentWindowId: "w-1" });
@@ -71,9 +74,23 @@ describe("ShellLayout", () => {
     expect(shellStore.get().activeTab).toBe("board");
     expect(screen.getByRole("button", { name: "Pick a task", hidden: true })).not.toBeVisible();
   });
+  it("puts the tab strip in the main column beside the sidebar, not above it", async () => {
+    render(<ShellLayout />);
+    await screen.findByRole("tablist", { name: "Views" });
+    act(() => shellStore.set({ sidebarOpen: true }));
+    const strip = screen.getByRole("tablist", { name: "Views" });
+    expect(screen.getByRole("complementary", { name: "Sidebar" })).not.toContainElement(strip);
+    const main = screen.getByRole("main");
+    expect(strip.closest("main")).toBeNull();
+    expect(main).toContainElement(document.getElementById("tc-board"));
+    const column = main.parentElement as HTMLElement;
+    expect(column).toContainElement(strip);
+    expect(column).not.toContainElement(screen.getByRole("complementary", { name: "Sidebar" }));
+    expect(strip.compareDocumentPosition(main) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
   it("toggles the sidebar with ⌘\\", async () => {
     render(<ShellLayout />);
-    await screen.findByText("Alpha");
+    await screen.findByRole("tablist", { name: "Views" });
     const before = shellStore.get().sidebarOpen;
     fireEvent.keyDown(window, { key: "\\", metaKey: true });
     expect(shellStore.get().sidebarOpen).toBe(!before);

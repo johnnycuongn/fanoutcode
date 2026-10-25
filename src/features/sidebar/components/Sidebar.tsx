@@ -21,7 +21,7 @@ export function Sidebar(props: SidebarProps): ReactElement | null {
       className="flex h-full w-64 shrink-0 flex-col border-r border-line bg-bar"
     >
       <IconStrip />
-      <div className="min-h-0 flex-1 overflow-auto py-1">
+      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden py-1">
         <SidebarBody section={section} {...props} />
       </div>
     </Panel>

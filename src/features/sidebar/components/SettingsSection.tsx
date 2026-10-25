@@ -7,8 +7,10 @@ const ProjectSettings = lazy(() => import("@/features/settings").then((m) => ({ 
 export function SettingsSection({ projectId }: { projectId?: ProjectId }): ReactElement | null {
   if (!projectId) return null;
   return (
-    <Suspense fallback={null}>
-      <ProjectSettings projectId={projectId} compact />
-    </Suspense>
+    <div className="min-w-0 px-2 py-2">
+      <Suspense fallback={null}>
+        <ProjectSettings projectId={projectId} compact />
+      </Suspense>
+    </div>
   );
 }

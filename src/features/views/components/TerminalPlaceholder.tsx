@@ -12,6 +12,17 @@ export type TerminalPlaceholderProps = {
   bringLabel?: string;
 };
 
+/** Why the terminal is not here and what the button does. A session is never started a second time. */
+function explanation(otherWindow: boolean, bringLabel: string): string {
+  const where = otherWindow ? "in another window" : "in another pane, maybe in another view";
+  const moved = otherWindow ? "the other window" : "that pane";
+  return (
+    `This terminal session is already open ${where}, and a session can only be shown in one place at a time. ` +
+    `It is still running; nothing starts a second one. “${bringLabel}” moves it here without restarting it, ` +
+    `and ${moved} then offers to take it back.`
+  );
+}
+
 export function TerminalPlaceholder({
   sessionId,
   attachedTo,
@@ -37,7 +48,7 @@ export function TerminalPlaceholder({
       className="h-full justify-center"
       data-session={sessionId}
       title={otherWindow ? `Open in ${title ?? "another window"}` : "Open in another pane"}
-      description="A terminal shows in one pane at a time."
+      description={explanation(otherWindow, bringLabel)}
       action={
         <div className="flex gap-2">
           {otherWindow && (

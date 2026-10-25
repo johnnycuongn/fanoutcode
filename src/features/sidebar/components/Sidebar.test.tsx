@@ -3,8 +3,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, within } from "@testing-library/react";
 vi.mock("@/lib/bindings", () => mockBindings());
 import { mockBindings } from "@/test/mockBindings";
-import { makeTask, makeView, needsYou, WORKING, IDLE } from "@/test/fixtures";
+import { makeProject, makeTask, makeView, needsYou, WORKING, IDLE } from "@/test/fixtures";
+import { projectsStore } from "@/lib/stores/projectsStore";
 import { tasksStore, projectContainer } from "@/lib/stores/tasksStore";
+import { settingsStore, type Settings } from "@/features/settings";
 import { viewsStore, leaf, EMPTY_PANE, taskContent } from "@/features/views";
 import { shellStore, initWindow, setTabOrder } from "@/features/shell";
 import { Sidebar } from "./Sidebar";
@@ -61,5 +63,21 @@ describe("Sidebar", () => {
     shellStore.set({ sidebarOpen: false });
     render(<Sidebar />);
     expect(screen.queryByRole("complementary", { name: "Sidebar" })).toBeNull();
+  });
+  it("scrolls vertically only, so a wide section never overflows sideways", () => {
+    render(<Sidebar />);
+    const body = screen.getByText("Needs you").closest(".overflow-y-auto");
+    expect(body).toHaveClass("overflow-x-hidden");
+  });
+  it("pads the Settings section and keeps it inside the 256px sidebar", async () => {
+    settingsStore.set({ byScope: { app: {} as Settings, "project:proj-a1": {} as Settings }, loading: {} });
+    projectsStore.set({ byId: { "proj-a1": makeProject({ id: "proj-a1", name: "Alpha" }) }, order: ["proj-a1"] });
+    shellStore.set({ sidebarSection: "settings" });
+    render(<Sidebar />);
+    const section = await screen.findByRole("region", { name: "Project" });
+    const wrapper = section.closest(".px-2");
+    expect(wrapper).toHaveClass("min-w-0", "px-2", "py-2");
+    expect(wrapper?.firstElementChild).toHaveClass("@container", "min-w-0", "gap-4");
+    expect(screen.getByRole("complementary", { name: "Sidebar" })).toHaveClass("w-64");
   });
 });

@@ -80,4 +80,24 @@ describe("ProjectSettings", () => {
     expect(screen.getByText("Login")).toBeInTheDocument();
     expect(screen.getByText("1200 in · 300 out")).toBeInTheDocument();
   });
+  it("lays rows out against its own width, not the window's", () => {
+    const { container, rerender } = render(<ProjectSettings projectId="proj-a1" />);
+    expect(container.firstChild).toHaveClass("@container", "min-w-0", "gap-5");
+    expect(screen.getByRole("region", { name: "Memory" })).toHaveClass("min-w-0");
+    expect(screen.getByText("Name").closest("div")).toHaveClass("grid-cols-1", "@md:grid-cols-[minmax(8rem,1fr)_2fr]");
+    rerender(<ProjectSettings projectId="proj-a1" compact />);
+    expect(container.firstChild).toHaveClass("gap-4");
+  });
+  it("lets the memory location wrap its buttons and truncate a long folder path", () => {
+    projectsStore.set({
+      byId: {
+        "proj-a1": makeProject({ id: "proj-a1", memory_location: { type: "Folder", path: "/r/alpha/docs/tasks" } }),
+      },
+      order: ["proj-a1"],
+    });
+    render(<ProjectSettings projectId="proj-a1" compact />);
+    expect(screen.getByText("/r/alpha/docs/tasks")).toHaveClass("truncate");
+    expect(screen.getByRole("button", { name: "Choose folder…" }).parentElement).toHaveClass("flex-wrap");
+    expect(screen.getByRole("button", { name: "Use app storage" })).toBeInTheDocument();
+  });
 });

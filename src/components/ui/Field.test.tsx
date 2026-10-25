@@ -41,13 +41,25 @@ test("required adds aria-required and a visual marker", () => {
   expect(screen.getByText("*")).toHaveAttribute("aria-hidden", "true");
 });
 
-test("row layout places label and control side by side", () => {
+test("row layout stacks by default and goes side by side inside a wide container", () => {
   const { container } = render(
     <Field label="Theme" layout="row">
       <Input />
     </Field>,
   );
-  expect(container.firstChild).toHaveClass("grid-cols-[minmax(8rem,1fr)_2fr]");
+  expect(container.firstChild).toHaveClass("grid", "grid-cols-1", "gap-y-1");
+  expect(container.firstChild).toHaveClass("@md:grid-cols-[minmax(8rem,1fr)_2fr]", "@md:gap-x-4");
+  expect(container.firstChild).not.toHaveClass("grid-cols-[minmax(8rem,1fr)_2fr]");
+});
+
+test("stack layout carries no container classes", () => {
+  const { container } = render(
+    <Field label="Theme">
+      <Input />
+    </Field>,
+  );
+  expect(container.firstChild).toHaveClass("flex", "flex-col");
+  expect(container.firstChild).not.toHaveClass("@md:grid-cols-[minmax(8rem,1fr)_2fr]");
 });
 
 test("a control outside a Field still renders with its own props", () => {

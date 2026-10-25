@@ -39,7 +39,7 @@ const TRIGGER: Record<ListVariant, string> = {
   underline:
     "-mb-px border-b-2 border-transparent text-mute hover:text-ink data-[state=active]:border-accent data-[state=active]:text-ink",
   pill: "rounded-card text-mute hover:text-ink data-[state=active]:bg-card data-[state=active]:text-ink data-[state=active]:shadow-card",
-  bar: "rounded-t-card text-mute hover:text-ink data-[state=active]:bg-page data-[state=active]:text-ink",
+  bar: "rounded-t-card border-t-2 border-transparent text-mute hover:bg-well hover:text-ink data-[state=active]:border-accent data-[state=active]:bg-card data-[state=active]:text-ink",
 };
 
 export type TabsTriggerProps = ComponentProps<typeof TabsPrimitive.Trigger> & {

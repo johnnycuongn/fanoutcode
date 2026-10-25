@@ -1,13 +1,21 @@
 // The window's tab strip: Board is tab zero, then one tab per view (drag to reorder), then New view.
 import { DndContext, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { horizontalListSortingStrategy, SortableContext, arrayMove } from "@dnd-kit/sortable";
-import { Plus } from "lucide-react";
+import { Plus, SquareKanban } from "lucide-react";
 import { useEffect, type ReactElement } from "react";
 import { IconButton, Tabs, TabsList, TabsTrigger } from "@/components/ui";
 import { registerHandler } from "@/lib/keyboard";
 import { projectsStore } from "@/lib/stores/projectsStore";
 import { tasksStore } from "@/lib/stores/tasksStore";
-import { createView, reorderViews, tabNeedsYouCount, viewProjectIds, viewsStore } from "@/features/views";
+import {
+  createView,
+  reorderViews,
+  tabNeedsYouCount,
+  viewProjectIds,
+  viewStage,
+  viewStatus,
+  viewsStore,
+} from "@/features/views";
 import { cycleTab, setActiveTab, shellStore } from "../store";
 import { TabItem } from "./TabItem";
 
@@ -41,10 +49,15 @@ export function TabStrip(): ReactElement {
   };
 
   return (
-    <div className="flex items-end bg-bar">
-      <Tabs value={activeTab} onValueChange={setActiveTab} activationMode="manual">
+    <div className="flex min-w-0 items-end bg-bar">
+      <Tabs value={activeTab} onValueChange={setActiveTab} activationMode="manual" className="min-w-0 overflow-x-auto">
         <TabsList variant="bar" aria-label="Views">
-          <TabsTrigger value="board" aria-controls={BOARD_PANEL_ID} onClick={() => setActiveTab("board")}>
+          <TabsTrigger
+            value="board"
+            aria-controls={BOARD_PANEL_ID}
+            icon={<SquareKanban aria-hidden className="size-4" />}
+            onClick={() => setActiveTab("board")}
+          >
             Board
           </TabsTrigger>
           <DndContext sensors={sensors} onDragEnd={onDragEnd}>
@@ -55,6 +68,8 @@ export function TabStrip(): ReactElement {
                   view={view}
                   active={view.id === activeTab}
                   count={tabNeedsYouCount(view, tasksById)}
+                  status={viewStatus(view, tasksById)}
+                  stage={viewStage(view, tasksById)}
                   colors={
                     workspace ? viewProjectIds(view, tasksById).map((id) => projectsById[id]?.color ?? "slate") : []
                   }

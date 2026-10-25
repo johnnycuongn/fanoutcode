@@ -13,6 +13,7 @@ async function writeLocation(projectId: ProjectId, memory_location: MemoryLocati
 
 export function MemoryLocationField({ projectId }: { projectId: ProjectId }): ReactElement {
   const location = projectsStore.useSelector((s) => s.byId[projectId]?.memory_location);
+  const folder = location?.type === "Folder" ? location.path : undefined;
   const choose = async () => {
     const r = await commands.memoryPickLocation(projectId);
     if (r?.status === "ok" && r.data) await writeLocation(projectId, { type: "Folder", path: r.data });
@@ -24,10 +25,10 @@ export function MemoryLocationField({ projectId }: { projectId: ProjectId }): Re
       layout="row"
       hint="Memory files stay readable without Fanout Code. Inside the repo, add the folder to .gitignore or keep it tracked; the app does not decide."
     >
-      <p className="truncate font-mono text-xs text-ink">
-        {location?.type === "Folder" ? location.path : "App storage"}
+      <p className="truncate font-mono text-xs text-ink" title={folder}>
+        {folder ?? "App storage"}
       </p>
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <Button size="sm" variant="secondary" onClick={() => void choose()}>
           Choose folder…
         </Button>

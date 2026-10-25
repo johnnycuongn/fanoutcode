@@ -65,14 +65,14 @@ export function SettingsDialog({ container, projects, workspaceTab }: SettingsDi
             {container && <TabsTrigger value="project">Project</TabsTrigger>}
             {workspaceTab && <TabsTrigger value="workspace">Workspace</TabsTrigger>}
           </TabsList>
-          <TabsContent value="app" className="pt-3">
+          <TabsContent value="app" className="@container pt-3">
             <AppSettings />
           </TabsContent>
-          <TabsContent value="project" className="pt-3">
+          <TabsContent value="project" className="@container pt-3">
             <ProjectTab container={container} projects={projects} />
           </TabsContent>
           {workspaceTab && (
-            <TabsContent value="workspace" className="pt-3">
+            <TabsContent value="workspace" className="@container pt-3">
               {workspaceTab}
             </TabsContent>
           )}

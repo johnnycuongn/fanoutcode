@@ -1,5 +1,7 @@
-// A project or workspace window: chrome, tabs, [rail] sidebar and the active tab, then the attention strip. Hidden
-// views stay mounted so their terminals keep state and switching costs no repaint.
+// A project or workspace window, under the native title bar (which shows the project or workspace name, set by
+// useShellEvents): [rail] and sidebar at full height beside a column holding the tab strip above the active tab, then
+// the attention strip. Hidden views stay mounted so their terminals keep state and
+// switching costs no repaint.
 import { useCallback, useEffect, useMemo, useState, type ReactElement } from "react";
 import { commands, type TaskId, type WindowInfo } from "@/lib/bindings";
 import { projectsStore, selectProjectList } from "@/lib/stores/projectsStore";
@@ -19,7 +21,6 @@ import { AttentionStrip } from "./AttentionStrip";
 import { NotificationBridge } from "./NotificationBridge";
 import { ProjectRail } from "./ProjectRail";
 import { BOARD_PANEL_ID, TabStrip } from "./TabStrip";
-import { WindowChrome } from "./WindowChrome";
 
 /** Plan 07's new-task sheet, when its module exports an opener. */
 export function newTask(): void {
@@ -47,7 +48,7 @@ function useWindowInfo(given?: WindowInfo): WindowInfo | null {
 
 export function ShellLayout({ info: given }: { info?: WindowInfo }): ReactElement | null {
   const info = useWindowInfo(given);
-  const { ready, dirty, title } = useShellEvents(info);
+  const { ready } = useShellEvents(info);
   const shell = shellStore.use();
   const views = viewsStore.useSelector((s) => s.views);
   const projects = projectsStore.useSelector(selectProjectList);
@@ -66,29 +67,30 @@ export function ShellLayout({ info: given }: { info?: WindowInfo }): ReactElemen
   const rail = shell.kind === "workspace" && shell.projectLayer === "Rail";
   return (
     <div className="flex h-full flex-col bg-page text-ink">
-      <WindowChrome title={title} dirty={dirty} />
-      <TabStrip />
       <div className="flex min-h-0 flex-1">
         {rail && <ProjectRail />}
         <Sidebar docs={docs} onAddPath={onAddPath} />
-        <main className="relative min-w-0 flex-1">
-          <div id={BOARD_PANEL_ID} hidden={shell.activeTab !== "board"} className="h-full overflow-auto">
-            <Board
-              container={shell.container}
-              projects={projects}
-              settings={settings}
-              focusedProject={boardProject(shell, projectIds)}
-              currentWindowId={shell.windowId ?? info.window_id}
-              onOpenTask={openFromBoard}
-              onNewTask={onNewTask}
-            />
-          </div>
-          {views.map((v) => (
-            <div key={v.id} hidden={shell.activeTab !== v.id} className="h-full">
-              <ViewCanvas viewId={v.id} />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <TabStrip />
+          <main className="relative min-h-0 min-w-0 flex-1">
+            <div id={BOARD_PANEL_ID} hidden={shell.activeTab !== "board"} className="h-full overflow-auto">
+              <Board
+                container={shell.container}
+                projects={projects}
+                settings={settings}
+                focusedProject={boardProject(shell, projectIds)}
+                currentWindowId={shell.windowId ?? info.window_id}
+                onOpenTask={openFromBoard}
+                onNewTask={onNewTask}
+              />
             </div>
-          ))}
-        </main>
+            {views.map((v) => (
+              <div key={v.id} hidden={shell.activeTab !== v.id} className="h-full">
+                <ViewCanvas viewId={v.id} />
+              </div>
+            ))}
+          </main>
+        </div>
       </div>
       <AttentionStrip />
       <TaskPicker />

@@ -1,7 +1,7 @@
 // The Project tab of Settings (and the sidebar's Settings section): project name and colour, memory location,
 // worktrees, automation, the detail-level override and, with the cost overview on, the project's costs.
 import { useState, type ReactElement, type ReactNode } from "react";
-import { Field, Input, Segmented, toast } from "@/components/ui";
+import { Field, Input, Segmented, cx, toast } from "@/components/ui";
 import { commands, type ProjectId } from "@/lib/bindings";
 import { projectsStore, upsertProject } from "@/lib/stores/projectsStore";
 import { SWATCHES } from "@/lib/theme";
@@ -14,7 +14,7 @@ import { WorktreeFields } from "./WorktreeFields";
 
 function Section({ title, children }: { title: string; children: ReactNode }): ReactElement {
   return (
-    <section aria-label={title} className="flex flex-col gap-3">
+    <section aria-label={title} className="flex min-w-0 flex-col gap-3">
       <h3 className="text-sm font-medium text-ink">{title}</h3>
       {children}
     </section>
@@ -55,7 +55,6 @@ function ProjectFields({ projectId }: { projectId: ProjectId }): ReactElement | 
         <Segmented
           aria-label="Project colour"
           size="sm"
-          className="flex-wrap"
           options={SWATCHES.map((s) => ({ value: s, label: s }))}
           value={project.color}
           onValueChange={(color) => void patchProject(projectId, { color })}
@@ -65,12 +64,19 @@ function ProjectFields({ projectId }: { projectId: ProjectId }): ReactElement | 
   );
 }
 
-export function ProjectSettings({ projectId }: { projectId: ProjectId; compact?: boolean }): ReactElement {
+/** `compact` (the sidebar) tightens the gap between sections; both modes sit in an `@container`, so rows stack when narrow. */
+export function ProjectSettings({
+  projectId,
+  compact = false,
+}: {
+  projectId: ProjectId;
+  compact?: boolean;
+}): ReactElement {
   const scope = projectScope(projectId);
   const costOverview = useSetting(appScope(), "cost_overview") ?? false;
   const root = projectsStore.useSelector((s) => s.byId[projectId]?.root);
   return (
-    <div className="flex flex-col gap-5">
+    <div className={cx("@container flex min-w-0 flex-col", compact ? "gap-4" : "gap-5")}>
       <Section title="Project">
         <ProjectFields projectId={projectId} />
       </Section>

@@ -95,6 +95,17 @@ describe("TerminalPane", () => {
     expect(screen.getByText("Bring here")).toBeInTheDocument();
   });
 
+  it("explains that the session is shared, still running and moved rather than restarted", () => {
+    terminalStore.set({
+      "s-1": { status: "elsewhere", attachedTo: { windowId: "w-1", paneId: "pane-b" }, pending: 0 }, // outside Tauri this window is w-1
+    });
+    render(<TerminalPane sessionId="s-1" paneId="pane-a" focused />);
+    expect(screen.getByText("Open in another pane")).toBeInTheDocument();
+    const text = screen.getByText(/already open in another pane, maybe in another view/);
+    expect(text).toHaveTextContent("nothing starts a second one");
+    expect(text).toHaveTextContent("“Bring here” moves it here without restarting it");
+  });
+
   it("shows the exit line and pending count from the store", () => {
     terminalStore.set({ "s-1": { status: "exited", exitCode: 130, pending: 0 } });
     render(<TerminalPane sessionId="s-1" paneId="pane-a" focused />);

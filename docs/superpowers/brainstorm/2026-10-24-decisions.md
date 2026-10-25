@@ -92,3 +92,10 @@ Seven questions, all settled by Claude as calls in the design doc: a task's link
 
 - **Ten plans written by parallel agents** (2026-10-24/25) in `docs/superpowers/plans/`, from a shared contracts document (`…-00-overview-and-contracts.md`). Totals: 177 tasks across foundation (15), primitives (17), core pipeline (17), sessions and terminals (16), observation (19), shell (19), board (18), task page (19), canvas (17), workspaces and integrations (20).
 - **Reconciliation.** The plans' proposed contract additions were reconciled into binding amendments A1–A20 in the overview, and every plan was updated to match. Key calls: internally tagged enums with only unit or struct variants; snake_case fields and Rust variant names, no `rename_all`; canonical hand-back chip texts with a Rust-written fixture the TypeScript mirror tests against; a buffered one-write hook command; migrations numbered by owning plan; build order 01, 02, 03, 05, 04, then 06 ∥ 07, 08 ∥ 09, 10.
+
+## Round 7: tab strip and Settings layout
+
+- **Tab strip placement: above the main content, beside the sidebar.** (Johnny, 2026-10-25) Like VS Code, the strip moves off the top of the left sidebar and sits above the main column (Board and the views), not above the whole window. It stays visible when a task page or the Team dock is open with no terminal showing; Board is the default tab. Supersedes the Round 1 "Warp-style tabs" placement; the Board-is-tab-zero and ⌘B calls stand.
+- **Board tab is fixed.** (Johnny) It is always tab zero and cannot be closed, reordered or renamed.
+- **Board icon: tab strip only.** (Johnny) A board icon (lucide `SquareKanban`) at the left of the Board tab, the size and style of the sidebar icon strip; none in the sidebar strip or the board header.
+- **Settings in the sidebar must not overflow.** (Johnny) Claude's call: setting rows lay out by container width, stacking label over control when narrow and going two-column when the container is wide (`Field` row layout with `@container`), segmented controls wrap, and the sidebar Settings section gets padding and `min-w-0`. The Settings dialog marks its panels as containers so it keeps two columns.

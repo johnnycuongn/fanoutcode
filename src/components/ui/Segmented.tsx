@@ -38,7 +38,7 @@ export function Segmented<T extends string>({
       orientation="horizontal"
       loop
       className={cx(
-        "gap-0.5 rounded-well border border-line bg-well p-0.5",
+        "max-w-full flex-wrap gap-0.5 rounded-well border border-line bg-well p-0.5",
         fullWidth ? "flex w-full" : "inline-flex",
         className,
       )}
