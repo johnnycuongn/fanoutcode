@@ -13,6 +13,8 @@ export type TerminalState = {
   exitCode?: number;
   pending: number;
   scrollback?: Scrollback;
+  /** This window's pane held the session until it was brought to another pane ("Bring back"). */
+  broughtAway?: boolean;
 };
 
 /** An ack is sent once this many bytes are drawn, or `ACK_FLUSH_MS` after the first undrawn ack. */
@@ -74,6 +76,7 @@ async function connect(
   }
   patch(sessionId, {
     status: exited === null ? "attached" : "exited",
+    broughtAway: false,
     attachedTo: { windowId, paneId },
     scrollback: r.data,
     ...(exited === null ? {} : { exitCode: exited }),
@@ -163,7 +166,8 @@ export function startListening(): () => void {
       const attachedTo = { windowId: payload.window_id, paneId: payload.pane_id };
       const current = terminalStore.get()[payload.session_id];
       if (here) patch(payload.session_id, { status: current?.status === "exited" ? "exited" : "attached", attachedTo });
-      else if (current) patch(payload.session_id, { status: "elsewhere", attachedTo });
+      else if (current)
+        patch(payload.session_id, { status: "elsewhere", attachedTo, broughtAway: current.status === "attached" });
     }),
     events.sessionExited.listen(({ payload }) => {
       patch(payload.session_id, { status: "exited", exitCode: payload.code ?? undefined, pending: 0 });

@@ -74,6 +74,7 @@ describe("terminalStore", () => {
     await attach("s-1", "pane-a", () => {});
     events.sessionAttached.emitForTest({ session_id: "s-1", window_id: "w-2", pane_id: "pane-b" });
     expect(terminalStore.get()["s-1"].status).toBe("elsewhere");
+    expect(terminalStore.get()["s-1"].broughtAway).toBe(true); // this pane offers "Bring back"
   });
 
   it("session-exited sets exited with code and clears pending", () => {

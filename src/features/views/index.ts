@@ -30,6 +30,8 @@ export { ViewCanvas } from "./components/ViewCanvas";
 // Plan 04's TerminalPane lives in this feature (A5).
 export { TerminalPane } from "./components/TerminalPane";
 export type { TerminalPaneProps, TerminalPaneHandle } from "./components/TerminalPane";
+export { TerminalPlaceholder } from "./components/TerminalPlaceholder";
+export type { TerminalPlaceholderProps } from "./components/TerminalPlaceholder";
 export { TaskPicker } from "./components/TaskPicker";
 export { terminalStore, useTerminal, startListening as startTerminalEvents } from "./terminalStore";
 export type { TerminalState, TerminalStatus } from "./terminalStore";

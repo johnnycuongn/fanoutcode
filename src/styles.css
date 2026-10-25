@@ -10,6 +10,7 @@
 @import "@fontsource-variable/inter/opsz.css";
 @import "@fontsource-variable/literata/opsz.css";
 @import "@fontsource-variable/jetbrains-mono";
+@import "@xterm/xterm/css/xterm.css";
 
 @theme {
   --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
@@ -147,6 +148,10 @@
 /* Terminal palettes (§11.2). TerminalPane sets `data-term-theme` on its root and reads these into xterm, so the
    colours stay in this file. Graphite and Soft White are built from the app themes above; One Dark and Solarized
    use their published palettes. Slots 0–15 are the ANSI colours, black through bright white. */
+[data-term-theme] {
+  background-color: var(--term-bg);
+  color: var(--term-fg);
+}
 [data-term-theme="graphite"] {
   --term-bg: #111318;
   --term-fg: #e7e9ee;

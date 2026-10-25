@@ -2,6 +2,7 @@
 // `data-accent` on <html> before first paint, and mirrors the choice in localStorage so the first paint is right
 // before any IPC returns. Also the swatch class helpers (task and project colours).
 
+import { useSyncExternalStore } from "react";
 import type { ThemePreference } from "@/lib/bindings";
 export type { ThemePreference } from "@/lib/bindings";
 
@@ -90,6 +91,23 @@ export function startThemeSync(): () => void {
   };
   query.addEventListener("change", onChange);
   return () => query.removeEventListener("change", onChange);
+}
+
+/** The app theme in effect, after System is resolved: `data-theme` on <html>. */
+export function currentAppTheme(): ResolvedTheme {
+  return typeof document !== "undefined" && document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+}
+
+function subscribeAppTheme(onChange: () => void): () => void {
+  if (typeof MutationObserver !== "function") return () => {};
+  const observer = new MutationObserver(onChange);
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  return () => observer.disconnect();
+}
+
+/** The resolved app theme, re-rendering when it changes (the terminal follows it). */
+export function useAppTheme(): ResolvedTheme {
+  return useSyncExternalStore(subscribeAppTheme, currentAppTheme, () => "light");
 }
 
 /** Same order as `domain::SWATCHES`. */
