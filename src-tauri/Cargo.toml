@@ -30,6 +30,10 @@ livespec-core = { path = "../crates/livespec-core" }
 reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls-native-roots"] }
 keyring = { version = "=3.6.3", features = ["apple-native"] }
 tauri-plugin-notification = "2"
+portable-pty = "0.9"
+which = "7"
+libc = "0.2"
 
 [dev-dependencies]
 tempfile = "3"
+teamcode-core = { path = "../crates/teamcode-core", features = ["test-support"] }

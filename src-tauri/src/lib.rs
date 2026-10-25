@@ -11,6 +11,7 @@ pub mod hooks_tailer;
 pub mod observation;
 pub mod observe;
 pub mod provider;
+pub mod pty;
 pub mod secrets;
 pub mod specta;
 pub mod state;
