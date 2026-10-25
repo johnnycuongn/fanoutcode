@@ -99,3 +99,23 @@ Seven questions, all settled by Claude as calls in the design doc: a task's link
 - **Board tab is fixed.** (Johnny) It is always tab zero and cannot be closed, reordered or renamed.
 - **Board icon: tab strip only.** (Johnny) A board icon (lucide `SquareKanban`) at the left of the Board tab, the size and style of the sidebar icon strip; none in the sidebar strip or the board header.
 - **Settings in the sidebar must not overflow.** (Johnny) Claude's call: setting rows lay out by container width, stacking label over control when narrow and going two-column when the container is wide (`Field` row layout with `@container`), segmented controls wrap, and the sidebar Settings section gets padding and `min-w-0`. The Settings dialog marks its panels as containers so it keeps two columns.
+
+## 2026-10-25: cross-task file awareness (Plan 11)
+
+- **Warn before overwriting another task's work.** (Johnny) When a task's session is about to edit a file another
+  task has uncommitted changes in, the developer is warned and decides: edit on top of the other task's changes,
+  replace them, or hold.
+- **Two grains for "on top".** (Johnny) *Proceed, check next file* grants one file; *Proceed for all related tasks*
+  grants every file the other task touches.
+- **Commit first, then integrate.** (Johnny) For worktree tasks he commits first, the card reaches Done, and
+  *Bring <base> in* runs from the Done card; landing on main stays his.
+- Claude's calls (spec §10): awareness is per task, not per view; the stop-and-ask is Claude Code only, Codex and
+  shell tasks still claim; a claim lasts while the file is uncommitted and grants last the session; Hold keeps the
+  task needs-you and tells it when the file is free; Merge by default, Rebase by setting; "Others working here" lists
+  each active task's added files and exported names; the claim lag is accepted; every decision and note is a
+  timeline entry; the tab is *Overlap*, the chips *File in use*, *Holding for <other>*, *Merge needs you*; Replace
+  needs no confirmation beyond Continue; the hook writes its own `ClaimDenied` line; soft notes go once per file per
+  direction; hookless sessions get best-effort `Observed` attribution; a pending decision pins the task's state;
+  Replace is an instruction plus a relabel (no git restore), shown in both tasks' Overlap tabs; the worktree base
+  defaults to the repo's default branch, confirmed once, and is re-recorded after a Rebase; decisions are mirrored
+  into the hook event log for the Team view.
