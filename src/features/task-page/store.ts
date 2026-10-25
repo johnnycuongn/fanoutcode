@@ -9,6 +9,15 @@ import { primaryActionFor } from "./primaryAction";
 import { tasksSource, type TaskSource } from "./taskSource";
 import type { TaskPageIpc, TaskPageState, TaskSettings } from "./types";
 
+export const DEFAULT_TASK_SETTINGS: TaskSettings = {
+  mayCommit: false,
+  costOverview: false,
+  testCommand: null,
+  advanceOnGreen: false,
+  dockPosition: "Bottom",
+  teamViewPlacement: "DockGrows",
+};
+
 export function toTaskSettings(r: ResolvedSettings): TaskSettings {
   return {
     mayCommit: r.may_commit ?? false,
@@ -137,9 +146,12 @@ export function createTaskPageStore(ipc: TaskPageIpc, tasks: TaskSource = tasksS
       }
     },
     startFresh: (taskId: TaskId) => act(taskId, { type: "StartFresh" }),
+    /** Starts or resumes the primary session (idempotent); a new id that no task-changed brought is fetched. */
     async startSession(taskId: TaskId): Promise<void> {
       try {
-        await ipc.sessionsOpen(taskId);
+        const session = await ipc.sessionsOpen(taskId);
+        if (typeof session === "string" && tasks.get(taskId)?.primary_session !== session)
+          tasks.put(await ipc.tasksGet(taskId));
       } catch (e) {
         fail(taskId, e);
       }

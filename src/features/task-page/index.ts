@@ -1,44 +1,14 @@
-// STUB(plan 08): the smallest TaskPage with Plan 08's exact props and handle (A5); Plan 08 replaces this file.
-import { createElement, useImperativeHandle, type ReactElement, type ReactNode, type Ref } from "react";
-import { Panel } from "@/components/ui";
-import type { Container, PaneId, Project, Task, TaskId } from "@/lib/bindings";
-
-export interface TaskPageHandle {
-  primaryAction(): void;
-  rename(): void;
-  archive(): void;
-  toggleDock(): void;
-  growTeam(): void;
-  toggleTerminalStrip(): void;
-  focusTerminal(): void;
-}
-
-export interface TaskPageProps {
-  taskId: TaskId;
-  paneId: PaneId;
-  container: Container;
-  projects: Project[];
-  renderTeam?: (task: Task) => ReactNode;
-  onBack(): void;
-  onOpenTeamPane?(task: Task): void;
-  ref?: Ref<TaskPageHandle>;
-}
-
-const noop = () => {};
-
-export function TaskPage({ taskId, ref }: TaskPageProps): ReactElement {
-  useImperativeHandle(ref, () => ({
-    primaryAction: noop,
-    rename: noop,
-    archive: noop,
-    toggleDock: noop,
-    growTeam: noop,
-    toggleTerminalStrip: noop,
-    focusTerminal: noop,
-  }));
-  return createElement(Panel, { variant: "plain", className: "h-full text-mute" }, `Task ${taskId}`);
-}
-
-// Plan 08's pieces, exported as they land; Task 19 replaces the stub above.
+// The task page feature's public surface (A5): Plan 06 renders TaskPage for PaneContent::Task and routes the task
+// chords to TaskPageHandle; Plan 09 supplies renderTeam and onOpenTeamPane. The action helpers are shared with
+// Plan 06's palette and Plan 07's card menu so every surface uses the same labels.
+export { TaskPage } from "./components/TaskPage";
+export type { TaskPageHandle, TaskPageProps } from "./components/TaskPage";
+export { taskPageStore, createTaskPageStore, toTaskSettings } from "./store";
+export type { TaskPageStore } from "./store";
+export { subscribeTaskPageEvents } from "./events";
+export { primaryActionFor, forwardActionFor, freshSessionAllowed, PREVIOUS_STAGE, QUEUED_HINT } from "./primaryAction";
+export type { PrimaryButton, PrimaryCtx, PrimaryIntent } from "./primaryAction";
+export { bodyFor } from "./body";
+export type { BodyKind } from "./body";
 export type { TaskSettings, TaskPageIpc, TaskPageState } from "./types";
 export type { TaskSource } from "./taskSource";

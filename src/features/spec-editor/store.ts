@@ -64,7 +64,8 @@ export function createSpecStore(
   }
 
   async function open(task: Task): Promise<void> {
-    if (sessions.has(task.id) || store.get().byTask[task.id]?.loaded) return;
+    // the store state, not the session map, says whether it is open (a reset store reopens cleanly)
+    if (store.get().byTask[task.id]?.loaded) return;
     projectOf.set(task.id, task.project_id);
     patch(task.id, {});
     const [text, settings] = await Promise.allSettled([readSpec(task), ipc.settingsGet(taskScope(task))]);
