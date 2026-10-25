@@ -7,7 +7,7 @@
 use std::path::{Path, PathBuf};
 
 use super::claims::Claim;
-use super::pathspec::named;
+use super::pathspec::{has_include, named};
 use crate::workspace::guard::rules::{clean, strip_prefixes};
 use crate::workspace::guard::shell_words::segments;
 
@@ -183,8 +183,8 @@ fn git_rule(sub: &str, args: &[String], dir: &Path, repo: &Path, claimed: &[&Cla
             let names_root = specs
                 .iter()
                 .any(|s| rel_in(repo, &resolve(s, dir)).as_deref() == Some(""));
-            // `-A` / `-u` reach the whole tree only without a pathspec; with one they are limited to it
-            let whole = specs.is_empty() && (has(&a, 'A', "--all") || has(&a, 'u', "--update"));
+            // `-A` / `-u` reach the whole tree unless an include limits them (excludes alone still mean the whole tree)
+            let whole = !has_include(&specs) && (has(&a, 'A', "--all") || has(&a, 'u', "--update"));
             if whole || names_root {
                 (GitRule::AddAll, all_paths(claimed))
             } else {

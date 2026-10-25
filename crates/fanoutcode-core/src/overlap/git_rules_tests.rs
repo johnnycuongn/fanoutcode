@@ -405,3 +405,32 @@ fn add_all_or_update_with_a_pathspec_is_limited_to_those_paths() {
         assert_eq!(eval(c, "/r", &claims()).map(|(r, _)| r), Some(GitRule::AddAll), "{c}");
     }
 }
+
+#[test]
+fn exclude_only_add_all_from_a_subfolder_names_claims_outside_it() {
+    // git reads an exclude-only pathspec list as the whole tree from the repo root (PATHSPEC_PREFER_FULL)
+    let held = vec![claim("lib/c.ts"), claim("src/x/y.ts"), claim("src/x/foo")];
+    for c in [
+        "cd src/x && git add -A ':!foo'",
+        "cd src/x && git add -u ':(exclude)foo'",
+        "cd src/x && git add --all ':^foo'",
+    ] {
+        let (rule, paths) = eval(c, "/r", &held).expect(c);
+        assert_eq!(rule, GitRule::AddAll, "{c}");
+        assert!(paths.contains(&"lib/c.ts".to_owned()), "{c}: {paths:?}");
+    }
+    // a plain add or a commit of excludes alone reaches outside the subfolder too
+    for c in ["cd src/x && git add ':!foo'", "cd src/x && git commit -m x -- ':!foo'"] {
+        let (_, paths) = eval(c, "/r", &held).expect(c);
+        assert!(paths.contains(&"lib/c.ts".to_owned()), "{c}: {paths:?}");
+        assert!(
+            !paths.contains(&"src/x/foo".to_owned()),
+            "{c}: the exclude still takes its path away"
+        );
+    }
+    // one real include limits -A to it
+    assert_eq!(
+        eval("cd src/x && git add -A y.ts ':!foo'", "/r", &held),
+        Some((GitRule::AddPath, vec!["src/x/y.ts".into()]))
+    );
+}

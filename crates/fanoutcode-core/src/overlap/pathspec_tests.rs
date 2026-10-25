@@ -66,7 +66,7 @@ fn top_and_glob_pathspecs_name_claimed_paths() {
 
 #[test]
 fn exclude_only_pathspec_still_matches_other_claims() {
-    // with no include, an exclude means "everything here but"
+    // with no include, an exclude means "everything in the repo but"
     for cmd in [
         "git add ':!src/a.ts'",
         "git add ':^src/a.ts'",
@@ -79,10 +79,10 @@ fn exclude_only_pathspec_still_matches_other_claims() {
             "{cmd}"
         );
     }
-    // relative to where it runs
+    // the exclude is relative to where it runs, but the implied include is the whole repo from its root
     assert_eq!(
         eval("git add ':!a.ts'", "/r/src", &claims()).map(|h| h.1),
-        Some(paths(&["src/deep/b.ts"]))
+        Some(paths(&["README.md", "src/deep/b.ts"]))
     );
     // an include minus an exclude
     assert_eq!(

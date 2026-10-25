@@ -228,8 +228,18 @@ fn name_exclude(m: &Magic<'_>, dir: &Path, repo: &Path, claimed: &[&Claim]) -> V
         .collect()
 }
 
+/// Whether `specs` hold at least one include (a spec that is not a recognised exclude). Without one, git reads the
+/// list as the whole tree minus the excludes, from the repo root (`PATHSPEC_PREFER_FULL`), whatever the cwd.
+pub(super) fn has_include(specs: &[&str]) -> bool {
+    specs.iter().any(|s| {
+        let m = magic(s);
+        !(m.exclude && !m.unknown)
+    })
+}
+
 /// The claimed paths the given pathspecs (resolved against `dir`) name in `repo`: what the includes name, minus what
-/// the excludes name. Excludes alone stand for `dir` minus them, as git reads them.
+/// the excludes name. Excludes alone stand for the whole repo minus them, from its root (never only `dir`, which would
+/// name too little).
 pub(super) fn named(specs: &[&str], dir: &Path, repo: &Path, claimed: &[&Claim]) -> Vec<String> {
     let mut included = Vec::new();
     let mut excluded = Vec::new();
@@ -246,6 +256,7 @@ pub(super) fn named(specs: &[&str], dir: &Path, repo: &Path, claimed: &[&Claim])
     }
     if !any_include && any_exclude {
         let here = Magic {
+            top: true,
             rest: ".",
             ..Magic::default()
         };
