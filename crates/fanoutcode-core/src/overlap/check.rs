@@ -81,14 +81,13 @@ fn target_path(input: &CheckInput) -> Option<PathBuf> {
     }))
 }
 
-/// Another task's claims on `path` in `file`, minus those `grants` cover. Empty when this task claims it too.
+/// The other tasks' claims on `path` in `file`, minus those `grants` cover. This task's own claim on the path is
+/// skipped, never a reason to allow: after it edited on top of another task's claim, that task's uncommitted
+/// changes are still there, and only a grant (which it then holds) lets it go on.
 fn uncovered<'a>(file: &'a ClaimsFile, path: &str, own: &TaskId, grants: &GrantsFile) -> Vec<&'a Claim> {
-    let on_path: Vec<&Claim> = file.claims.iter().filter(|c| c.path == path).collect();
-    if on_path.iter().any(|c| c.task_id.as_ref() == Some(own)) {
-        return Vec::new();
-    }
-    on_path
-        .into_iter()
+    file.claims
+        .iter()
+        .filter(|c| c.path == path && c.task_id.as_ref() != Some(own))
         .filter(|c| !grants.covers(&file.repo_root, path, c.task_id.as_ref()))
         .collect()
 }

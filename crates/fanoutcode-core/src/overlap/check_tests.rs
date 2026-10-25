@@ -108,6 +108,35 @@ fn allows_own_claim() {
 }
 
 #[test]
+fn a_file_both_tasks_claim_still_asks_about_the_other() {
+    // A (this task) edited on top of B's claim earlier; B still has uncommitted changes there
+    let mut file = repo(Path::new("/r"));
+    file.claims.push(claim("src/both.ts", Some("t-a1"), "Login"));
+    file.claims.push(claim("src/both.ts", Some("t-b2"), "Checkout"));
+    let ask = |grants: &GrantsFile| evaluate(&edit("/r/src/both.ts", "/r"), &id("t-a1"), &[file.clone()], grants, true);
+    assert!(matches!(ask(&GrantsFile::default()),
+        CheckDecision::Deny { other: Some(ref c), .. } if c.task_id == Some(id("t-b2"))));
+    // A's own grant on B covers it, by file or for every file
+    let at = "2026-10-25T10:00:00Z".parse().unwrap();
+    for scope in [
+        GrantScope::File {
+            repo: "/r".into(),
+            path: "src/both.ts".into(),
+        },
+        GrantScope::AllFiles,
+    ] {
+        let grants = GrantsFile {
+            grants: vec![Grant {
+                other_task: Some(id("t-b2")),
+                scope,
+                granted_at: at,
+            }],
+        };
+        assert_eq!(ask(&grants), CheckDecision::Allow);
+    }
+}
+
+#[test]
 fn denies_other_tasks_claim_with_reason_and_logs_claim_denied() {
     assert_eq!(
         decide(&edit("/r/src/a.ts", "/r"), &GrantsFile::default(), false),
