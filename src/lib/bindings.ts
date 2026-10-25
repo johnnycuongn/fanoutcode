@@ -1184,7 +1184,8 @@ host: string | null;
  */
 id: string; 
 /**
- * A file or folder: never trusted unless approved one by one in the preview.
+ * Always true: every imported reference (file, folder, link, Confluence page) is trusted only when approved one
+ * by one in the preview.
  */
 needs_approval: boolean; 
 /**

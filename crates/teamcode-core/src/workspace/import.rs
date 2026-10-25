@@ -22,8 +22,7 @@ use crate::{Error, Result};
 /// Which imported references become trusted.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum DocTrust {
-    /// Shown in a preview the developer confirmed: one flag per reference (a file or folder only when approved by
-    /// the developer also allowed those).
+    /// Shown in a preview the developer confirmed: one flag per reference, true only for those approved by id.
     Confirmed(Vec<bool>),
     /// Unchanged from the record: each keeps the trust of the matching stored doc.
     Existing,
@@ -62,7 +61,8 @@ pub struct ImportDoc {
     pub host: Option<String>,
     /// The doc's id in the file: what `confirm_open` approves file and folder references by.
     pub id: String,
-    /// A file or folder: never trusted unless approved one by one in the preview.
+    /// Always true: every imported reference (file, folder, link, Confluence page) is trusted only when approved one
+    /// by one in the preview.
     pub needs_approval: bool,
     /// A file or folder outside every project the file names (a warning shown beside it).
     pub outside_projects: bool,
@@ -93,8 +93,6 @@ pub struct WorkspaceImportPreview {
 
 /// A preview waiting for its confirm: the file exactly as read and its roots as they resolved then.
 pub(crate) struct PendingImport {
-    /// Per reference: a file or folder, which needs per-doc approval.
-    needs_approval: Vec<bool>,
     path: PathBuf,
     file: WorkspaceFile,
     roots: Vec<PathBuf>,
@@ -193,7 +191,8 @@ pub fn preview_open(store: &WorkspaceStore, path: &Path, env: &OpenEnv) -> Resul
                 label: d.label.clone(),
                 page_id: d.page_id.clone(),
                 id: d.id.clone(),
-                needs_approval: matches!(d.kind, ContextDocKind::File | ContextDocKind::Folder),
+                // every imported reference is approved one by one, whatever its kind
+                needs_approval: true,
                 outside_projects: *out,
                 host: url::Url::parse(&d.target)
                     .ok()
@@ -211,11 +210,6 @@ pub fn preview_open(store: &WorkspaceStore, path: &Path, env: &OpenEnv) -> Resul
     pending.insert(
         token,
         PendingImport {
-            needs_approval: file
-                .context_docs
-                .iter()
-                .map(|d| matches!(d.kind, ContextDocKind::File | ContextDocKind::Folder))
-                .collect(),
             path,
             file,
             roots,
@@ -230,9 +224,9 @@ pub fn preview_open(store: &WorkspaceStore, path: &Path, env: &OpenEnv) -> Resul
 /// another record elsewhere is imported under a fresh id (written into the file on its next save) and inherits
 /// nothing from that record. Refused when the token is unknown or expired, the preview was blocked, or a root now
 /// resolves to a different folder.
-/// `approved_doc_ids` names the file and folder references (by their id in the preview) the developer approved one
-/// by one; every other file or folder reference is imported untrusted and never read nor named in prompts. A root
-/// the file declares never implies approval.
+/// `approved_doc_ids` names the references (by their id in the preview) the developer approved one by one; every
+/// other reference, of any kind, is imported untrusted and never read, fetched nor named in prompts. A root the file
+/// declares never implies approval.
 pub fn confirm_open(
     store: &WorkspaceStore,
     token: &str,
@@ -258,13 +252,12 @@ pub fn confirm_open(
         None if store.exists(&pending.file.id)? => (WorkspaceId::new(), true),
         None => (pending.file.id.clone(), false),
     };
-    // every reference was listed in the preview the developer confirmed
+    // a reference is trusted only when the developer approved it by id in the preview
     let trust = pending
         .file
         .context_docs
         .iter()
-        .zip(&pending.needs_approval)
-        .map(|(d, needs)| !needs || approved_doc_ids.contains(&d.id))
+        .map(|d| approved_doc_ids.contains(&d.id))
         .collect();
     super::open::import(
         store,
@@ -526,7 +519,19 @@ mod tests {
         );
         let p = preview_open(&s, &path, &env).unwrap();
         assert_eq!(p.docs[0].host.as_deref(), Some("wiki.corp"));
+        assert!(p.docs[0].needs_approval, "links are approved one by one too");
         let ws = confirm_open(&s, &p.token, &[], &env).unwrap();
+        let stored = crate::workspace::context_docs::list_rows(
+            &s.db().lock().unwrap(),
+            &Container::Workspace { id: ws.id.clone() },
+        )
+        .unwrap();
+        assert!(
+            !stored[0].trusted,
+            "an imported link not in the approved list stays untrusted"
+        );
+        let p = preview_open(&s, &path, &env).unwrap();
+        let ws = confirm_open(&s, &p.token, &["doc-1".to_owned()], &env).unwrap();
         let stored =
             crate::workspace::context_docs::list_rows(&s.db().lock().unwrap(), &Container::Workspace { id: ws.id })
                 .unwrap();

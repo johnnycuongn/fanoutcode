@@ -1,6 +1,6 @@
 // The review of a workspace file before it is imported: each project folder, the linking policy in plain words, and
-// what the file adds (agents, prompt instructions, settings, references). File and folder references are approved
-// one by one. Mounted once at the window root; `openWorkspaceFile` fills it.
+// what the file adds (agents, prompt instructions, settings, references). Every reference is approved one by one.
+// Mounted once at the window root; `openWorkspaceFile` fills it.
 import type { ReactElement } from "react";
 import {
   Badge,
@@ -42,23 +42,19 @@ function References({ p, approved }: { p: WorkspaceImportPreview; approved: stri
   if (p.docs.length === 0) return null;
   return (
     <ul className="flex flex-col gap-1 text-sm" aria-label="References">
-      {p.docs.map((d) =>
-        d.needs_approval ? (
-          <li key={d.id} className="flex flex-col gap-0.5">
-            <Checkbox
-              aria-label={`Allow reading ${d.target}`}
-              label={<span className="font-mono text-xs">{d.target}</span>}
-              checked={approved.includes(d.id)}
-              onCheckedChange={() => importStore.toggle(d.id)}
-            />
-            {d.outside_projects && <span className="pl-6 text-xs text-warn">Outside the workspace's projects</span>}
-          </li>
-        ) : (
-          <li key={d.id} className="text-xs text-mute">
-            {`${d.label} (${d.host ?? d.target})`}
-          </li>
-        ),
-      )}
+      {p.docs.map((d) => (
+        <li key={d.id} className="flex flex-col gap-0.5">
+          <Checkbox
+            aria-label={`Allow reading ${d.target}`}
+            label={
+              <span className="font-mono text-xs">{d.host ? `${d.label} — ${d.host} (${d.target})` : d.target}</span>
+            }
+            checked={approved.includes(d.id)}
+            onCheckedChange={() => importStore.toggle(d.id)}
+          />
+          {d.outside_projects && <span className="pl-6 text-xs text-warn">Outside the workspace's projects</span>}
+        </li>
+      ))}
     </ul>
   );
 }
