@@ -36,7 +36,8 @@ pub fn dispatch(
                     task = t;
                 }
             }
-            e @ Effect::RunTest => no_runner(&task, &e), // STUB(plan 05)
+            // No-op by design: the task page's Test tab owns the run through `tests_run`.
+            Effect::RunTest => {}
             Effect::RunHelper(kind) => crate::helpers::run(app, &task.id, kind),
             // apply consumes the persistence effects; none reaches here
             e @ (Effect::SetStage(_) | Effect::SetState(_) | Effect::SetArchived(_) | Effect::WriteIndex(_)) => {
@@ -49,8 +50,4 @@ pub fn dispatch(
     }
     session_service::apply_effects(app, &task, action, &session);
     toasts
-}
-
-fn no_runner(task: &Task, effect: &Effect) {
-    eprintln!("Team Code: effect {effect:?} has no runner yet (task {})", task.id);
 }

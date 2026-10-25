@@ -1,6 +1,14 @@
 // Builders for the board's tests. The only place a `Container` or a `Task` literal is spelled out.
-import type { AgentState, Container, HandbackReason, Project, Task } from "@/lib/bindings";
-import type { CostSummary, HookEvent, TaskEvent } from "../stubs/plan05";
+import type {
+  AgentState,
+  Container,
+  CostSummary,
+  HandbackReason,
+  HookEvent,
+  Project,
+  Task,
+  TaskEvent,
+} from "@/lib/bindings";
 
 export const WORKING: AgentState = { type: "Working" };
 export const IDLE: AgentState = { type: "Idle" };

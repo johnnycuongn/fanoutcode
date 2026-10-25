@@ -1,11 +1,10 @@
 // What a card says the agent is doing: the last line it produced, the file it is editing (with +/-) and its team.
 // Seeded from `tasks_activity` at launch, then kept current by `team-event` and `git-changes`.
-import type { Container, JsonValue } from "@/lib/bindings";
+import type { Container, HookEvent, JsonValue, RepoChanges } from "@/lib/bindings";
 import { createStore } from "@/lib/stores/createStore";
 import { firstLine } from "./chipText";
 import { ipc } from "./ipc";
 import { all, track } from "./listen";
-import type { HookEvent, RepoChanges } from "./stubs/plan05";
 import type { CardActivity, TeamMember } from "./types";
 
 /** The line a role prints when it finishes a stage (overview: `SENTINEL_PREFIX`). */

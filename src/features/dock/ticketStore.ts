@@ -1,11 +1,25 @@
 // The Ticket tab's state per task: the linked Jira issue, search results to link one, and comment posting. Errors
 // (e.g. no Jira site linked) are kept verbatim for the tab to show.
-import type { Task, TaskId } from "@/lib/bindings";
-import { errorMessage } from "@/lib/ipcResult";
+import type { Issue, Task, TaskId, TaskPatch } from "@/lib/bindings";
+import { errorMessage, live, type Live } from "@/lib/ipcResult";
 import { createStore } from "@/lib/stores/createStore";
-import { jiraIpc, type Issue } from "./jira";
 
-export type TicketIpc = typeof jiraIpc;
+export type TicketIpc = Live<"jiraIssue" | "jiraComment" | "jiraSearch" | "tasksUpdate">;
+
+/** The full TaskPatch for a change to the Jira key alone (`null` unlinks). */
+export function jiraKeyPatch(jiraKey: string | null): TaskPatch {
+  return {
+    priority: null,
+    color: null,
+    clear_color: false,
+    flagged: null,
+    hidden: null,
+    jira_key: jiraKey,
+    clear_jira_key: jiraKey === null,
+    worktree: null,
+    agent_kind: null,
+  };
+}
 export interface TicketTaskState {
   issue: Issue | null;
   results: Issue[];
@@ -61,7 +75,7 @@ export function createTicketStore(ipc: TicketIpc) {
     },
     async link(task: Task, key: string): Promise<void> {
       try {
-        await ipc.tasksUpdate(task.id, { jira_key: key });
+        await ipc.tasksUpdate(task.id, jiraKeyPatch(key));
       } catch (e) {
         patch(task.id, { error: errorMessage(e) });
         return;
@@ -73,4 +87,4 @@ export function createTicketStore(ipc: TicketIpc) {
 
 export type TicketStore = ReturnType<typeof createTicketStore>;
 
-export const ticketStore = createTicketStore(jiraIpc);
+export const ticketStore = createTicketStore(live("jiraIssue", "jiraComment", "jiraSearch", "tasksUpdate"));

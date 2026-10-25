@@ -1,10 +1,9 @@
 // Cost on the board: how a summary reads (`~$0.42` while estimated) and the cost store, fed by `cost_summary` and kept
 // current by `cost-updated`. Nothing here runs unless the cost overview is on.
-import type { Container, Scope } from "@/lib/bindings";
+import type { Container, CostSummary, Scope } from "@/lib/bindings";
 import { createStore } from "@/lib/stores/createStore";
 import { ipc } from "./ipc";
 import { track } from "./listen";
-import type { CostSummary } from "./stubs/plan05";
 
 /** Two decimals; a `~` prefix marks an estimate. */
 export function formatCost(c: Pick<CostSummary, "cost_usd" | "estimated">): string {

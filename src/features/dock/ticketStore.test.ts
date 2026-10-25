@@ -1,14 +1,17 @@
 import { expect, test, vi, type Mock } from "vitest";
 import { makeTask } from "@/test/taskPageFixtures";
-import type { Issue } from "./jira";
-import { createTicketStore, type TicketIpc } from "./ticketStore";
+import type { Issue } from "@/lib/bindings";
+import { createTicketStore, jiraKeyPatch, type TicketIpc } from "./ticketStore";
 
 const issue: Issue = {
   key: "TC-12",
   summary: "Add dock",
   status: "In Progress",
   assignee: "Johnny",
+  issue_type: "Task",
+  description: "",
   url: "https://x.atlassian.net/browse/TC-12",
+  updated: "2026-10-24T08:00:00Z",
 };
 const fakeIpc = (): TicketIpc =>
   ({
@@ -40,7 +43,7 @@ test("comment posts and reports success; link updates the task and loads the iss
   await expect(s.comment(t, "Looks good")).resolves.toBe(true);
   expect(ipc.jiraComment).toHaveBeenCalledWith("proj-1", "TC-12", "Looks good");
   await s.link(makeTask({ jira_key: null }), "TC-12");
-  expect(ipc.tasksUpdate).toHaveBeenCalledWith("task-1", { jira_key: "TC-12" });
+  expect(ipc.tasksUpdate).toHaveBeenCalledWith("task-1", jiraKeyPatch("TC-12"));
   expect(ipc.jiraIssue).toHaveBeenCalledWith("proj-1", "TC-12");
 });
 test("search fills results", async () => {

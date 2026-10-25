@@ -6,26 +6,21 @@ import {
   events,
   type ActionOutcome,
   type Container,
+  type CostSummary,
   type CostUpdated,
   type GitChanges,
+  type RepoChanges,
   type Result,
   type Scope,
   type Stage,
   type Task,
+  type TaskActivity,
   type TaskChanged,
   type TaskPatch,
   type TasksReloaded,
+  type TeamEvent,
   type WindowInfo,
 } from "@/lib/bindings";
-import { costSummary, gitChanges } from "@/lib/pendingCommands";
-import {
-  listenTeamEvent,
-  tasksActivity,
-  type CostSummary,
-  type RepoChanges,
-  type TaskActivity,
-  type TeamEventPayload,
-} from "./stubs/plan05";
 import type { TaskPatchInput } from "./types";
 
 export type Unlisten = () => void;
@@ -33,7 +28,7 @@ export type Unlisten = () => void;
 export type EventMap = {
   "task-changed": TaskChanged;
   "tasks-reloaded": TasksReloaded;
-  "team-event": TeamEventPayload;
+  "team-event": TeamEvent;
   "cost-updated": CostUpdated;
   "git-changes": GitChanges;
 };
@@ -74,7 +69,7 @@ function listen<K extends EventName>(name: K, cb: (payload: EventMap[K]) => void
     case "git-changes":
       return events.gitChanges.listen((e) => handler(e.payload));
     case "team-event":
-      return listenTeamEvent(handler as (payload: TeamEventPayload) => void);
+      return events.teamEvent.listen((e) => handler(e.payload));
   }
   throw new Error(`Unknown event ${String(name)}`);
 }
@@ -113,11 +108,13 @@ export const ipc = {
     return unwrap(await commands.windowsList());
   },
   async gitChanges(taskId: string): Promise<RepoChanges[]> {
-    return unwrap(await gitChanges(taskId));
+    return unwrap(await commands.gitChanges(taskId));
   },
   async costSummary(scope: Scope): Promise<CostSummary> {
-    return unwrap(await costSummary(scope));
+    return unwrap(await commands.costSummary(scope));
   },
-  tasksActivity: (container: Container): Promise<TaskActivity[]> => tasksActivity(container),
+  async tasksActivity(container: Container): Promise<TaskActivity[]> {
+    return unwrap(await commands.tasksActivity(container));
+  },
   on: listen,
 };

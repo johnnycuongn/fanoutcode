@@ -1,7 +1,6 @@
 // Test builders for the generated domain types. Every enum value in a test comes from here, the layout helpers
 // (src/features/views/layout.ts) or projectContainer/workspaceContainer (src/lib/stores/tasksStore.ts).
-import type { AgentState, HandbackReason, Project, Task, View, Workspace } from "@/lib/bindings";
-import type { CostSummary } from "@/lib/pendingCommands";
+import type { AgentState, CostSummary, HandbackReason, Project, Task, View, Workspace } from "@/lib/bindings";
 
 const AT = "2026-10-24T08:00:00Z";
 

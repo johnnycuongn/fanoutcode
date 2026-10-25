@@ -8,7 +8,7 @@ import {
   reduceActivity,
   startActivityEvents,
 } from "./activity";
-import type { HookEvent } from "./stubs/plan05";
+import type { ChangedFile, HookEvent } from "@/lib/bindings";
 import { makeEvent, projectContainer } from "./testing/fixtures";
 import { mockIpc } from "./testing/mockIpc";
 
@@ -153,7 +153,17 @@ describe("activityStore", () => {
   });
   it("applyChanges fills +/- for the current file from git_changes", () => {
     activityStore.set({ "t-1": reduceActivity(emptyActivity, edit("/r/src/b.ts")) });
-    applyChanges("t-1", [{ repo_root: "/r", files: [{ path: "src/b.ts", added: 12, removed: 3 }] }]);
+    const file: ChangedFile = {
+      path: "src/b.ts",
+      status: "Modified",
+      added: 12,
+      removed: 3,
+      binary: false,
+      owners: [],
+      shared: false,
+      source: "Worktree",
+    };
+    applyChanges("t-1", [{ repo_root: "/r", base: null, files: [file], other: [] }]);
     expect(activityStore.get()["t-1"]!.currentFile).toEqual({ path: "/r/src/b.ts", added: 12, removed: 3 });
   });
   it("git-changes refetches only a task with a current file", async () => {

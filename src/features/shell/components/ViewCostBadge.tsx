@@ -2,9 +2,8 @@
 // refetched per task on `cost-updated`.
 import { useEffect, useState, type ReactElement } from "react";
 import { Badge } from "@/components/ui";
-import { events, type TaskId, type ViewId } from "@/lib/bindings";
+import { commands, events, type CostSummary, type TaskId, type ViewId } from "@/lib/bindings";
 import { formatUsd } from "@/lib/format";
-import { costSummary, type CostSummary } from "@/lib/pendingCommands";
 import { taskScope } from "@/features/settings";
 import { viewTaskIds, viewsStore } from "@/features/views";
 
@@ -15,7 +14,7 @@ function useTaskCosts(ids: TaskId[]): Record<TaskId, CostSummary> {
     let live = true;
     const wanted = new Set(key ? key.split(",") : []);
     const fetchOne = async (id: TaskId) => {
-      const r = await costSummary(taskScope(id));
+      const r = await commands.costSummary(taskScope(id));
       if (live && r?.status === "ok") setByTask((s) => ({ ...s, [id]: r.data }));
     };
     for (const id of wanted) void fetchOne(id);

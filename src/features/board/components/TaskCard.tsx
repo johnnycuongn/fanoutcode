@@ -1,11 +1,10 @@
 import { Bookmark, Flag } from "lucide-react";
 import { memo, type KeyboardEvent, type MouseEvent, type ReactElement, type ReactNode, type Ref } from "react";
 import { Badge, Tooltip, cx } from "@/components/ui";
-import type { AgentKind, DetailLevel, Priority, Project, Task } from "@/lib/bindings";
+import type { AgentKind, CostSummary, DetailLevel, Priority, Project, Task } from "@/lib/bindings";
 import { swatchClass } from "@/lib/theme";
 import { chipFor } from "../chipText";
 import { formatCost, formatTokens } from "../cost";
-import type { CostSummary } from "../stubs/plan05";
 import type { CardActivity, OpenTarget } from "../types";
 import { CardChip } from "./CardChip";
 import { CardStepper } from "./CardStepper";

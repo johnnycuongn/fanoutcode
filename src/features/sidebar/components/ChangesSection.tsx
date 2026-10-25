@@ -2,8 +2,7 @@
 // with its Changes dock tab; a task's list refetches on its `git-changes` event.
 import { useEffect, useState, type ReactElement } from "react";
 import { Button, EmptyState } from "@/components/ui";
-import { events, type ProjectId, type Task, type TaskId } from "@/lib/bindings";
-import { gitChanges, type RepoChanges } from "@/lib/pendingCommands";
+import { commands, events, type ProjectId, type RepoChanges, type Task, type TaskId } from "@/lib/bindings";
 import { selectTaskList, tasksStore } from "@/lib/stores/tasksStore";
 import { openTaskInCurrentView } from "@/features/shell";
 
@@ -22,7 +21,7 @@ function useChanges(ids: TaskId[]): Record<TaskId, RepoChanges[]> {
     let live = true;
     const wanted = new Set(key ? key.split(",") : []);
     const fetchOne = async (id: TaskId) => {
-      const r = await gitChanges(id);
+      const r = await commands.gitChanges(id);
       if (live && r?.status === "ok") setByTask((s) => ({ ...s, [id]: r.data }));
     };
     for (const id of wanted) void fetchOne(id);

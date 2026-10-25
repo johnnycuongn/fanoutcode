@@ -1,5 +1,4 @@
-// Board-local types. Everything that crosses IPC comes from `@/lib/bindings` (or, until Plan 05 lands, the
-// `stubs/plan05.ts` wrapper); these are view-model shapes only.
+// Board-local types. Everything that crosses IPC comes from `@/lib/bindings`; these are view-model shapes only.
 import type {
   Container,
   DetailLevel,

@@ -2,9 +2,8 @@
 // it for the workspace panel.
 import { useEffect, useState, type ReactElement } from "react";
 import { Panel } from "@/components/ui";
-import { events, type Scope } from "@/lib/bindings";
+import { commands, events, type CostLine, type CostSummary, type Scope } from "@/lib/bindings";
 import { formatUsd } from "@/lib/format";
-import { costSummary, type CostLine, type CostSummary } from "@/lib/pendingCommands";
 import { tasksStore } from "@/lib/stores/tasksStore";
 
 function useCostSummary(scope: Scope): CostSummary | null {
@@ -13,7 +12,7 @@ function useCostSummary(scope: Scope): CostSummary | null {
   useEffect(() => {
     let live = true;
     const s = JSON.parse(key) as Scope;
-    const load = () => void costSummary(s).then((r) => live && r?.status === "ok" && setSummary(r.data));
+    const load = () => void commands.costSummary(s).then((r) => live && r?.status === "ok" && setSummary(r.data));
     load();
     const off = events.costUpdated.listen(() => load());
     return () => {
