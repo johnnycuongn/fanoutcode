@@ -1,6 +1,16 @@
-//! The git guard's pathspecs (§5.6): which claimed paths a pathspec names. Understands `:/`, `:(top)`, excludes
-//! (`:!`, `:^`, `:(exclude)`) and `*` / `?` / `[…]` globs; other magic is read as a plain path. When unsure it names
-//! more, never less.
+//! The git guard's pathspecs (§5.6): which claimed paths a pathspec names.
+//!
+//! This is a deliberately conservative over-approximation of git's matcher, not a copy of it. Git reads pathspecs
+//! through magic, case folding, `:(glob)` rules and settings the guard cannot all see (`GIT_ICASE_PATHSPECS` may be
+//! exported earlier or inherited, `core.ignorecase`, Unicode folding), and every place where the two disagree is a
+//! way past the guard. So the answer is allowed to name too much, never too little:
+//!
+//! - an include always matches ASCII case-insensitively;
+//! - `*` and `?` are matched (crossing `/`, git's default); a bracket expression or `:(glob)` magic names every claim
+//!   under the spec's literal directory prefix;
+//! - an exclude is honoured only when it is plain ASCII without wildcards, matched exactly; any other excludes
+//!   nothing;
+//! - unknown long-form magic, or a glob over `MAX_GLOB` chars, names every claim.
 
 use std::path::Path;
 
@@ -14,89 +24,49 @@ const MAX_GLOB: usize = 256;
 enum Tok {
     Lit(char),
     One,
-    Set { negate: bool, ranges: Vec<(char, char)> },
     Star,
 }
 
-/// The glob as tokens, consecutive `*` collapsed. A `[` without its `]` is a literal.
+/// The `*` / `?` glob as tokens, consecutive `*` collapsed.
 fn tokens(pat: &str) -> Vec<Tok> {
-    let chars: Vec<char> = pat.chars().collect();
     let mut out = Vec::new();
-    let mut i = 0;
-    while i < chars.len() {
-        match chars[i] {
-            '*' => {
-                if out.last() != Some(&Tok::Star) {
-                    out.push(Tok::Star);
-                }
-                i += 1;
-            }
-            '?' => {
-                out.push(Tok::One);
-                i += 1;
-            }
-            '[' => match chars[i + 1..].iter().skip(1).position(|c| *c == ']').map(|n| i + 2 + n) {
-                Some(close) => {
-                    let mut set = &chars[i + 1..close];
-                    let negate = matches!(set.first(), Some('!' | '^'));
-                    if negate {
-                        set = &set[1..];
-                    }
-                    let mut ranges = Vec::new();
-                    let mut j = 0;
-                    while j < set.len() {
-                        if j + 2 < set.len() && set[j + 1] == '-' {
-                            ranges.push((set[j], set[j + 2]));
-                            j += 3;
-                        } else {
-                            ranges.push((set[j], set[j]));
-                            j += 1;
-                        }
-                    }
-                    out.push(Tok::Set { negate, ranges });
-                    i = close + 1;
-                }
-                None => {
-                    out.push(Tok::Lit('['));
-                    i += 1;
-                }
-            },
-            c => {
-                out.push(Tok::Lit(c));
-                i += 1;
-            }
+    for c in pat.chars() {
+        match c {
+            '*' if out.last() == Some(&Tok::Star) => {}
+            '*' => out.push(Tok::Star),
+            '?' => out.push(Tok::One),
+            c => out.push(Tok::Lit(c)),
         }
     }
     out
 }
 
-fn one(tok: &Tok, c: char) -> bool {
-    match tok {
-        Tok::Lit(l) => *l == c,
-        Tok::One => true,
-        Tok::Set { negate, ranges } => ranges.iter().any(|(a, b)| (*a..=*b).contains(&c)) != *negate,
-        Tok::Star => false,
-    }
-}
-
-/// Git's pathspec wildcard match without `:(glob)` magic (`*` and `?` cross `/`), iterative: O(pattern × text),
-/// backtracking only to the last `*`.
+/// Wildcard match, `*` and `?` crossing `/`, iterative: O(pattern × text), backtracking only to the last `*`.
 fn glob_match(pat: &[Tok], text: &[char]) -> bool {
     let (mut p, mut t) = (0, 0);
     let mut star: Option<(usize, usize)> = None;
     while t < text.len() {
-        if p < pat.len() && pat[p] == Tok::Star {
-            star = Some((p, t));
-            p += 1;
-        } else if p < pat.len() && one(&pat[p], text[t]) {
-            p += 1;
-            t += 1;
-        } else if let Some((sp, st)) = star {
-            p = sp + 1;
-            t = st + 1;
-            star = Some((sp, st + 1));
-        } else {
-            return false;
+        match pat.get(p) {
+            Some(Tok::Star) => {
+                star = Some((p, t));
+                p += 1;
+            }
+            Some(Tok::One) => {
+                p += 1;
+                t += 1;
+            }
+            Some(Tok::Lit(c)) if *c == text[t] => {
+                p += 1;
+                t += 1;
+            }
+            _ => match star {
+                Some((sp, st)) => {
+                    p = sp + 1;
+                    t = st + 1;
+                    star = Some((sp, st + 1));
+                }
+                None => return false,
+            },
         }
     }
     pat[p..].iter().all(|tok| *tok == Tok::Star)
@@ -124,15 +94,17 @@ struct Magic<'a> {
     top: bool,
     /// `:!x`, `:^x`, `:(exclude)x`: takes paths away.
     exclude: bool,
-    icase: bool,
-    /// `:(literal)x`: no glob.
+    /// `:(literal)x`: no wildcards.
     literal: bool,
+    /// `:(glob)x`: not modelled, so everything under the prefix.
+    glob: bool,
     /// A long-form word not understood here: the spec counts as naming every claim.
     unknown: bool,
     rest: &'a str,
 }
 
-/// Parses `:<short magic>[:]rest` (`/`, `!`, `^`; git drops one `:` after them) and `:(<word>,…)rest`.
+/// Parses `:<short magic>[:]rest` (`/`, `!`, `^`; git drops one `:` after them) and `:(<word>,…)rest`. `icase`
+/// needs no flag: includes always fold case.
 fn magic(spec: &str) -> Magic<'_> {
     let Some(after) = spec.strip_prefix(':') else {
         return Magic {
@@ -156,10 +128,9 @@ fn magic(spec: &str) -> Magic<'_> {
             match w {
                 "top" => m.top = true,
                 "exclude" => m.exclude = true,
-                "icase" => m.icase = true,
                 "literal" => m.literal = true,
-                // read as the plain glob, which names at least as much
-                "glob" => {}
+                "glob" => m.glob = true,
+                "icase" => {}
                 _ => m.unknown = true,
             }
         }
@@ -175,27 +146,28 @@ fn magic(spec: &str) -> Magic<'_> {
     }
 }
 
-/// The claimed paths one pathspec names, relative to `dir` or, `top`, to the repo root; `icase` (the spec's own or
-/// the command's) compares case-insensitively.
-fn name_one(m: &Magic<'_>, icase: bool, dir: &Path, repo: &Path, claimed: &[&Claim]) -> Vec<String> {
+/// `rel` names `path`: the path itself, everything under it as a directory, or all at the root.
+fn names(rel: &str, path: &str) -> bool {
+    rel.is_empty() || path == rel || path.strip_prefix(rel).is_some_and(|r| r.starts_with('/'))
+}
+
+/// The claimed paths one include names, relative to `dir` or, `top`, to the repo root, ASCII case folded.
+fn name_include(m: &Magic<'_>, dir: &Path, repo: &Path, claimed: &[&Claim]) -> Vec<String> {
     let every = || claimed.iter().map(|c| c.path.clone()).collect();
+    let fold = |s: &str| s.to_ascii_lowercase();
     if m.unknown {
         return every();
     }
-    let icase = icase || m.icase;
-    let fold = |s: &str| if icase { s.to_lowercase() } else { s.to_owned() };
     let base = if m.top { repo } else { dir };
-    if m.literal || !m.rest.contains(['*', '?', '[']) {
+    let wild = !m.literal && m.rest.contains(['*', '?', '[']);
+    if !wild && !m.glob {
         let Some(rel) = rel_in(repo, &resolve(m.rest, base)) else {
             return Vec::new();
         };
         let rel = fold(&rel);
         return claimed
             .iter()
-            .filter(|c| {
-                let p = fold(&c.path);
-                rel.is_empty() || p == rel || p.strip_prefix(&rel).is_some_and(|r| r.starts_with('/'))
-            })
+            .filter(|c| names(&rel, &fold(&c.path)))
             .map(|c| c.path.clone())
             .collect();
     }
@@ -209,7 +181,25 @@ fn name_one(m: &Magic<'_>, icase: bool, dir: &Path, repo: &Path, claimed: &[&Cla
     let Some(full) = normalise(&format!("{prefix}/{}", m.rest)) else {
         return Vec::new();
     };
-    let pat = tokens(&fold(&full));
+    let full = fold(&full);
+    if m.glob || full.contains('[') {
+        // everything under the literal directories before the first wildcard
+        let literal: Vec<&str> = full
+            .split('/')
+            .take_while(|part| !part.contains(['*', '?', '[']))
+            .collect();
+        let dir_prefix = if literal.len() == full.split('/').count() {
+            full.clone()
+        } else {
+            literal.join("/")
+        };
+        return claimed
+            .iter()
+            .filter(|c| names(&dir_prefix, &fold(&c.path)))
+            .map(|c| c.path.clone())
+            .collect();
+    }
+    let pat = tokens(&full);
     claimed
         .iter()
         .filter(|c| glob_match(&pat, &fold(&c.path).chars().collect::<Vec<_>>()))
@@ -217,10 +207,27 @@ fn name_one(m: &Magic<'_>, icase: bool, dir: &Path, repo: &Path, claimed: &[&Cla
         .collect()
 }
 
+/// The claimed paths one exclude takes away: only a plain ASCII path without wildcards or other magic, matched
+/// exactly; any other exclude takes nothing away.
+fn name_exclude(m: &Magic<'_>, dir: &Path, repo: &Path, claimed: &[&Claim]) -> Vec<String> {
+    let plain = !m.unknown && !m.glob && m.rest.is_ascii() && !m.rest.contains(['*', '?', '[', '\\']);
+    if !plain {
+        return Vec::new();
+    }
+    let base = if m.top { repo } else { dir };
+    let Some(rel) = rel_in(repo, &resolve(m.rest, base)) else {
+        return Vec::new();
+    };
+    claimed
+        .iter()
+        .filter(|c| names(&rel, &c.path))
+        .map(|c| c.path.clone())
+        .collect()
+}
+
 /// The claimed paths the given pathspecs (resolved against `dir`) name in `repo`: what the includes name, minus what
-/// the excludes name. Excludes alone stand for `dir` minus them, as git reads them. `icase`: the command set
-/// `--icase-pathspecs` or `GIT_ICASE_PATHSPECS`.
-pub(super) fn named(specs: &[&str], dir: &Path, repo: &Path, claimed: &[&Claim], icase: bool) -> Vec<String> {
+/// the excludes name. Excludes alone stand for `dir` minus them, as git reads them.
+pub(super) fn named(specs: &[&str], dir: &Path, repo: &Path, claimed: &[&Claim]) -> Vec<String> {
     let mut included = Vec::new();
     let mut excluded = Vec::new();
     let (mut any_include, mut any_exclude) = (false, false);
@@ -228,10 +235,10 @@ pub(super) fn named(specs: &[&str], dir: &Path, repo: &Path, claimed: &[&Claim],
         let m = magic(spec);
         if m.exclude && !m.unknown {
             any_exclude = true;
-            excluded.extend(name_one(&m, icase, dir, repo, claimed));
+            excluded.extend(name_exclude(&m, dir, repo, claimed));
         } else {
             any_include = true;
-            included.extend(name_one(&m, icase, dir, repo, claimed));
+            included.extend(name_include(&m, dir, repo, claimed));
         }
     }
     if !any_include && any_exclude {
@@ -239,7 +246,7 @@ pub(super) fn named(specs: &[&str], dir: &Path, repo: &Path, claimed: &[&Claim],
             rest: ".",
             ..Magic::default()
         };
-        included = name_one(&here, icase, dir, repo, claimed);
+        included = name_include(&here, dir, repo, claimed);
     }
     included.retain(|p| !excluded.contains(p));
     included
