@@ -36,12 +36,18 @@ vi.mock("@/lib/bindings", async () => {
     costSummary: vi.fn(async () => ({})),
     livespecAnalyze: vi.fn(async () => null),
     livespecCancel: vi.fn(async () => null),
+    overlapBaseSuggestion: vi.fn(async () => "main"),
+    overlapSetBase: vi.fn(async (_id: string, branch: string) => makeTask({ stage: "Done", base_branch: branch })),
+    overlapIntegrate: vi.fn(async () => null),
+    overlapIntegrationContext: vi.fn(async () => []),
   });
   return { commands: h.fakeCommands, events: fakeEvents };
 });
 vi.mock("../taskSource", async () => ({ tasksSource: (await import("../testing/fixtures")).makeTaskSource() })); // stands in for Plan 06's tasksStore
 
 import { dockStore } from "@/features/dock";
+import { overlapStore } from "@/features/overlap";
+import { setupUser } from "@/test/ui";
 import { specStore } from "@/features/spec-editor";
 import { taskPageStore } from "../store";
 import { tasksSource } from "../taskSource";
@@ -54,6 +60,7 @@ afterEach(() => {
   dockStore.store.reset();
   specStore.store.reset();
   taskPageStore.store.reset();
+  overlapStore.reset();
 });
 const home = { type: "Project", id: "proj-1" } as Container;
 const open = async (task: Task) => {
@@ -109,4 +116,67 @@ test("toggleDock flips the dock", async () => {
   const ref = await open(makeTask({ stage: "Plan" }));
   act(() => ref.current!.toggleDock());
   expect(screen.queryByRole("tab", { name: "Memory" })).toBeNull();
+});
+
+const openMenu = async () => {
+  // Radix opens its menu on pointerdown or a key, not a synthetic click
+  screen.getByRole("button", { name: "More actions" }).focus();
+  const user = setupUser();
+  await user.keyboard("{Enter}");
+  return user;
+};
+const doneWorktree = (base_branch: string | null) =>
+  makeTask({ stage: "Done", worktree: "On", worktree_path: "/wt/a", base_branch });
+
+test("an unset base opens the dialog before integrating", async () => {
+  await open(doneWorktree(null));
+  const user = await openMenu();
+  await user.click(await screen.findByRole("menuitem", { name: "Bring base in" }));
+  const input = await screen.findByLabelText("Base branch");
+  await waitFor(() => expect(input).toHaveProperty("value", "main"));
+  expect(fakeCommands.overlapIntegrate).not.toHaveBeenCalled();
+  await user.click(screen.getByRole("button", { name: "Bring main in" }));
+  await waitFor(() => expect(fakeCommands.overlapIntegrate).toHaveBeenCalledWith("task-1"));
+  expect(fakeCommands.overlapSetBase).toHaveBeenCalledWith("task-1", "main");
+  expect(fakeCommands.overlapSetBase.mock.invocationCallOrder[0]).toBeLessThan(
+    fakeCommands.overlapIntegrate.mock.invocationCallOrder[0]!,
+  );
+  await waitFor(() => expect(screen.queryByLabelText("Base branch")).toBeNull());
+});
+test("a confirmed base integrates at once, and a Precondition shows as an action error", async () => {
+  fakeCommands.overlapIntegrate.mockRejectedValueOnce("Finish the task first.");
+  await open(doneWorktree("main"));
+  const user = await openMenu();
+  await user.click(await screen.findByRole("menuitem", { name: "Bring main in" }));
+  await waitFor(() => expect(fakeCommands.overlapIntegrate).toHaveBeenCalledWith("task-1"));
+  expect(screen.queryByLabelText("Base branch")).toBeNull();
+  await waitFor(() => expect(taskPageStore.store.get().errors["task-1"]).toBe("Finish the task first."));
+});
+test("Decide opens the dock on the Overlap tab", async () => {
+  fakeCommands.overlapList.mockResolvedValue({
+    status: "ok",
+    data: [
+      {
+        task_id: "task-1",
+        other_task: "task-2",
+        repo_root: "/r",
+        path: "src/a.ts",
+        relation: "Claimed",
+        pending: null,
+        held: false,
+        noted_out: false,
+        noted_in: false,
+        decided_at: null,
+        updated_at: "2026-10-25T08:00:00Z",
+      },
+    ],
+  });
+  const ref = await open(
+    makeTask({ stage: "Plan", state: { type: "NeedsYou", reason: { type: "FileInUse", pending: 1 } } }),
+  );
+  act(() => ref.current!.toggleDock());
+  expect(screen.queryByRole("tab", { name: /Overlap/ })).toBeNull();
+  await act(() => ref.current!.primaryAction());
+  expect(await screen.findByRole("tab", { name: /Overlap/, selected: true })).toBeTruthy();
+  fakeCommands.overlapList.mockResolvedValue({ status: "ok", data: [] });
 });

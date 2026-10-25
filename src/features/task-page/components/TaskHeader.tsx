@@ -33,6 +33,7 @@ export interface TaskHeaderProps {
   onStopAgent(): void;
   onLinkIssue(): void;
   onToggleWorktree?(): void;
+  onIntegrate?(): void;
 }
 
 function RenameInput({ title, onDone, onCancel }: { title: string; onDone(t: string): void; onCancel(): void }) {
@@ -113,6 +114,7 @@ export function TaskHeader(p: TaskHeaderProps): ReactElement {
           onStopAgent={p.onStopAgent}
           onLinkIssue={p.onLinkIssue}
           {...(p.onToggleWorktree ? { onToggleWorktree: p.onToggleWorktree } : {})}
+          {...(p.onIntegrate ? { onIntegrate: p.onIntegrate } : {})}
         />
       </div>
       {p.linksChanged && <p className="mt-1 text-xs text-warn">{LINKS_CHANGED}</p>}

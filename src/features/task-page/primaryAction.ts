@@ -1,9 +1,14 @@
 // The task header's primary button per stage and hand-back state (§6). Button copy is this plan's; the chip text is
 // `handbackLabel` (A2). Plan 06's palette and Plan 07's card menu use `forwardActionFor` so every surface agrees.
 import type { Stage, StageAction, Task } from "@/lib/bindings";
+import type { DockTab } from "@/features/dock";
 import { handbackKind, isWorking } from "./agentState";
 
-export type PrimaryIntent = { kind: "action"; action: StageAction } | { kind: "focus-terminal" } | { kind: "none" };
+export type PrimaryIntent =
+  | { kind: "action"; action: StageAction }
+  | { kind: "focus-terminal" }
+  | { kind: "dock-tab"; tab: DockTab }
+  | { kind: "none" };
 export interface PrimaryButton {
   label: string;
   intent: PrimaryIntent;
@@ -69,6 +74,10 @@ function decide(task: Pick<Task, "stage" | "state" | "archived">, ctx: PrimaryCt
   const kind = handbackKind(task.state);
   if (kind === "Replied" && task.stage !== "Spec" && task.stage !== "Done")
     return button("Reply", { kind: "focus-terminal" });
+  // Plan 11: an overlap decision or a stuck merge is settled in the Overlap tab, whatever the stage (a Done card can
+  // be needs-you while it brings its base in).
+  if (kind === "FileInUse" || kind === "HoldingFor") return button("Decide", { kind: "dock-tab", tab: "overlap" });
+  if (kind === "MergeNeedsYou") return button("Resolve merge", { kind: "dock-tab", tab: "overlap" });
   if (task.stage === "Done") return button("Archive", { kind: "action", action: action("Archive") });
   if (task.stage === "Test") {
     if (isWorking(task.state)) return button("Running tests…", { kind: "none" }, true);

@@ -13,7 +13,14 @@ export interface TaskSettings {
 }
 
 export type TaskPageIpc = Live<
-  "tasksGet" | "tasksAction" | "tasksRename" | "sessionsStop" | "sessionsOpen" | "costSummary" | "settingsGet"
+  | "tasksGet"
+  | "tasksAction"
+  | "tasksRename"
+  | "sessionsStop"
+  | "sessionsOpen"
+  | "costSummary"
+  | "settingsGet"
+  | "overlapIntegrate"
 >;
 
 /** Page-local only. */

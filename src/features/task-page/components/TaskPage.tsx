@@ -13,8 +13,7 @@ import {
 } from "react";
 import { EmptyState, toast } from "@/components/ui";
 import type { Container, PaneId, Project, Task, TaskId } from "@/lib/bindings";
-import { live } from "@/lib/ipcResult";
-import { Dock, DockSplit, dockStore, nextOnGrowShortcut, type BodyMode } from "@/features/dock";
+import { Dock, DockSplit, dockStore, nextOnGrowShortcut, type BodyMode, type DockTab } from "@/features/dock";
 import { consumeDockTab } from "@/features/shell";
 import { SAVE_FAILED, specStore } from "@/features/spec-editor";
 import type { TerminalPaneHandle } from "@/features/views";
@@ -24,8 +23,10 @@ import { linksChanged } from "../links";
 import { primaryActionFor } from "../primaryAction";
 import { DEFAULT_TASK_SETTINGS, taskPageStore } from "../store";
 import { tasksSource } from "../taskSource";
+import { toggleWorktree } from "../worktree";
 import { TaskBody } from "./TaskBody";
 import { TaskHeader } from "./TaskHeader";
+import { useBringBaseIn } from "./useBringBaseIn";
 
 export interface TaskPageHandle {
   primaryAction(): void;
@@ -48,8 +49,6 @@ export interface TaskPageProps {
   ref?: Ref<TaskPageHandle>;
 }
 
-const { tasksUpdate } = live("tasksUpdate");
-
 export function TaskPage({
   taskId,
   paneId,
@@ -69,6 +68,7 @@ export function TaskPage({
   const [body, setBody] = useState<BodyMode>("terminal");
   const [renaming, setRenaming] = useState(false);
   const terminalRef = useRef<TerminalPaneHandle | null>(null);
+  const bringBaseIn = useBringBaseIn(task);
 
   useEffect(() => acquireTaskPageEvents(), []);
   useEffect(() => {
@@ -101,6 +101,11 @@ export function TaskPage({
   const open = dockOpen ?? (task ? dockStore.defaultOpen(task.stage) : false);
   const primary = task ? primaryActionFor(task, { mayCommit: settings.mayCommit, queued }) : null;
   const focusTerminal = () => terminalRef.current?.focus();
+  const openDockTab = (tab: DockTab) => {
+    if (!task) return;
+    dockStore.selectTab(task.stage, tab);
+    setDockOpen(true);
+  };
   const runPrimary = async () => {
     if (!task) return;
     if (task.stage === "Spec" && !task.archived) {
@@ -109,7 +114,7 @@ export function TaskPage({
       } catch (e) {
         toast.error(typeof e === "string" ? e : String(e));
       }
-    } else await taskPageStore.runPrimary(taskId, focusTerminal);
+    } else await taskPageStore.runPrimary(taskId, focusTerminal, openDockTab);
   };
   const growTeam = () => {
     if (!task) return;
@@ -157,23 +162,9 @@ export function TaskPage({
         onRename={(title) => void taskPageStore.rename(taskId, title)}
         onAction={(a) => void taskPageStore.act(taskId, a)}
         onStopAgent={() => void taskPageStore.stopAgent(taskId)}
-        onLinkIssue={() => {
-          dockStore.selectTab(task.stage, "ticket");
-          setDockOpen(true);
-        }}
-        onToggleWorktree={() =>
-          void tasksUpdate(taskId, {
-            priority: null,
-            color: null,
-            clear_color: false,
-            flagged: null,
-            hidden: null,
-            jira_key: null,
-            clear_jira_key: false,
-            worktree: task.worktree === "On" ? "Off" : "On",
-            agent_kind: null,
-          }).then(tasksSource.put, (e) => toast.error(String(e)))
-        }
+        onLinkIssue={() => openDockTab("ticket")}
+        onIntegrate={bringBaseIn.start}
+        onToggleWorktree={() => toggleWorktree(task)}
       />
       <div className="min-h-0 flex-1">
         <DockSplit
@@ -194,6 +185,7 @@ export function TaskPage({
           dock={<Dock task={task} settings={settings} open={open} teamSlot={team} projects={projects} />}
         />
       </div>
+      {bringBaseIn.dialog}
     </div>
   );
 }

@@ -99,3 +99,14 @@ test("selects Overlap once when a decision becomes pending", async () => {
   setCounts(1, 1);
   expect(screen.getByRole("tab", { name: /Overlap/ })).toHaveAttribute("data-state", "active");
 });
+
+test("a merge that needs you shows Overlap even with no overlap rows", async () => {
+  commands.overlapList.mockResolvedValue({ status: "ok", data: [] });
+  const d = createDockStore(mem());
+  const merging = makeTask({
+    stage: "Done",
+    state: { type: "NeedsYou", reason: { type: "MergeNeedsYou", repo: "/r", paths: ["src/a.ts"] } },
+  });
+  render(<Dock task={merging} settings={makeSettings()} open teamSlot={null} store={d} />);
+  expect(await screen.findByRole("tab", { name: /Overlap/ })).toBeTruthy();
+});

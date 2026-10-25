@@ -4,7 +4,7 @@ import { useEffect, useState, type ReactElement, type ReactNode } from "react";
 import { EmptyState, Panel, Tabs, TabsContent } from "@/components/ui";
 import type { Project, Task } from "@/lib/bindings";
 import { ChangesTab, changesStore, repoName } from "@/features/changes";
-import { OverlapTab, overlapStore, refreshOverlaps } from "@/features/overlap";
+import { mergeNeedsYou, OverlapTab, overlapStore, refreshOverlaps } from "@/features/overlap";
 import type { TaskSettings } from "@/features/task-page";
 import { dockStore, type DockStore } from "../store";
 import { GROWN_HEIGHT, resolveTab, visibleTabs } from "../tabRules";
@@ -79,7 +79,12 @@ export function Dock(p: DockProps): ReactElement | null {
     void refreshOverlaps(task.id);
   }, [open, task.id]);
   if (!open) return null;
-  const tabs = visibleTabs(task.stage, settings.testCommand !== null, overlaps.count > 0);
+  // §6.3: a stuck merge is settled in the Overlap tab even when no overlap rows remain.
+  const tabs = visibleTabs(
+    task.stage,
+    settings.testCommand !== null,
+    overlaps.count > 0 || mergeNeedsYou(task) !== null,
+  );
   const tab = forced && tabs.includes(forced) ? forced : resolveTab(task.stage, remembered, tabs);
   const select = (next: string) => {
     clearForced();

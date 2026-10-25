@@ -15,6 +15,10 @@ const done: AgentState = { type: "NeedsYou", reason: { type: "StageDone" } };
 const replied: AgentState = { type: "NeedsYou", reason: { type: "Replied", first_line: "Which API?" } };
 const failed: AgentState = { type: "NeedsYou", reason: { type: "TestFailed", exit_code: 1 } };
 const perm: AgentState = { type: "NeedsYou", reason: { type: "PermissionNeeded" } };
+const inUse: AgentState = { type: "NeedsYou", reason: { type: "FileInUse", pending: 2 } };
+const holding: AgentState = { type: "NeedsYou", reason: { type: "HoldingFor", other: "Login" } };
+const merge: AgentState = { type: "NeedsYou", reason: { type: "MergeNeedsYou", repo: "/r", paths: ["a.ts"] } };
+const overlapTab: PrimaryIntent = { kind: "dock-tab", tab: "overlap" };
 const ctx = { mayCommit: false, queued: false };
 const t = (stage: Stage, state: AgentState, archived = false) => ({ stage, state, archived });
 const act = (type: StageAction["type"]): PrimaryIntent => ({ kind: "action", action: { type } as StageAction });
@@ -34,6 +38,10 @@ test.each<[string, Parameters<typeof primaryActionFor>[0], PrimaryCtx, string, P
   ["Commit may commit", t("Commit", done), { ...ctx, mayCommit: true }, "Commit", act("Commit"), false],
   ["Commit may not", t("Commit", done), ctx, "Mark done", act("Advance"), false],
   ["Done", t("Done", idle), ctx, "Archive", act("Archive"), false],
+  ["Done stage done", t("Done", done), ctx, "Archive", act("Archive"), false],
+  ["file in use gives Decide opening the overlap tab", t("Build", inUse), ctx, "Decide", overlapTab, false],
+  ["holding for another task gives Decide", t("Build", holding), ctx, "Decide", overlapTab, false],
+  ["merge needs you gives Resolve merge", t("Done", merge), ctx, "Resolve merge", overlapTab, false],
   ["archived", t("Build", idle, true), ctx, "Restore", act("Restore"), false],
 ])("%s", (_n, task, c, label, intent, disabled) => {
   expect(primaryActionFor(task, c)).toMatchObject({ label, intent, disabled });
