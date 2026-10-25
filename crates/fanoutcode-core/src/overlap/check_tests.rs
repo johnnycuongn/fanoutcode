@@ -113,7 +113,15 @@ fn a_file_both_tasks_claim_still_asks_about_the_other() {
     let mut file = repo(Path::new("/r"));
     file.claims.push(claim("src/both.ts", Some("t-a1"), "Login"));
     file.claims.push(claim("src/both.ts", Some("t-b2"), "Checkout"));
-    let ask = |grants: &GrantsFile| evaluate(&edit("/r/src/both.ts", "/r"), &id("t-a1"), &[file.clone()], grants, true);
+    let ask = |grants: &GrantsFile| {
+        evaluate(
+            &edit("/r/src/both.ts", "/r"),
+            &id("t-a1"),
+            &[file.clone()],
+            grants,
+            true,
+        )
+    };
     assert!(matches!(ask(&GrantsFile::default()),
         CheckDecision::Deny { other: Some(ref c), .. } if c.task_id == Some(id("t-b2"))));
     // A's own grant on B covers it, by file or for every file
@@ -133,6 +141,30 @@ fn a_file_both_tasks_claim_still_asks_about_the_other() {
             }],
         };
         assert_eq!(ask(&grants), CheckDecision::Allow);
+    }
+}
+
+#[test]
+fn picks_the_deepest_repo_for_an_edit() {
+    // `/r/linked` is a repo of its own inside `/r`; its claims, not `/r`'s, decide a file under it
+    let inner = ClaimsFile {
+        repo_root: "/r/linked".into(),
+        written_at: "2026-10-25T10:00:00Z".parse().unwrap(),
+        claims: vec![claim("x.ts", Some("t-c3"), "Search")],
+    };
+    let mut outer = repo(Path::new("/r"));
+    outer.claims.push(claim("linked/free.ts", Some("t-b2"), "Checkout"));
+    for claims in [vec![outer.clone(), inner.clone()], vec![inner, outer]] {
+        let g = GrantsFile::default();
+        assert!(
+            matches!(evaluate(&edit("/r/linked/x.ts", "/r"), &id("t-a1"), &claims, &g, true),
+                CheckDecision::Deny { ref repo, path: Some(ref p), .. } if repo == Path::new("/r/linked") && p == "x.ts")
+        );
+        // the outer file's claim on the same path does not count: the inner repo holds it
+        assert_eq!(
+            evaluate(&edit("/r/linked/free.ts", "/r"), &id("t-a1"), &claims, &g, true),
+            CheckDecision::Allow
+        );
     }
 }
 
@@ -336,13 +368,32 @@ fn malformed_input_allows() {
     let h = hook(true);
     assert_eq!(run(&h, "not json"), None);
     assert_eq!(run(&h, "{\"tool_name\": \"Edit\"}"), None);
-    // unreadable claims and grants fail open
-    std::fs::write(&h.args.claims_paths[0], "{").unwrap();
+    let payload = json!({"tool_name": "Edit", "tool_input": {"file_path": h.root.join("src/a.ts")}, "cwd": h.root});
+    // an unreadable grants file is no grants: with the claims readable, the developer is asked (never allows more
+    // than they said)
     std::fs::create_dir_all(h.args.grants_path.parent().unwrap()).unwrap();
     std::fs::write(&h.args.grants_path, "[").unwrap();
-    let payload = json!({"tool_name": "Edit", "tool_input": {"file_path": h.root.join("src/a.ts")}, "cwd": h.root});
+    assert_eq!(
+        run(&h, &payload.to_string()).unwrap()["hookSpecificOutput"]["permissionDecision"],
+        "deny"
+    );
+    assert_eq!(log_lines(&h).len(), 1);
+    // an unreadable claims file fails open
+    let claims = std::fs::read(&h.args.claims_paths[0]).unwrap();
+    std::fs::write(&h.args.claims_paths[0], "{").unwrap();
     assert_eq!(run(&h, &payload.to_string()), None);
-    assert!(log_lines(&h).is_empty());
+    assert_eq!(log_lines(&h).len(), 1);
+    // and with it readable again and a grant written, the same edit passes
+    std::fs::write(&h.args.claims_paths[0], claims).unwrap();
+    let all = GrantsFile {
+        grants: vec![Grant {
+            other_task: Some(id("t-b2")),
+            scope: GrantScope::AllFiles,
+            granted_at: "2026-10-25T10:00:00Z".parse().unwrap(),
+        }],
+    };
+    std::fs::write(&h.args.grants_path, serde_json::to_vec(&all).unwrap()).unwrap();
+    assert_eq!(run(&h, &payload.to_string()), None);
 }
 
 #[test]
