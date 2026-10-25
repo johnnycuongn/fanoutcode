@@ -419,58 +419,6 @@ fn non_edit_tool_without_git_guard_allows() {
 }
 
 #[test]
-fn args_round_trip_through_the_hook_command() {
-    let args = CheckArgs {
-        task_id: id("t-a1"),
-        claims_paths: vec!["/d/claims/1.json".into(), "/d/claims/it's.json".into()],
-        grants_path: "/d/grants/t-a1.json".into(),
-        notes_path: "/d/notes/t-a1.json".into(),
-        log_path: "/d/events/t-a1.jsonl".into(),
-        ask_before: false,
-        guard_git: true,
-    };
-    let spec = check_hook_spec(Path::new("/Apps/Fanout Code/fanoutcode"), &args);
-    assert_eq!((spec.event.as_str(), spec.timeout_s), ("PreToolUse", Some(5)));
-    assert_eq!(spec.matcher.as_deref(), Some("Edit|Write|MultiEdit|NotebookEdit|Bash"));
-    assert_eq!(
-        spec.command,
-        "'/Apps/Fanout Code/fanoutcode' claim-check 't-a1' '/d/grants/t-a1.json' '/d/notes/t-a1.json' \
-         '/d/events/t-a1.jsonl' 0 1 '/d/claims/1.json' '/d/claims/it'\\''s.json'"
-    );
-    let argv: Vec<String> = [
-        "t-a1",
-        "/d/grants/t-a1.json",
-        "/d/notes/t-a1.json",
-        "/d/events/t-a1.jsonl",
-        "0",
-        "1",
-        "/d/claims/1.json",
-        "/d/claims/it's.json",
-    ]
-    .map(String::from)
-    .to_vec();
-    assert_eq!(CheckArgs::parse(&argv), Some(args));
-    assert_eq!(CheckArgs::parse(&argv[..5]), None);
-    let mut bad = argv.clone();
-    bad[0] = "../x".into();
-    assert_eq!(CheckArgs::parse(&bad), None);
-    for flag in [4, 5] {
-        let mut bad = argv.clone();
-        bad[flag] = "yes".into();
-        assert_eq!(CheckArgs::parse(&bad), None, "flag {flag}");
-    }
-    // ask on, guard off
-    let mut on = argv;
-    on[4] = "1".into();
-    on[5] = "0".into();
-    let parsed = CheckArgs::parse(&on).unwrap();
-    assert!(parsed.ask_before && !parsed.guard_git);
-    assert!(check_hook_spec(Path::new("/x"), &parsed)
-        .command
-        .contains("'/d/events/t-a1.jsonl' 1 0 "));
-}
-
-#[test]
 fn ask_off_allows_and_logs_claim_noted() {
     let h = hook_with(false, false);
     push_note(&h.args.notes_path, "Fanout Code: a note.").unwrap();

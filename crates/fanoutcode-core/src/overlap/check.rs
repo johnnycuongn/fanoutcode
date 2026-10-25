@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 use chrono::Utc;
 use serde::Deserialize;
 
+use super::check_log::{log_claim, log_command_ran};
 use super::claims::{read_claims, Claim, ClaimsFile};
 use super::denial::rule_kind;
 use super::git_rules::{evaluate_git, rel_in};
@@ -220,6 +221,44 @@ pub fn evaluate(
     }
 }
 
+/// The reason given when the hook's arguments no longer parse (`run_unparsed`).
+pub const STALE_HOOK_REASON: &str = "Fanout Code updated: restart this task's session to pick up the new hook.";
+
+/// The hook of a session whose arguments do not parse (an older Fanout Code wrote its settings): it cannot tell
+/// what is claimed, so it fails closed for what it guards, denying every file-tool write and every Bash command that
+/// names `git` (as a word anywhere, nested shells included), and allows the rest. Always returns 0.
+pub fn run_unparsed(stdin: &mut dyn Read, stdout: &mut dyn Write) -> i32 {
+    let mut text = String::new();
+    let input: Option<HookInput> = stdin
+        .read_to_string(&mut text)
+        .ok()
+        .and_then(|_| serde_json::from_str(&text).ok());
+    let Some(input) = input else {
+        return 0;
+    };
+    let tool = input.tool_name.unwrap_or_default();
+    let names_git = || {
+        input
+            .tool_input
+            .as_ref()
+            .and_then(|t| t.get("command"))
+            .and_then(|c| c.as_str())
+            .is_some_and(|c| {
+                c.split(|ch: char| !(ch.is_alphanumeric() || ch == '-' || ch == '_'))
+                    .any(|w| w == "git")
+            })
+    };
+    if EDIT_TOOLS.contains(&tool.as_str()) || (tool == "Bash" && names_git()) {
+        let out = serde_json::json!({"hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "deny",
+            "permissionDecisionReason": STALE_HOOK_REASON,
+        }});
+        let _ = writeln!(stdout, "{out}");
+    }
+    0
+}
+
 /// What the hook command line carries: `claim-check <task-id> <grants> <notes> <log> <ask 0|1> <git 0|1> <claims…>`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CheckArgs {
@@ -242,7 +281,7 @@ fn flag(word: &str) -> Option<bool> {
 }
 
 impl CheckArgs {
-    /// The arguments after `claim-check`; `None` when they do not parse (the caller then allows).
+    /// The arguments after `claim-check`; `None` when they do not parse (the caller then runs `run_unparsed`).
     pub fn parse(args: &[String]) -> Option<CheckArgs> {
         let [task, grants, notes, log, ask, guard, claims @ ..] = args else {
             return None;
@@ -290,55 +329,6 @@ struct HookInput {
     tool_name: Option<String>,
     tool_input: Option<serde_json::Value>,
     cwd: Option<PathBuf>,
-}
-
-/// Appends `<event><TAB><rfc3339><TAB><payload>` to the task's event log in one write.
-fn append_event(log: &Path, event: &str, payload: &serde_json::Value) {
-    let line = format!("{event}\t{}\t{payload}\n", Utc::now().format("%Y-%m-%dT%H:%M:%SZ"));
-    let written = log
-        .parent()
-        .map_or(Ok(()), std::fs::create_dir_all)
-        .and_then(|()| std::fs::OpenOptions::new().create(true).append(true).open(log))
-        .and_then(|mut f| f.write_all(line.as_bytes()));
-    if let Err(e) = written {
-        eprintln!("fanoutcode claim-check: cannot log to {}: {e}", log.display());
-    }
-}
-
-/// `{repo, path, command, cwd, other_task}` as `event`: `ClaimDenied` for a stop, `ClaimNoted` for an overlap
-/// allowed with "Ask before editing" off.
-fn log_claim(
-    log: &Path,
-    event: &str,
-    repo: &Path,
-    path: Option<&str>,
-    command: Option<&str>,
-    other: Option<&Claim>,
-    cwd: &Path,
-) {
-    let payload = serde_json::json!({
-        "repo": repo,
-        "path": path,
-        "command": command,
-        "cwd": cwd,
-        "other_task": other.and_then(|c| c.task_id.as_ref()),
-    });
-    append_event(log, event, &payload);
-}
-
-/// One `CommandRan` line per grant just spent (§5.6): the app tells the other task only when the line matches a
-/// grant it wrote itself.
-fn log_command_ran(log: &Path, command: &str, needed: &[CommandNeed]) {
-    for n in needed {
-        let payload = serde_json::json!({
-            "repo": n.repo,
-            "command": command,
-            "kind": n.kind,
-            "paths": n.paths,
-            "other_task": n.other,
-        });
-        append_event(log, "CommandRan", &payload);
-    }
 }
 
 /// Reads one hook payload from `stdin` and answers it on `stdout`. Always returns 0: unreadable claims or grants and
@@ -448,3 +438,7 @@ mod tests;
 #[cfg(test)]
 #[path = "check_bash_tests.rs"]
 mod bash_tests;
+
+#[cfg(test)]
+#[path = "check_args_tests.rs"]
+mod args_tests;

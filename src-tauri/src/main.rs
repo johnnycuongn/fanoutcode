@@ -13,12 +13,13 @@ fn main() {
         ));
     }
     // `fanoutcode claim-check <task-id> <grants> <notes> <log> <ask 0|1> <git 0|1> <claims…>`: the PreToolUse hook
-    // over other tasks' uncommitted files (Plan 11); arguments that do not parse allow (fail open)
+    // over other tasks' uncommitted files (Plan 11); arguments that do not parse (a session started by an older
+    // build) fail closed for edits and git commands
     if args.get(1).map(String::as_str) == Some("claim-check") {
-        use fanoutcode_core::overlap::check::{run_check, CheckArgs};
+        use fanoutcode_core::overlap::check::{run_check, run_unparsed, CheckArgs};
         let Some(check) = CheckArgs::parse(&args[2..]) else {
-            eprintln!("fanoutcode claim-check: bad arguments; allowing");
-            std::process::exit(0);
+            eprintln!("fanoutcode claim-check: arguments from an older build; denying edits and git commands");
+            std::process::exit(run_unparsed(&mut std::io::stdin(), &mut std::io::stdout()));
         };
         std::process::exit(run_check(&mut std::io::stdin(), &mut std::io::stdout(), &check));
     }

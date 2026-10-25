@@ -2,6 +2,7 @@
 //! claims, grants, the claim-check hook, the overlap and footprint stores, and every overlap prompt text.
 
 pub mod check;
+mod check_log;
 pub mod claims;
 pub mod compute;
 pub mod decide;
