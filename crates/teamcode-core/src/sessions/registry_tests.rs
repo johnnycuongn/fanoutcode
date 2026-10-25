@@ -7,8 +7,10 @@ use chrono::Utc;
 
 use super::*;
 use crate::domain::{AgentKind, DriverKind, PaneId, Session, SessionId, WindowId};
+use crate::hooks::HookEvent;
 use crate::sessions::fake::{FakePty, FakePtyHandle};
 use crate::sessions::flow::FlowControl;
+use crate::sessions::inject::{frame_prompt, QueueOutcome};
 use crate::Error;
 
 #[derive(Clone, Default)]
@@ -161,4 +163,41 @@ fn exit_clears_queue_and_sink() {
         r.write(&id, b"x").unwrap_err(),
         Error::Precondition("session exited".into())
     );
+}
+
+#[test]
+fn inject_sends_when_idle_and_queues_when_working() {
+    let (mut r, id, pty) = registry_with_fake(AgentKind::ClaudeCode);
+    let now = Instant::now();
+    assert!(matches!(
+        r.inject(&id, "p1".into(), now).unwrap(),
+        QueueOutcome::Queued { pending: 1 }
+    ));
+    assert!(pty.writes().is_empty());
+    r.get_mut(&id).unwrap().idle.on_hook(&HookEvent::Stop {
+        last_assistant_message: "".into(),
+        background_tasks: 0,
+    });
+    assert_eq!(r.pump(&id, now).unwrap(), Some(0));
+    assert_eq!(pty.writes(), vec![frame_prompt("p1")]);
+    // injecting made it working again
+    assert!(matches!(
+        r.inject(&id, "p2".into(), now).unwrap(),
+        QueueOutcome::Queued { pending: 1 }
+    ));
+}
+
+#[test]
+fn pump_sends_one_prompt_per_idle_in_fifo_order() {
+    let (mut r, id, pty) = registry_with_fake(AgentKind::ClaudeCode);
+    let now = Instant::now();
+    r.inject(&id, "a".into(), now).unwrap();
+    r.inject(&id, "b".into(), now).unwrap();
+    r.get_mut(&id).unwrap().idle.on_hook(&HookEvent::Stop {
+        last_assistant_message: "".into(),
+        background_tasks: 0,
+    });
+    assert_eq!(r.pump(&id, now).unwrap(), Some(1));
+    assert_eq!(r.pump(&id, now).unwrap(), None);
+    assert_eq!(pty.writes(), vec![frame_prompt("a")]);
 }

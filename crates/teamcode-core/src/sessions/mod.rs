@@ -15,9 +15,11 @@ pub mod stop;
 pub use batch::Batcher;
 pub use driver::{ExitFn, GracefulExit, OutputFn, OwnedDriver, Pty, PtySpawner, SessionDriver, SpawnSpec, STOP_GRACE};
 pub use flow::FlowControl;
+pub use inject::{frame_prompt, IdleTracker, InjectQueue, QueueOutcome, CODEX_IDLE_AFTER, INJECT_ENTER_DELAY};
 pub use launch::{
     agents_json, claude_launch, codex_launch, session_env, settings_path, shell_launch, worktree_name, ClaudeLaunch,
     GeneratedSettings, LaunchSpec,
 };
+pub use registry::{LiveSession, OutputSink, SessionRegistry, MIN_COLS, MIN_ROWS};
 pub use scrollback::{Scrollback, ScrollbackBuffer};
 pub use stop::{Clock, SystemClock, STOP_POLL};

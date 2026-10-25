@@ -7,7 +7,7 @@ use std::time::Instant;
 use crate::domain::{AgentKind, PaneId, Session, SessionId, TaskId, WindowId};
 use crate::sessions::driver::Pty;
 use crate::sessions::flow::FlowControl;
-use crate::sessions::inject::{IdleTracker, InjectQueue};
+use crate::sessions::inject::{frame_prompt, IdleTracker, InjectQueue, QueueOutcome};
 use crate::sessions::scrollback::{Scrollback, ScrollbackBuffer};
 use crate::Error;
 
@@ -240,6 +240,39 @@ impl SessionRegistry {
             .into_iter()
             .filter(|s| s.exited.is_none() && self.live.get(&s.id).is_some_and(|l| !l.idle.is_idle(now)))
             .collect()
+    }
+
+    /// Types `prompt` now when the agent is idle, else queues it until it is.
+    pub fn inject(&mut self, id: &SessionId, prompt: String, now: Instant) -> Result<QueueOutcome, Error> {
+        let live = self.live(id)?;
+        if live.session.exited.is_some() {
+            return Err(Error::Precondition("session exited".into()));
+        }
+        if live.queue.is_empty() && live.idle.is_idle(now) {
+            live.pty_mut()?.write(&frame_prompt(&prompt))?;
+            live.idle.on_injected();
+            return Ok(QueueOutcome::Sent);
+        }
+        Ok(QueueOutcome::Queued {
+            pending: live.queue.push(prompt),
+        })
+    }
+
+    /// Sends the oldest queued prompt when the agent is idle; `Some(pending)` when one was sent.
+    pub fn pump(&mut self, id: &SessionId, now: Instant) -> Result<Option<usize>, Error> {
+        let live = self.live(id)?;
+        if live.queue.is_empty() || !live.idle.is_idle(now) {
+            return Ok(None);
+        }
+        let Some(prompt) = live.queue.pop_front() else {
+            return Ok(None);
+        };
+        if let Err(e) = live.pty_mut().and_then(|pty| pty.write(&frame_prompt(&prompt))) {
+            live.queue.push_front(prompt); // nothing was typed
+            return Err(e);
+        }
+        live.idle.on_injected();
+        Ok(Some(live.queue.len()))
     }
 
     /// The task's live (not exited) session, if any.
