@@ -1,7 +1,7 @@
 //! Fetching a context doc's text on demand (`context_docs_fetch`), cached by the shell at `text_cache_path`.
 
 use super::context_docs::{ContextDoc, ContextDocKind};
-use super::url_guard::{guarded_get, pinned_client, validate_hop, NetGuard};
+use super::url_guard::{client_for, client_plan, guarded_get, validate_hop, NetGuard};
 use crate::{Error, Result};
 
 /// The most text a fetched reference keeps (prompts point at the cache file, so this only bounds disk use).
@@ -157,7 +157,8 @@ pub(crate) async fn fetch_text_capped(
             }
             let base_url = url::Url::parse(&base).map_err(|_| no_site())?;
             let (pin_host, addr) = validate_hop(&base_url, doc.trusted, guard)?;
-            let client = ConfluenceClient::with_http(site, token, pinned_client(&pin_host, addr)?)?;
+            let plan = client_plan(doc.trusted, addr);
+            let client = ConfluenceClient::with_http(site, token, client_for(&pin_host, plan)?)?;
             let page_id = doc
                 .page_id
                 .clone()
@@ -534,5 +535,52 @@ mod tests {
             None,
         ));
         assert_eq!(fetch_text(&inside, &roots, None, &g).await.unwrap(), "notes");
+    }
+
+    #[tokio::test]
+    async fn trust_does_not_follow_a_redirect_to_another_private_host() {
+        use wiremock::matchers::path;
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+        let server = MockServer::start().await;
+        let port = port_of(&server.uri());
+        Mock::given(path("/away"))
+            .respond_with(ResponseTemplate::new(302).insert_header("location", "http://other.corp/secret"))
+            .mount(&server)
+            .await;
+        Mock::given(path("/here"))
+            .respond_with(ResponseTemplate::new(302).insert_header("location", "/page"))
+            .mount(&server)
+            .await;
+        Mock::given(path("/page"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("same host"))
+            .mount(&server)
+            .await;
+        let r = MapResolver(
+            vec![
+                ("mock.test", "127.0.0.1".parse().unwrap()),
+                ("other.corp", "10.0.0.9".parse().unwrap()),
+            ],
+            0,
+        );
+        let r = MapResolver(r.0, port);
+        let away = trusted(doc(
+            "doc-1",
+            ContextDocKind::Url,
+            &format!("http://mock.test:{port}/away"),
+            None,
+        ));
+        assert!(
+            matches!(fetch_text(&away, &[], None, &mock_guard(&r)).await, Err(Error::Precondition(m)) if m.contains("private"))
+        );
+        let here = trusted(doc(
+            "doc-2",
+            ContextDocKind::Url,
+            &format!("http://mock.test:{port}/here"),
+            None,
+        ));
+        assert_eq!(
+            fetch_text(&here, &[], None, &mock_guard(&r)).await.unwrap(),
+            "same host"
+        );
     }
 }

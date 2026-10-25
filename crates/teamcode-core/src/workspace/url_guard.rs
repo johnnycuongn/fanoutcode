@@ -155,24 +155,56 @@ pub fn validate_hop(url: &url::Url, trusted: bool, guard: &NetGuard) -> Result<(
     Ok((host, Some(first)))
 }
 
-/// A client for one hop: no automatic redirects, the host pinned to its checked address.
-pub fn pinned_client(host: &str, addr: Option<SocketAddr>) -> Result<reqwest::Client> {
+/// How one hop's client is built.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ClientPlan {
+    /// The system proxy is used only for a trusted hop to the vetted host (corporate networks need it); the proxy
+    /// resolves the name itself, so the address pin does not hold on that path.
+    pub use_proxy: bool,
+    /// The checked address the connection is pinned to (not for address literals). Through a proxy the proxy
+    /// resolves the name, so the pin holds only when no proxy is configured.
+    pub pin: Option<SocketAddr>,
+}
+
+/// Trust covers only the doc's own host (normalised): a hop anywhere else is checked as untrusted.
+pub fn hop_trusted(trusted: bool, origin_host: &str, hop_host: &str) -> bool {
+    trusted && normalise_host(origin_host) == normalise_host(hop_host)
+}
+
+/// An untrusted hop never goes through a proxy, so the pin and the address checks hold.
+pub fn client_plan(trusted_hop: bool, addr: Option<SocketAddr>) -> ClientPlan {
+    ClientPlan {
+        use_proxy: trusted_hop,
+        pin: addr,
+    }
+}
+
+/// A client for one hop: no automatic redirects; per `client_plan`, no proxy for an untrusted hop, and the
+/// connection pinned to the checked address.
+pub fn client_for(host: &str, plan: ClientPlan) -> Result<reqwest::Client> {
     let mut b = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .timeout(std::time::Duration::from_secs(15));
-    if let Some(a) = addr {
+    if !plan.use_proxy {
+        b = b.no_proxy();
+    }
+    if let Some(a) = plan.pin {
         b = b.resolve(host, a);
     }
     b.build().map_err(|e| Error::Provider(format!("Fetching {host}: {e}")))
 }
 
-/// GET `url`, following up to `MAX_HOPS` redirects, each hop checked and pinned. Returns the final response.
+/// GET `url`, following up to `MAX_HOPS` redirects, each hop checked (trusted only on the doc's own host) and, when
+/// untrusted, pinned with no proxy. Returns the final response.
 pub async fn guarded_get(url: &str, trusted: bool, guard: &NetGuard<'_>) -> Result<reqwest::Response> {
     let mut current =
         url::Url::parse(url).map_err(|_| Error::Invalid("A link must start with http:// or https://".into()))?;
+    let origin = normalise_host(current.host_str().unwrap_or_default());
     for _ in 0..=MAX_HOPS {
-        let (host, addr) = validate_hop(&current, trusted, guard)?;
-        let resp = pinned_client(&host, addr)?
+        let hop_host = normalise_host(current.host_str().unwrap_or_default());
+        let trusted_hop = hop_trusted(trusted, &origin, &hop_host);
+        let (host, addr) = validate_hop(&current, trusted_hop, guard)?;
+        let resp = client_for(&host, client_plan(trusted_hop, addr))?
             .get(current.clone())
             .send()
             .await
@@ -231,5 +263,27 @@ mod tests {
         assert!(check_lexical("http://10.0.0.5/wiki", true).is_ok());
         assert!(check_lexical("https://example.com/spec", false).is_ok());
         assert!(check_lexical("file:///etc/passwd", true).is_err());
+    }
+
+    #[test]
+    fn trust_covers_only_the_original_host_and_untrusted_hops_skip_the_proxy() {
+        assert!(hop_trusted(true, "Wiki.Corp.", "wiki.corp"));
+        assert!(!hop_trusted(true, "wiki.corp", "other.corp"));
+        assert!(!hop_trusted(false, "wiki.corp", "wiki.corp"));
+        let addr: SocketAddr = "10.0.0.5:443".parse().unwrap();
+        assert_eq!(
+            client_plan(false, Some(addr)),
+            ClientPlan {
+                use_proxy: false,
+                pin: Some(addr)
+            }
+        );
+        assert_eq!(
+            client_plan(true, Some(addr)),
+            ClientPlan {
+                use_proxy: true,
+                pin: Some(addr)
+            }
+        );
     }
 }
