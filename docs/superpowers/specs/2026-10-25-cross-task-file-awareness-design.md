@@ -43,6 +43,8 @@ decides how to proceed; the other session is told what happened; and a merge is 
   session merges or rebases the base into its branch; landing stays the developer's.
 - Perfect detection. Writes made by a shell command (a code generator, `sed -i`) are caught only as far as the
   existing Bash guard sees them, and two edits inside the claim's write lag (§5.7) can both pass.
+- Integrating before the task's work is committed. Git will not merge over uncommitted changes; the developer commits
+  first and integration runs from the Done card (§6.3).
 
 **Anti-goals** (failure even if it technically works)
 
@@ -236,8 +238,15 @@ The overlap is recorded and shown (§7). The other task gets the mirror note onc
 
 ### 6.3 Bring the base in
 
-In Commit stage a worktree task's dock gains the action **Bring <base> in** beside the drafted messages (available
-whatever the "Fanout Code may commit" setting is, because the app runs no git: it injects a prompt). The base branch
+Git refuses to merge or rebase over uncommitted changes, so integration comes after the task's work is committed:
+the developer commits as today (or through the Commit button when "Fanout Code may commit" is on), the card moves to
+Done, and the **Done** card's task page offers **Bring <base> in** in its Overlap tab and its primary-action menu
+(Johnny's decision). The session is still alive at Done (it ends only on archive, Stop agent or Start fresh). The
+action is available whatever the "may commit" setting is, because the app runs no git: it injects a prompt. This is
+the one prompt that tells the agent to merge or rebase, a narrow exception to the stage-prompt rule in
+`.claude/rules/prompts.md`, which otherwise stands (it still never says commit, push or delete); the rule and the
+prompt tests change with it, and the integrate prompt is assembled from data rather than rendered from the
+eight-placeholder template set. The base branch
 is stored on the task (new nullable column). For a Team Code-managed worktree it is the branch the worktree was
 created from, recorded at creation. For Claude Code's own convention the branch is created by `claude --worktree`
 from the user's `worktree.baseRef`, which the app does not read; the base defaults to the repo's default branch
@@ -257,9 +266,11 @@ Merge) the base into its branch and lists:
 
 When the session's `Stop` comes without the sentinel `FANOUTCODE: integrate done` and the tree has conflict markers
 or an in-progress merge, the task hands back as `NeedsYou { reason: MergeNeedsYou { repo, paths } }` (chip *Merge
-needs you*), and the Overlap tab shows each conflicted file with both sides and both tasks' intent, plus **Resume**
-(inject "continue the integration with these instructions: …" with a free-text field) and **Abort** (inject
-"`git merge --abort`, leave the branch as it was"). Landing the branch on the base stays with the developer.
+needs you*; a Done card can be needs-you, state and stage being independent), and the Overlap tab shows each
+conflicted file with both sides and both tasks' intent, plus **Resume** (inject "continue the integration with these
+instructions: …" with a free-text field) and **Abort** (inject "`git merge --abort`, leave the branch as it was").
+The sentinel with a clean tree returns the task to Idle and records the integration in the timeline. Landing the
+branch on the base stays with the developer, as does archiving.
 
 ## 7. Showing it: the Overlap tab and counts
 
@@ -301,8 +312,9 @@ No app-wide setting. Grants are not settings; they are per session.
   flags per direction, decided_at). `task_overlaps` is the source of truth for the Overlap tab, the counts, the
   pin of §5.4 and the taken-over exclusion in `changes::done_paths`; the timeline and the event log carry the
   history. Migrations follow CLAUDE.md's rule; this is plan 11, so `0011_<name>.sql`.
-- New `HandbackReason` variants: `FileInUse { pending: u32 }` and `MergeNeedsYou { repo: PathBuf, paths: Vec<String>
-  }`; the details live in `task_overlaps`. Serde round-trip tests as the rule requires; `chip_text` entries.
+- New `HandbackReason` variants: `FileInUse { pending: u32 }`, `HoldingFor { other: String }` (when every pending
+  decision is a Hold) and `MergeNeedsYou { repo: PathBuf, paths: Vec<String> }`; the details live in `task_overlaps`.
+  Serde round-trip tests as the rule requires; `chip_text` entries.
 - New hook event `ClaimDenied` in `HookEvent`, written by the hook itself (not by Claude Code), parsed by the existing
   log parser from the line's first field.
 - Events to the webview: `task-changed` already carries state; a new `overlap-changed { task_id, count, pending }`
@@ -319,7 +331,8 @@ Marked so Johnny can check them while reading; everything else above he decided 
 - **Claude Code only** for the stop-and-ask; Codex and shell tasks contribute claims and appear in the tab.
 - A claim lasts while the file is **uncommitted**; grants last the session and clear with the claims they cover.
 - **Hold** keeps the task needs-you and tells it when the file is free.
-- **Bring <base> in**, not merge onto main; landing stays the developer's. Merge by default, Rebase by setting.
+- **Bring <base> in**, not merge onto main; landing stays the developer's. Merge by default, Rebase by setting. Johnny
+  decided the order: he commits first, the card reaches Done, and integration runs from the Done card.
 - The "consistency" ask is served by listing each active task's **added files and exported names** in "Others
   working here".
 - The claim write **lag** is accepted (§5.7).
