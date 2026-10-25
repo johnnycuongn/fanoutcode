@@ -31,6 +31,12 @@ pub const MENU_CHORDS: &[&str] = &[
     "⌘⇧W", // Close Window (CLOSE_WINDOW_ACCELERATOR)
 ];
 
+/// The App menu's About item, named explicitly: AppKit's default reads the process name, which is the binary's
+/// (`fanoutcode`) outside a bundle. The About panel itself shows the bundle icon.
+pub fn about_label(product_name: &str) -> String {
+    format!("About {product_name}")
+}
+
 /// App, Edit, View, Window and Help. No Close Window on ⌘W and no File menu (whose default is Close Window ⌘W).
 pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
     let info = app.package_info();
@@ -45,7 +51,7 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         info.name.clone(),
         true,
         &[
-            &PredefinedMenuItem::about(app, None, Some(about))?,
+            &PredefinedMenuItem::about(app, Some(&about_label(&info.name)), Some(about))?,
             &sep()?,
             &PredefinedMenuItem::services(app, None)?,
             &sep()?,
@@ -143,6 +149,15 @@ mod tests {
                 "the menu claims {chord}, which the keymap uses"
             );
         }
+    }
+
+    #[test]
+    fn the_about_item_names_the_product() {
+        let conf: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).expect("tauri.conf.json");
+        let product = conf["productName"].as_str().expect("productName");
+        assert_eq!(product, "Fanout Code");
+        assert_eq!(about_label(product), "About Fanout Code");
     }
 
     #[test]

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="navy" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1b2140"/><stop offset="1" stop-color="#2f3a72"/></linearGradient>
+    <linearGradient id="blade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7aa2ff"/><stop offset="1" stop-color="#3b6cff"/></linearGradient>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#navy)"/>
+  <circle cx="400" cy="512" r="215" fill="none" stroke="#cfd6ff" stroke-width="18" stroke-opacity=".9"/>
+  <circle cx="400" cy="512" r="150" fill="none" stroke="#cfd6ff" stroke-width="8" stroke-opacity=".3"/>
+  <g id="blades" transform="translate(400 512)">
+    <ellipse cy="-92" rx="56" ry="104" fill="url(#blade)"/>
+    <ellipse cy="-92" rx="56" ry="104" fill="url(#blade)" transform="rotate(120)"/>
+    <ellipse cy="-92" rx="56" ry="104" fill="url(#blade)" transform="rotate(240)"/>
+    <circle r="36" fill="#eef1ff"/>
+  </g>
+  <g stroke-linecap="round" stroke-opacity=".38">
+    <line x1="687" y1="406" x2="735" y2="330" stroke="#8b7cf6" stroke-width="26"/>
+    <line x1="711" y1="463" x2="790" y2="420" stroke="#4c8dff" stroke-width="30"/>
+    <line x1="725" y1="512" x2="815" y2="512" stroke="#f0a93a" stroke-width="34"/>
+    <line x1="711" y1="561" x2="790" y2="604" stroke="#f06292" stroke-width="30"/>
+    <line x1="687" y1="618" x2="735" y2="694" stroke="#34c759" stroke-width="26"/>
+  </g>
+  <circle cx="735" cy="330" r="30" fill="#8b7cf6"/>
+  <circle cx="790" cy="420" r="34" fill="#4c8dff"/>
+  <circle cx="815" cy="512" r="38" fill="#f0a93a"/>
+  <circle cx="790" cy="604" r="34" fill="#f06292"/>
+  <circle cx="735" cy="694" r="30" fill="#34c759"/>
+</svg>

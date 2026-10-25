@@ -11,6 +11,7 @@
     "tauri": "tauri",
     "bindings": "cd src-tauri && cargo run -q --bin bindings",
     "bindings:check": "npm run bindings && git diff --exit-code -- src/lib/bindings.ts",
+    "icons": "PLAYWRIGHT_BROWSERS_PATH=0 node scripts/render-icons.mjs",
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

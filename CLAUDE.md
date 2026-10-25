@@ -41,6 +41,7 @@ cargo test --workspace                             # Rust tests
 cargo clippy --workspace --all-targets -- -D warnings
 npm run bindings                                   # regenerate src/lib/bindings.ts from Rust
 npm run bindings:check                             # fails when bindings.ts is stale (CI runs it)
+npm run icons                                      # re-render src-tauri/icons from src-tauri/icons/source/*.svg
 npm run format                                     # Prettier --write
 npm run build                                      # tsc + vite build
 npm run e2e                                        # Playwright smoke suite (needs the WebKit install above)
