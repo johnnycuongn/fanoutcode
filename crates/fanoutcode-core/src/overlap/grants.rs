@@ -17,10 +17,15 @@ use crate::Result;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(tag = "type")]
 pub enum GrantScope {
-    File { repo: PathBuf, path: String },
+    File {
+        repo: PathBuf,
+        path: String,
+    },
     AllFiles,
     /// Single use: removed from the grants file once the hook allows the command (`consume_command`).
-    Command { command: String },
+    Command {
+        command: String,
+    },
 }
 
 /// One answer: this task may edit on top of `other_task`'s claims in `scope` (`other_task: None`: an unattributed

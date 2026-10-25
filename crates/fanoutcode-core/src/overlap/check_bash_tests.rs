@@ -122,7 +122,10 @@ fn denied(args: &CheckArgs, root: &Path, command: &str) -> bool {
 
 #[test]
 fn command_grant_allows_exactly_that_command_once() {
-    assert_eq!(decide("git stash", &command_grant("t-b2", "git stash")), CheckDecision::Allow);
+    assert_eq!(
+        decide("git stash", &command_grant("t-b2", "git stash")),
+        CheckDecision::Allow
+    );
     // the command is matched trimmed, on either side
     assert_eq!(
         decide("  git stash\n", &command_grant("t-b2", " git stash ")),
@@ -141,7 +144,10 @@ fn command_grant_allows_exactly_that_command_once() {
         granted_at: "2026-10-25T10:00:00Z".parse().unwrap(),
     });
     write_grants(&data, &id("t-a1"), &grants).unwrap();
-    assert!(denied(&args, &root, "git reset --hard"), "another command is still stopped");
+    assert!(
+        denied(&args, &root, "git reset --hard"),
+        "another command is still stopped"
+    );
     assert!(!denied(&args, &root, "git stash"), "the granted command runs");
     let left = read_grants(&args.grants_path);
     assert_eq!(left.grants.len(), 1, "the edit grant stays: {left:?}");
@@ -152,11 +158,13 @@ fn command_grant_allows_exactly_that_command_once() {
 #[test]
 fn command_grant_does_not_cover_a_different_command() {
     let g = command_grant("t-b2", "git stash");
-    for command in ["git stash -u", "git reset --hard", "git commit -am wip", "git stash && git clean -fd"] {
-        assert!(
-            matches!(decide(command, &g), CheckDecision::Deny { .. }),
-            "{command}"
-        );
+    for command in [
+        "git stash -u",
+        "git reset --hard",
+        "git commit -am wip",
+        "git stash && git clean -fd",
+    ] {
+        assert!(matches!(decide(command, &g), CheckDecision::Deny { .. }), "{command}");
     }
     // a grant on another task's claims does not cover Checkout's
     assert!(matches!(

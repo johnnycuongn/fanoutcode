@@ -317,11 +317,7 @@ mod tests {
 
     #[test]
     fn a_command_proceed_answers_that_commands_rows_on_the_same_task_only() {
-        let cmd = |c: &str| {
-            Some(PendingDecision::Command {
-                command: c.into(),
-            })
-        };
+        let cmd = |c: &str| Some(PendingDecision::Command { command: c.into() });
         let decided = row("src/a.ts", Some("t-b2"), cmd("git stash"), false);
         let rows = [
             decided.clone(),
@@ -331,7 +327,11 @@ mod tests {
             row("src/e.ts", Some("t-b2"), edit(), false),
         ];
         let mut grants = GrantsFile::default();
-        grants.add(outcome(Decision::OnTopAll, &decided, "C", "Login", now()).grant.unwrap());
+        grants.add(
+            outcome(Decision::OnTopAll, &decided, "C", "Login", now())
+                .grant
+                .unwrap(),
+        );
         let covered: Vec<&str> = covered_pending(&rows, &grants, &decided)
             .iter()
             .map(|r| r.path.as_str())
