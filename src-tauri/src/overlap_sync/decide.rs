@@ -8,10 +8,11 @@ use std::path::Path;
 use chrono::{DateTime, Utc};
 use fanoutcode_core::changes;
 use fanoutcode_core::domain::{Task, TaskId};
+use fanoutcode_core::git::StatusEntry;
 use fanoutcode_core::hooks::event_log_path;
 use fanoutcode_core::memory::{IndexEntry, TaskFolder, TimelineKind};
-use fanoutcode_core::overlap::claims::{ClaimsFile, ANOTHER_SESSION};
-use fanoutcode_core::overlap::decide::{covered_pending, decided_line, outcome, released_holds};
+use fanoutcode_core::overlap::claims::ANOTHER_SESSION;
+use fanoutcode_core::overlap::decide::{covered_pending, decided_line, outcome, release_line, released_holds, Release};
 use fanoutcode_core::overlap::prompts::go_ahead;
 use fanoutcode_core::overlap::{grants, notes, store, Decision, OverlapRow, PendingDecision, Relation};
 use fanoutcode_core::pipeline::{self, Effect};
@@ -191,20 +192,29 @@ async fn after_decision(app: &AppHandle, repo: &Path, me: &TaskId, other: Option
     }
 }
 
-/// A rebuilt claims file: every held decision of `task_id` whose claim left it is closed, and the session is told
-/// the file is now free (the `Hold` go-ahead, §5.4 answer 4), with a timeline line.
-pub fn release_holds(app: &AppHandle, state: &AppState, task_id: &TaskId, file: &ClaimsFile) -> Result<()> {
-    let freed: Vec<(OverlapRow, String)> = {
+/// A fresh status of `repo`: every held decision of `task_id` whose file is clean there is closed, and the session
+/// is told the file is now free (the `Hold` go-ahead, §5.4 answer 4), with a timeline line saying whether the other
+/// task committed it or it simply has no uncommitted changes now. `attributed` says whether a row's other task
+/// attributes its path.
+pub fn release_holds(
+    app: &AppHandle,
+    state: &AppState,
+    task_id: &TaskId,
+    repo: &Path,
+    status: &[StatusEntry],
+    attributed: impl Fn(&OverlapRow) -> bool,
+) -> Result<()> {
+    let freed: Vec<(OverlapRow, Release, String)> = {
         let conn = state.db.lock().expect("db lock");
         let rows = store::pending(&conn, task_id)?;
         let mut freed = Vec::new();
-        for r in released_holds(&rows, file) {
+        for (r, why) in released_holds(&rows, repo, status, &attributed) {
             store::set_pending(&conn, task_id, &r.repo_root, &r.path, r.other_task.as_ref(), None)?;
             let title = match &r.other_task {
                 Some(o) => db::tasks::get(&conn, o)?.map(|t| t.title),
                 None => None,
             };
-            freed.push((r.clone(), title.unwrap_or_else(|| ANOTHER_SESSION.to_owned())));
+            freed.push((r.clone(), why, title.unwrap_or_else(|| ANOTHER_SESSION.to_owned())));
         }
         freed
     };
@@ -213,14 +223,8 @@ pub fn release_holds(app: &AppHandle, state: &AppState, task_id: &TaskId, file: 
     }
     let now = Utc::now();
     let mut prompts = Vec::new();
-    for (r, title) in &freed {
-        timeline(
-            app,
-            state,
-            task_id,
-            format!("{} is free: {title} let go of it", r.path),
-            now,
-        )?;
+    for (r, why, title) in &freed {
+        timeline(app, state, task_id, release_line(*why, &r.path, title), now)?;
         prompts.push(go_ahead(Decision::Hold, title, &r.path));
     }
     repin(app, state, task_id)?;

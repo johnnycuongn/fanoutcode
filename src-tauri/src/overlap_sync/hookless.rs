@@ -7,11 +7,11 @@ use chrono::Utc;
 use fanoutcode_core::changes::{AttributedFile, ChangeSource, MAIN_AGENT};
 use fanoutcode_core::domain::{AgentKind, TaskId};
 use fanoutcode_core::git;
-use fanoutcode_core::overlap::claims;
+use fanoutcode_core::overlap::{claims, observed};
 use fanoutcode_core::Result;
 use tauri::{AppHandle, Manager};
 
-use super::{active, Active};
+use super::{active, save_observed, Active};
 use crate::observe;
 use crate::state::AppState;
 
@@ -77,18 +77,23 @@ pub async fn observe_hookless(app: &AppHandle, repo: &Path) -> Result<()> {
         })?;
         return observe::save_attributions(&state, &one.task.id, &files);
     }
-    let mut all = state.overlap.unattributed.lock().expect("unattributed lock");
-    let list = all.entry(repo.to_owned()).or_default();
-    for e in fresh {
-        if !list.iter().any(|f| f.path == e.path) {
-            list.push(AttributedFile {
-                repo_root: repo.to_owned(),
-                path: e.path,
-                agent_id: MAIN_AGENT.to_owned(),
-                source: ChangeSource::Observed,
-                added_at: now,
-            });
-        }
+    let seen: Vec<AttributedFile> = fresh
+        .into_iter()
+        .map(|e| AttributedFile {
+            repo_root: repo.to_owned(),
+            path: e.path,
+            agent_id: MAIN_AGENT.to_owned(),
+            source: ChangeSource::Observed,
+            added_at: now,
+        })
+        .collect();
+    let list = {
+        let mut all = state.overlap.unattributed.lock().expect("unattributed lock");
+        let list = all.entry(repo.to_owned()).or_default();
+        observed::merge(list, seen).then(|| list.clone())
+    };
+    match list {
+        Some(list) => save_observed(&state, repo, &list),
+        None => Ok(()),
     }
-    Ok(())
 }

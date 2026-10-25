@@ -15,7 +15,7 @@ use fanoutcode_core::pipeline::Effect;
 use fanoutcode_core::{db, Result};
 use tauri::AppHandle;
 
-use super::{emit_overlap_changed, rebuild_around, RECENT_EDITS};
+use super::{emit_overlap_changed, orphan_files, rebuild_around, RECENT_EDITS};
 use crate::hook_feed::set_state;
 use crate::observe::{self, log_err};
 use crate::session_service;
@@ -185,7 +185,8 @@ pub fn note_edit_call(app: &AppHandle, state: &AppState, id: &TaskId, call: Edit
 }
 
 /// Start fresh session or Archive: the task's open decisions, its pin and its grants go, so the new session is not
-/// born needs-you (Review Focus 5); an archived task's note inbox goes too and its claims leave the claims files.
+/// born needs-you (Review Focus 5); an archived task's note inbox goes too and its claims leave the claims files,
+/// its dirty files in shared repos staying claimed as *another session* (`orphan_files`).
 pub fn clear_task(app: &AppHandle, state: &AppState, task: &Task) -> Result<()> {
     store::clear_pending(&state.db.lock().expect("db lock"), &task.id)?;
     state.pinned.lock().expect("pinned lock").remove(&task.id);
@@ -200,6 +201,10 @@ pub fn clear_task(app: &AppHandle, state: &AppState, task: &Task) -> Result<()> 
             .remove(&task.id);
         let (app, task) = (app.clone(), task.clone());
         tauri::async_runtime::spawn(async move {
+            log_err(
+                "keeping an archived task's dirty files claimed",
+                orphan_files(&app, &task).await,
+            );
             log_err("rebuilding after an archive", rebuild_around(&app, &task).await);
         });
     }

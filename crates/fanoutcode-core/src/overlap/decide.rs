@@ -1,12 +1,13 @@
 //! The developer's answer to a pending decision (§5.4, §5.5, §5.6), as pure functions: what `overlap_decide` writes
 //! (the grant, the relation, the timeline lines, the prompts), which other open decisions the new grant answers too,
-//! which held decisions a rebuilt claims file releases, and the `OverlapDecided` log line.
+//! which held decisions a clean file releases, and the `OverlapDecided` log line.
 
 use std::path::Path;
 
 use chrono::{DateTime, Utc};
 
-use super::claims::ClaimsFile;
+use crate::git::StatusEntry;
+
 use super::grants::{Grant, GrantScope, GrantsFile};
 use super::prompts::{go_ahead, go_ahead_command, told};
 use super::{Decision, OverlapRow, PendingDecision, Relation};
@@ -128,18 +129,44 @@ pub fn covered_pending<'a>(rows: &'a [OverlapRow], grants: &GrantsFile, except: 
         .collect()
 }
 
-/// The held decisions of `rows` in `file`'s repo whose claim is gone from it: the other task committed (or let go
-/// of) the file, so the developer's Hold is over (§5.4, answer 4).
-pub fn released_holds<'a>(rows: &'a [OverlapRow], file: &ClaimsFile) -> Vec<&'a OverlapRow> {
+/// Why a held decision was released: the other task's attributed file is clean (it committed it), or a file no task
+/// attributed (another session's, or one whose owner let go of it) is clean.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Release {
+    Committed,
+    Clean,
+}
+
+/// The held decisions of `rows` in `repo` that are over (§5.4, answer 4): only those whose path `status` (the
+/// repo's fresh `git status`) shows clean. A claimant missing from the claims file never releases a hold by itself:
+/// its claims may have been lost on a relaunch, or it was archived with the changes still on disk. `attributed`
+/// says whether the row's other task attributes the path, which makes the release `Committed` rather than `Clean`.
+pub fn released_holds<'a>(
+    rows: &'a [OverlapRow],
+    repo: &Path,
+    status: &[StatusEntry],
+    attributed: impl Fn(&OverlapRow) -> bool,
+) -> Vec<(&'a OverlapRow, Release)> {
     rows.iter()
-        .filter(|r| r.pending.is_some() && r.held && r.repo_root == file.repo_root)
-        .filter(|r| {
-            !file
-                .claims
-                .iter()
-                .any(|c| c.path == r.path && c.task_id == r.other_task)
+        .filter(|r| r.pending.is_some() && r.held && r.repo_root == repo)
+        .filter(|r| !status.iter().any(|e| e.path == r.path))
+        .map(|r| {
+            let why = if r.other_task.is_some() && attributed(r) {
+                Release::Committed
+            } else {
+                Release::Clean
+            };
+            (r, why)
         })
         .collect()
+}
+
+/// The timeline line for a released hold, worded for what happened.
+pub fn release_line(why: Release, path: &str, other_title: &str) -> String {
+    match why {
+        Release::Committed => format!("{path} is free: {other_title} committed it"),
+        Release::Clean => format!("{path} is free: it has no uncommitted changes now"),
+    }
 }
 
 /// The `OverlapDecided` event-log line (§5.4) for one task's log: `other` is the task on the other side from that
@@ -166,9 +193,9 @@ mod tests {
 
     use super::*;
     use crate::domain::TaskId;
+    use crate::git::FileStatus;
     use crate::hooks::parse::parse_line;
     use crate::hooks::HookEvent;
-    use crate::overlap::claims::Claim;
 
     fn id(s: &str) -> TaskId {
         TaskId::parse(s).unwrap()
@@ -368,34 +395,73 @@ mod tests {
         assert_eq!(covered, vec!["src/b.ts"]);
     }
 
+    fn dirty(paths: &[&str]) -> Vec<StatusEntry> {
+        paths
+            .iter()
+            .map(|p| StatusEntry {
+                path: (*p).into(),
+                status: FileStatus::Modified,
+                orig_path: None,
+            })
+            .collect()
+    }
+
+    fn released<'a>(rows: &'a [OverlapRow], repo: &str, status: &[StatusEntry]) -> Vec<(&'a str, Release)> {
+        // t-b2 attributed src/a.ts; nothing else is any task's
+        released_holds(rows, Path::new(repo), status, |r| {
+            r.other_task.as_ref().map(TaskId::as_str) == Some("t-b2") && r.path == "src/a.ts"
+        })
+        .into_iter()
+        .map(|(r, why)| (r.path.as_str(), why))
+        .collect()
+    }
+
     #[test]
-    fn a_hold_is_released_once_its_claim_leaves_the_claims_file() {
+    fn a_hold_is_released_once_the_path_is_clean() {
         let rows = [
             row("src/a.ts", Some("t-b2"), edit(), true),
             row("src/b.ts", Some("t-b2"), edit(), true),
             row("src/c.ts", Some("t-b2"), edit(), false),
             row("src/d.ts", None, edit(), true),
         ];
-        let claim = |path: &str, task: Option<&str>| Claim {
-            path: path.into(),
-            task_id: task.map(id),
-            title: "Login".into(),
-            stage: None,
-            state: None,
-            last_edit: now(),
-        };
-        let file = ClaimsFile {
-            repo_root: "/r".into(),
-            written_at: now(),
-            claims: vec![claim("src/b.ts", Some("t-b2")), claim("src/a.ts", Some("t-c3"))],
-        };
-        let freed: Vec<&str> = released_holds(&rows, &file).iter().map(|r| r.path.as_str()).collect();
-        assert_eq!(freed, vec!["src/a.ts", "src/d.ts"]);
-        let elsewhere = ClaimsFile {
-            repo_root: "/other".into(),
-            ..file
-        };
-        assert!(released_holds(&rows, &elsewhere).is_empty());
+        // src/b.ts is still dirty; src/c.ts is not held
+        assert_eq!(
+            released(&rows, "/r", &dirty(&["src/b.ts", "src/c.ts"])),
+            vec![("src/a.ts", Release::Committed), ("src/d.ts", Release::Clean)]
+        );
+        assert!(released(&rows, "/other", &[]).is_empty());
+    }
+
+    #[test]
+    fn hold_is_not_released_while_the_path_is_dirty() {
+        // the claim left the claims file (the claimant vanished from the list: its session was lost on a
+        // relaunch, or the claims lag), but the changes are still on disk
+        let rows = [
+            row("src/a.ts", Some("t-b2"), edit(), true),
+            row("src/d.ts", None, edit(), true),
+        ];
+        assert!(released(&rows, "/r", &dirty(&["src/a.ts", "src/d.ts"])).is_empty());
+    }
+
+    #[test]
+    fn archived_task_files_still_hold_a_hold() {
+        // t-b2 was archived with src/a.ts dirty: it claims nothing any more, yet its changes are on disk
+        let rows = [row("src/a.ts", Some("t-b2"), edit(), true)];
+        assert!(released(&rows, "/r", &dirty(&["src/a.ts"])).is_empty());
+        // once the file is clean the hold is over
+        assert_eq!(released(&rows, "/r", &[]), vec![("src/a.ts", Release::Committed)]);
+    }
+
+    #[test]
+    fn release_lines_say_what_happened() {
+        assert_eq!(
+            release_line(Release::Committed, "src/a.ts", "Login"),
+            "src/a.ts is free: Login committed it"
+        );
+        assert_eq!(
+            release_line(Release::Clean, "src/a.ts", "another session"),
+            "src/a.ts is free: it has no uncommitted changes now"
+        );
     }
 
     #[test]
