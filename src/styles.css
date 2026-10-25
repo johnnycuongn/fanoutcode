@@ -262,3 +262,35 @@
   --term-ansi-14: #93a1a1;
   --term-ansi-15: #fdf6e3;
 }
+
+/* Task page loops (Plan 08): the notes rule filling while LiveSpec thinks, and the current stage chip breathing.
+   The reduced-motion block above stops both after one pass. */
+@utility animate-fill {
+  animation: tc-fill 1.6s ease-in-out infinite;
+}
+@utility animate-breathe {
+  animation: tc-breathe 2.4s ease-in-out infinite;
+}
+@keyframes tc-fill {
+  0% {
+    transform: scaleY(0);
+    transform-origin: top;
+  }
+  50% {
+    transform: scaleY(1);
+    transform-origin: top;
+  }
+  51% {
+    transform: scaleY(1);
+    transform-origin: bottom;
+  }
+  100% {
+    transform: scaleY(0);
+    transform-origin: bottom;
+  }
+}
+@keyframes tc-breathe {
+  50% {
+    opacity: 0.7;
+  }
+}
