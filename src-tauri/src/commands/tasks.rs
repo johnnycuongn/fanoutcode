@@ -58,7 +58,8 @@ pub(crate) fn run_with(
     compute: impl Fn(&Task, &pipeline::TransitionCtx) -> Result<Vec<Effect>>,
 ) -> Result<ActionOutcome> {
     let id = TaskId::parse(id.as_str())?;
-    let (applied, needs_briefs) = {
+    let others = crate::overlap_integrate::others_section(state, &id);
+    let (applied, needs_briefs, before) = {
         let mut conn = state.db.lock().expect("db lock");
         let now = Utc::now();
         let prepared = pipeline::prepare_action(
@@ -68,9 +69,11 @@ pub(crate) fn run_with(
             &state.data_dir,
             now,
             state.last_test(&id),
+            &others,
             compute,
         )?;
         let task = prepared.task;
+        let before = task.stage;
         let applied = pipeline::apply(
             &mut conn,
             &TaskFolder::open(task.memory_dir.clone()),
@@ -78,8 +81,9 @@ pub(crate) fn run_with(
             prepared.effects,
             now,
         )?;
-        (applied, prepared.needs_briefs)
+        (applied, prepared.needs_briefs, before)
     };
+    crate::overlap_integrate::on_stage_entered(state, before, &applied.task);
     if needs_briefs {
         crate::helpers::run(app, &id, HelperKind::ProjectBrief);
     }

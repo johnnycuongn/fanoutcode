@@ -15,6 +15,7 @@ pub mod jira;
 pub mod livespec;
 pub mod memory;
 pub mod overlap;
+pub mod overlap_integrate;
 pub mod projects;
 pub mod sessions;
 pub mod settings;

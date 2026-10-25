@@ -46,6 +46,9 @@ pub struct PromptCtx {
     pub workspace_fragments: std::collections::BTreeMap<String, String>,
     /// For example a reviewer-note reply prefixed with `file:line` (Plan 08).
     pub task_additions: Vec<String>,
+    /// Plan 11's "Others working here" section (§6.1); `build_stage_prompts` adds it to the task additions of the
+    /// Plan and Build prompts only. Empty when no other task is active.
+    pub others_working_here: String,
 }
 
 const LINKED_INTRO: &str =
@@ -228,6 +231,7 @@ mod tests {
             workspace_fragment: None,
             workspace_fragments: Default::default(),
             task_additions: vec![],
+            others_working_here: String::new(),
         }
     }
 

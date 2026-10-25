@@ -26,6 +26,8 @@ fn project_of(conn: &Connection, task: &Task) -> Result<Project> {
 }
 
 /// Computes `compute`'s effects for task `id`. Call with the database lock held, then `apply` the result.
+/// `others_working_here` is the Plan and Build prompts' Plan 11 section (`overlap::others::others_section`).
+#[allow(clippy::too_many_arguments)]
 pub fn prepare_action(
     conn: &Connection,
     id: &TaskId,
@@ -33,12 +35,24 @@ pub fn prepare_action(
     app_data: &Path,
     now: DateTime<Utc>,
     last_test: Option<TestRun>,
+    others_working_here: &str,
     compute: impl Fn(&Task, &TransitionCtx) -> Result<Vec<Effect>>,
 ) -> Result<Prepared> {
     let task = db::tasks::require(conn, id)?;
     let project = project_of(conn, &task)?;
-    let build =
-        |task: &Task| ctx::build_transition_ctx(conn, task, &project, app_config, app_data, now, last_test.clone());
+    let build = |task: &Task| {
+        let last = last_test.clone();
+        ctx::build_transition_ctx(
+            conn,
+            task,
+            &project,
+            app_config,
+            app_data,
+            now,
+            last,
+            others_working_here,
+        )
+    };
     let effects = compute(&task, &build(&task)?)?;
     let starts = effects.iter().any(|e| matches!(e, Effect::StartSession));
     if task.links_bound_at.is_some() || !starts {
@@ -91,6 +105,7 @@ mod tests {
             fx.app_data.path(),
             Utc::now(),
             None,
+            "",
             |task, c| transition(task, StageAction::Approve, c),
         )
         .unwrap();
@@ -118,6 +133,7 @@ mod tests {
             fx.app_data.path(),
             Utc::now(),
             None,
+            "",
             |task, c| transition(task, StageAction::Archive, c),
         )
         .unwrap();

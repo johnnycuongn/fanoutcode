@@ -171,7 +171,9 @@ pub async fn handle(app: &AppHandle, mut ev: TaskEvent, line: &str, live: bool) 
         _ => false,
     };
     let main_or_prompt = ev.agent_id.is_none() || matches!(ev.event, HookEvent::PermissionRequest { .. });
-    if main_or_prompt {
+    // Plan 11: a Stop of a task bringing its base in is read by `overlap_integrate`, not the stage feed
+    let integrating = crate::overlap_integrate::on_main_stop(app, &state, &task, &ev).await?;
+    if main_or_prompt && !integrating {
         if let Some(next) = feed::next_state(task.stage, &ev.event, artifact_changed) {
             // through the overlap pin: kept aside while a decision is open (Plan 11, §5.4)
             overlap_sync::apply_derived(app, &state, &id, next)?;
@@ -196,6 +198,7 @@ pub async fn handle(app: &AppHandle, mut ev: TaskEvent, line: &str, live: bool) 
             }
         }
     }
+    crate::overlap_integrate::on_edit(&state, &task, &repos, &ev, live);
     crate::commands::activity::track(&state, &ev, &repos);
     if !matches!(ev.event, HookEvent::StatusLine { .. }) {
         events::emit(

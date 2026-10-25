@@ -101,6 +101,10 @@ pub struct AppState {
     pub pinned: Mutex<HashMap<TaskId, AgentState>>,
     /// Plan 11's sync caches (recent edit calls, unattributed files, last statuses).
     pub overlap: OverlapCache,
+    /// Tasks bringing their base branch in (Plan 11, §6.3), with the files the integrate prompt listed.
+    pub integrating: Mutex<HashMap<TaskId, Vec<fanoutcode_core::overlap::prompts::ConflictCtx>>>,
+    /// Integrating tasks the developer asked to abort: their sentinel records no integration.
+    pub integration_aborts: Mutex<std::collections::HashSet<TaskId>>,
 }
 
 impl AppState {
@@ -149,6 +153,8 @@ impl AppState {
             codex_idle: Mutex::default(),
             pinned: Mutex::default(),
             overlap: OverlapCache::default(),
+            integrating: Mutex::default(),
+            integration_aborts: Mutex::default(),
         })
     }
 

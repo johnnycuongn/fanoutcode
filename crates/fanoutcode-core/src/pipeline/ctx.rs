@@ -72,6 +72,7 @@ pub fn build_prompt_ctx(
         workspace_fragment: None,
         workspace_fragments: Default::default(),
         task_additions: Vec::new(),
+        others_working_here: String::new(),
     };
     // the workspace's policy, protection, references and stage instructions (Plan 10)
     crate::workspace::launch::fill_prompt_ctx(conn, task, &mut ctx, app_data)?;
@@ -88,7 +89,14 @@ pub fn build_stage_prompts(ctx: &mut PromptCtx, app_config: &Path, memory_root: 
         ctx.workspace_fragment = ctx.workspace_fragments.get(stage.as_str()).cloned();
         ctx.app_override = prompts::load_override(&app_dir, stage)?;
         ctx.project_override = prompts::load_override(&project_dir, stage)?;
-        Ok(prompts::assemble(stage, ctx))
+        // "Others working here" belongs to planning and building (§6.1), not to Spec or Review
+        let kept = ctx.task_additions.len();
+        if matches!(stage, Stage::Plan | Stage::Build) && !ctx.others_working_here.trim().is_empty() {
+            ctx.task_additions.push(ctx.others_working_here.clone());
+        }
+        let prompt = prompts::assemble(stage, ctx);
+        ctx.task_additions.truncate(kept);
+        Ok(prompt)
     };
     let spec = one(Stage::Spec)?;
     let plan = one(Stage::Plan)?;
@@ -105,7 +113,8 @@ pub fn build_stage_prompts(ctx: &mut PromptCtx, app_config: &Path, memory_root: 
 }
 
 /// Everything `transition` reads for this task now: the test and commit settings at the task's scope, the last
-/// test run (Plan 05's), and the assembled prompts.
+/// test run (Plan 05's), and the assembled prompts, the Plan and Build ones with `others_working_here` (Plan 11).
+#[allow(clippy::too_many_arguments)]
 pub fn build_transition_ctx(
     conn: &Connection,
     task: &Task,
@@ -114,10 +123,12 @@ pub fn build_transition_ctx(
     app_data: &Path,
     now: DateTime<Utc>,
     last_test: Option<TestRun>,
+    others_working_here: &str,
 ) -> Result<TransitionCtx> {
     let (scope, values) = values(conn, task)?;
     let mut prompt_ctx = build_prompt_ctx(conn, task, project, app_config, app_data)?;
     prompt_ctx.last_test = last_test.clone();
+    prompt_ctx.others_working_here = others_working_here.to_owned();
     let prompts = build_stage_prompts(&mut prompt_ctx, app_config, &root_for(project, app_data))?;
     Ok(TransitionCtx {
         now,
@@ -154,7 +165,7 @@ mod tests {
         .unwrap();
         db::settings::set(&c, ScopeKind::Project, "p-1a-1", "may_commit", &serde_json::json!(true)).unwrap();
         db::settings::set(&c, ScopeKind::Task, "t-1a-1", "test_enabled", &serde_json::json!(false)).unwrap();
-        let ctx = build_transition_ctx(&c, &t, &p, cfg.path(), data.path(), Utc::now(), None).unwrap();
+        let ctx = build_transition_ctx(&c, &t, &p, cfg.path(), data.path(), Utc::now(), None, "").unwrap();
         assert_eq!(
             (
                 ctx.test_command.as_deref(),
@@ -180,7 +191,7 @@ mod tests {
         std::fs::write(root.join("prompts/plan.md"), "PROJECT PLAN {{project.root}}").unwrap();
         std::fs::create_dir_all(cfg.path().join("prompts")).unwrap();
         std::fs::write(cfg.path().join("prompts/build.md"), "APP BUILD").unwrap();
-        let ctx = build_transition_ctx(&c, &t, &p, cfg.path(), data.path(), Utc::now(), None).unwrap();
+        let ctx = build_transition_ctx(&c, &t, &p, cfg.path(), data.path(), Utc::now(), None, "").unwrap();
         assert!(ctx
             .prompts
             .plan
@@ -213,6 +224,27 @@ mod tests {
     }
 
     #[test]
+    fn others_working_here_reaches_only_the_plan_and_build_prompts() {
+        let c = test_conn();
+        let data = tempfile::tempdir().unwrap();
+        let cfg = tempfile::tempdir().unwrap();
+        let p = insert_project(&c, "p-1a-1");
+        let t = insert_task(&c, "t-1a-1", "p-1a-1");
+        let others = "## Others working here\n\n### Login";
+        let ctx = build_transition_ctx(&c, &t, &p, cfg.path(), data.path(), Utc::now(), None, others).unwrap();
+        for prompt in [&ctx.prompts.plan, &ctx.prompts.build] {
+            assert!(prompt.contains("### Login"), "{prompt}");
+            assert!(
+                prompt.trim_end().lines().last().unwrap().starts_with("FANOUTCODE:"),
+                "the sentinel stays last"
+            );
+        }
+        for prompt in [&ctx.prompts.spec, &ctx.prompts.review] {
+            assert!(!prompt.contains("Others working here"), "{prompt}");
+        }
+    }
+
+    #[test]
     fn fix_tests_prompt_exists_only_with_a_last_run() {
         let c = test_conn();
         let data = tempfile::tempdir().unwrap();
@@ -224,7 +256,7 @@ mod tests {
             exit_code: 2,
             tail: "boom".into(),
         };
-        let ctx = build_transition_ctx(&c, &t, &p, cfg.path(), data.path(), Utc::now(), Some(run)).unwrap();
+        let ctx = build_transition_ctx(&c, &t, &p, cfg.path(), data.path(), Utc::now(), Some(run), "").unwrap();
         assert!(ctx.prompts.fix_tests.as_deref().unwrap().contains("Exit code: 2"));
     }
 }

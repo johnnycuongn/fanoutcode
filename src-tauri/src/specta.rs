@@ -7,6 +7,7 @@ use fanoutcode_core::{Error, Result};
 use specta_typescript::{BigIntExportBehavior, Typescript};
 use tauri_specta::{collect_commands, collect_events, Builder};
 
+use crate::commands::overlap_integrate as integrate;
 use crate::commands::tests as test_runs;
 use crate::commands::{
     activity, canvas, context_docs, cost, git, hooks, jira, livespec, memory, overlap, projects, sessions, settings,
@@ -139,6 +140,12 @@ pub fn builder() -> Builder<tauri::Wry> {
             overlap::overlap_list,
             overlap::overlap_decide,
             overlap::overlap_pending_input,
+            integrate::overlap_integrate,
+            integrate::overlap_set_base,
+            integrate::overlap_base_suggestion,
+            integrate::overlap_resume,
+            integrate::overlap_abort,
+            integrate::overlap_integration_context,
         ])
         .events(collect_events![
             TaskChanged,

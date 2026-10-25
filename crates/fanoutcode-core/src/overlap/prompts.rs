@@ -1,5 +1,7 @@
 //! Every overlap prompt text (spec §5.4, §5.5, §6.1–§6.3).
 
+use serde::{Deserialize, Serialize};
+
 use super::Decision;
 use crate::domain::{AgentState, Stage};
 use crate::pipeline::handback::chip_text;
@@ -38,8 +40,8 @@ pub struct OtherSummary {
 }
 
 /// One file the integrate prompt lists, with the other task that touched it on the base side and that task's
-/// spec summary and plan excerpt (§6.3).
-#[derive(Debug, Clone, PartialEq)]
+/// spec summary and plan excerpt (§6.3). Also what the merge hand-back pane shows (`overlap_integration_context`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 pub struct ConflictCtx {
     pub path: String,
     pub other_title: String,
@@ -169,16 +171,17 @@ pub fn new_task_note(title: &str, branch: &str, planned: &[String]) -> String {
 }
 
 /// The prompt behind **Bring <base> in** (§6.3), assembled from data rather than from the stage templates. The
-/// only prompt that tells the agent to merge or rebase (`.claude/rules/prompts.md`).
+/// only prompt that tells the agent to merge or rebase (`.claude/rules/prompts.md`). `base` must be a
+/// `git::valid_branch` (the shell checks it); it is single-quoted after `--` in the command line all the same.
 pub fn integrate(base: &str, mode: Integration, conflicts: &[ConflictCtx]) -> String {
     let (verb, how) = match mode {
         Integration::Merge => (
             "merge",
-            format!("Merge `{base}` into your current branch: `git merge {base}`."),
+            format!("Merge `{base}` into your current branch: `git merge -- '{base}'`."),
         ),
         Integration::Rebase => (
             "rebase",
-            format!("Rebase your current branch onto `{base}`: `git rebase {base}`."),
+            format!("Rebase your current branch onto `{base}`: `git rebase -- '{base}'`."),
         ),
     };
     let mut out = format!(
@@ -423,7 +426,7 @@ merge."
 changed the same lines, write the version that does what each task's spec asks. Run the tests. If you cannot keep \
 both, stop, leave the conflict markers in place, and say which files and why."
         ));
-        assert!(merge.contains("git merge main"), "{merge}");
+        assert!(merge.contains("`git merge -- 'main'`"), "{merge}");
         assert!(!merge.contains("git rebase"), "{merge}");
         for needle in [
             "src/auth/session.ts",
@@ -442,7 +445,7 @@ both, stop, leave the conflict markers in place, and say which files and why."
         assert!(!merge.contains("{{"));
 
         let rebase = integrate("develop", Integration::Rebase, &[]);
-        assert!(rebase.contains("git rebase develop"), "{rebase}");
+        assert!(rebase.contains("`git rebase -- 'develop'`"), "{rebase}");
         assert_eq!(rebase.trim_end().lines().last().unwrap(), INTEGRATE_SENTINEL);
         assert_eq!(INTEGRATE_SENTINEL, "FANOUTCODE: integrate done");
     }
