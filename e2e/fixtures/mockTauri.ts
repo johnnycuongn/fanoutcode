@@ -44,6 +44,7 @@ export const HANDLERS: Record<string, (args: Args) => unknown> = {
   views_reorder: () => null,
   tasks_list: () => TASKS,
   tasks_get: (args) => taskOf(args),
+  tasks_working_count: () => TASKS.filter((t) => !t.archived && t.state.type === "Working").length,
   tasks_activity: () => [],
   memory_missing: () => [],
   memory_read: () => "",

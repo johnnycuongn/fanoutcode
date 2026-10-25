@@ -123,6 +123,15 @@ pub fn needs_you_count(conn: &Connection, c: &Container) -> Result<u32> {
     )?)
 }
 
+/// Tasks whose agent is working, across every project, archived ones excluded (the start screen's brand mark).
+pub fn working_count(conn: &Connection) -> Result<u32> {
+    Ok(conn.query_row(
+        "SELECT count(*) FROM tasks WHERE archived = 0 AND json_extract(state, '$.type') = 'Working'",
+        [],
+        |r| r.get(0),
+    )?)
+}
+
 pub fn workspace_contains(conn: &Connection, ws: &WorkspaceId, p: &ProjectId) -> Result<bool> {
     Ok(conn.query_row(
         "SELECT EXISTS (SELECT 1 FROM workspace_projects WHERE workspace_id = ?1 AND project_id = ?2)",
@@ -204,6 +213,31 @@ mod tests {
         let ws = WorkspaceId::parse("ws-1a-1").unwrap();
         assert!(workspace_contains(&c, &ws, &ProjectId::parse("p-1a-1").unwrap()).unwrap());
         assert!(!workspace_contains(&c, &ws, &ProjectId::parse("p-1a-3").unwrap()).unwrap());
+    }
+
+    #[test]
+    fn working_count_spans_every_project_and_skips_archived() {
+        let c = test_conn();
+        insert_project(&c, "p-1a-1");
+        insert_project(&c, "p-1a-2");
+        assert_eq!(working_count(&c).unwrap(), 0);
+        let mut a = task_fixture("t-1a-1", "p-1a-1");
+        a.state = AgentState::Working;
+        insert(&c, &a).unwrap();
+        let mut b = task_fixture("t-1a-2", "p-1a-2");
+        b.state = AgentState::Working;
+        insert(&c, &b).unwrap();
+        let mut archived = task_fixture("t-1a-3", "p-1a-2");
+        archived.state = AgentState::Working;
+        archived.archived = true;
+        insert(&c, &archived).unwrap();
+        let mut waiting = task_fixture("t-1a-4", "p-1a-1");
+        waiting.state = AgentState::NeedsYou {
+            reason: HandbackReason::StageDone,
+        };
+        insert(&c, &waiting).unwrap();
+        insert(&c, &task_fixture("t-1a-5", "p-1a-1")).unwrap();
+        assert_eq!(working_count(&c).unwrap(), 2);
     }
 
     #[test]

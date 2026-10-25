@@ -154,6 +154,13 @@ pub fn tasks_list(state: State<'_, AppState>, container: Container) -> Result<Ve
     db::tasks::list(&state.db.lock().expect("db lock"), &parse_container(&container)?)
 }
 
+/// How many tasks are working across every project; the start screen spins its brand mark while it is above zero.
+#[tauri::command]
+#[specta::specta]
+pub fn tasks_working_count(state: State<'_, AppState>) -> Result<u32> {
+    db::tasks::working_count(&state.db.lock().expect("db lock"))
+}
+
 #[tauri::command]
 #[specta::specta]
 pub fn tasks_get(state: State<'_, AppState>, id: TaskId) -> Result<Task> {

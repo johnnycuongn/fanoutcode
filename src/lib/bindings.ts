@@ -154,6 +154,17 @@ async tasksGet(id: TaskId) : Promise<Result<Task, string>> {
     else return { status: "error", error: e  as any };
 }
 },
+/**
+ * How many tasks are working across every project; the start screen spins its brand mark while it is above zero.
+ */
+async tasksWorkingCount() : Promise<Result<number, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("tasks_working_count") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async tasksUpdate(id: TaskId, patch: TaskPatch) : Promise<Result<Task, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("tasks_update", { id, patch }) };

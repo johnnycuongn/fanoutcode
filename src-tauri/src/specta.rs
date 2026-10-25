@@ -41,6 +41,7 @@ pub fn builder() -> Builder<tauri::Wry> {
             tasks::tasks_create,
             tasks::tasks_list,
             tasks::tasks_get,
+            tasks::tasks_working_count,
             tasks::tasks_update,
             tasks::tasks_rename,
             tasks::tasks_move,

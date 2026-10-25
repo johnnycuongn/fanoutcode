@@ -1,9 +1,11 @@
-// The start window: recent projects and workspaces, open buttons, and a new workspace from the open windows.
+// The start window: the brand mark (spinning while any agent works), recent projects and workspaces, open buttons,
+// and a new workspace from the open windows.
 import { useEffect, useState, type ReactElement } from "react";
-import { Button, Panel, Tooltip } from "@/components/ui";
+import { AppMark, Button, Panel, Tooltip } from "@/components/ui";
 import { commands } from "@/lib/bindings";
 import { newWorkspaceFromOpenWindows, openProjectDialog, openWorkspaceDialog } from "../actions";
 import { loadRecents, startStore } from "../store";
+import { useAgentsWorking } from "../working";
 import { RecentList } from "./RecentList";
 
 function useHasProjectWindows(): boolean {
@@ -27,6 +29,7 @@ function useHasProjectWindows(): boolean {
 export function StartScreen(): ReactElement {
   const recents = startStore.useSelector((s) => s.recents);
   const hasProjects = useHasProjectWindows();
+  const working = useAgentsWorking();
   useEffect(() => void loadRecents(), []);
   const newWorkspace = (
     <Button variant="secondary" disabled={!hasProjects} onClick={() => void newWorkspaceFromOpenWindows()}>
@@ -36,7 +39,10 @@ export function StartScreen(): ReactElement {
   return (
     <main className="grid h-full place-items-center bg-page p-6 text-ink">
       <Panel variant="card" padding="md" className="flex w-full max-w-2xl flex-col gap-5">
-        <h1 className="text-lg font-semibold">Fanout Code</h1>
+        <div className="flex items-center gap-3">
+          <AppMark size={48} spinning={working} data-testid="app-mark" />
+          <h1 className="text-lg font-semibold">Fanout Code</h1>
+        </div>
         <div className="flex flex-wrap gap-2">
           <Button onClick={() => void openProjectDialog()}>Open project…</Button>
           <Button variant="secondary" onClick={() => void openWorkspaceDialog()}>
