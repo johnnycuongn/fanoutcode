@@ -301,3 +301,27 @@ fn actions_outside_their_stage_are_invalid() {
         Err(Error::Invalid(_))
     ));
 }
+
+#[test]
+fn a_failed_commit_draft_needs_you_and_can_be_drafted_again() {
+    let commit = fixture(Stage::Commit, AgentKind::ClaudeCode);
+    assert_eq!(
+        on_helper_failed(&commit, HelperKind::CommitMessages, "rate limited"),
+        Some(AgentState::NeedsYou {
+            reason: HandbackReason::Error {
+                message: "Couldn't draft the commit messages: rate limited".into()
+            }
+        })
+    );
+    assert_eq!(on_helper_failed(&commit, HelperKind::Naming, "x"), None);
+    let moved_on = fixture(Stage::Done, AgentKind::ClaudeCode);
+    assert_eq!(on_helper_failed(&moved_on, HelperKind::CommitMessages, "x"), None);
+    assert_eq!(
+        redraft_commits(&commit).unwrap(),
+        [
+            Effect::RunHelper(HelperKind::CommitMessages),
+            Effect::SetState(AgentState::Working)
+        ]
+    );
+    assert!(matches!(redraft_commits(&moved_on), Err(Error::Invalid(_))));
+}

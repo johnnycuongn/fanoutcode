@@ -6,7 +6,11 @@ import { drafts } from "../testing/fakes";
 import { createCommitStore, type CommitIpc } from "../commitStore";
 import { CommitTab } from "./CommitTab";
 
-const ipc = () => ({ gitDrafts: vi.fn(async () => drafts), tasksAction: vi.fn(async () => {}) });
+const ipc = () => ({
+  gitDrafts: vi.fn(async () => drafts),
+  tasksAction: vi.fn(async () => {}),
+  tasksDraftCommits: vi.fn(async () => {}),
+});
 const clip = () => ({ write: vi.fn(async () => {}) });
 test("renders drafts grouped by repo with Copy, which copies and records CopyCommit", async () => {
   const i = ipc();
@@ -26,4 +30,23 @@ test("the Commit button exists only with may_commit on and confirms before sendi
   fireEvent.click(await screen.findByRole("button", { name: "Commit" }));
   fireEvent.click(await screen.findByRole("button", { name: "Commit 3 files in 2 repos" }));
   await waitFor(() => expect(i.tasksAction).toHaveBeenCalledWith("task-1", { type: "Commit" }));
+});
+test("a failed draft shows its error and Draft again runs the helper once more", async () => {
+  const i = ipc();
+  const s = createCommitStore(i as unknown as CommitIpc, clip());
+  const failed = makeTask({
+    stage: "Commit",
+    state: { type: "NeedsYou", reason: { type: "Error", message: "Couldn't draft the commit messages: offline" } },
+  });
+  render(<CommitTab task={failed} settings={makeSettings()} store={s} />);
+  expect(await screen.findByText("Couldn't draft the commit messages: offline")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Draft again" }));
+  await waitFor(() => expect(i.tasksDraftCommits).toHaveBeenCalledWith("task-1"));
+});
+test("Draft again is disabled while the draft runs", async () => {
+  const s = createCommitStore(ipc() as unknown as CommitIpc, clip());
+  render(
+    <CommitTab task={makeTask({ stage: "Commit", state: { type: "Working" } })} settings={makeSettings()} store={s} />,
+  );
+  expect((await screen.findByRole("button", { name: "Draft again" })).hasAttribute("disabled")).toBe(true);
 });

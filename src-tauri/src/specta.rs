@@ -47,6 +47,7 @@ pub fn builder() -> Builder<tauri::Wry> {
             tasks::tasks_action,
             tasks::tasks_archive,
             tasks::tasks_restore,
+            tasks::tasks_draft_commits,
             views::views_list,
             views::views_create,
             views::views_update_layout,

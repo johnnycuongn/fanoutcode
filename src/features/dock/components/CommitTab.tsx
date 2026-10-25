@@ -1,5 +1,6 @@
 // The Commit tab (§6.6): the drafted messages per repo with their files and a Copy button; the Commit button only
-// when "Team Code may commit" is on, behind a confirmation. The app never commits on its own.
+// when "Team Code may commit" is on, behind a confirmation; Draft again after a failed draft. The app never commits on
+// its own.
 import { useEffect, useState, type ReactElement } from "react";
 import {
   Button,
@@ -42,6 +43,9 @@ export function CommitTab({
   }, [store, task.id]);
 
   const repos = [...new Set(drafts.map((d) => d.repo))];
+  const drafting = task.state.type === "Working";
+  const failure =
+    task.state.type === "NeedsYou" && task.state.reason.type === "Error" ? task.state.reason.message : null;
   return (
     <div className="h-full overflow-auto px-4 py-3">
       <div className="mb-3 flex items-center gap-2">
@@ -52,7 +56,16 @@ export function CommitTab({
         ) : (
           <p className="text-xs text-mute">{OFF_HINT}</p>
         )}
+        <span className="flex-1" />
+        <Button size="sm" variant="secondary" disabled={drafting} onClick={() => void store.redraft(task.id)}>
+          Draft again
+        </Button>
       </div>
+      {failure && (
+        <p role="alert" className="mb-2 text-[13px] text-bad">
+          {failure}
+        </p>
+      )}
       {error && (
         <p role="alert" className="mb-2 text-[13px] text-bad">
           {error}

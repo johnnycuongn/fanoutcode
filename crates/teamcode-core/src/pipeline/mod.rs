@@ -232,5 +232,28 @@ pub fn on_test_finished(task: &Task, exit_code: i32, ctx: &TransitionCtx) -> Res
     Ok(vec![Effect::SetState(AgentState::NeedsYou { reason })])
 }
 
+/// A helper run failed (§7.4). Only the commit-message draft owns the card's state, so only it hands back: while
+/// the task is still in Commit it needs you with the error, instead of "working" forever.
+pub fn on_helper_failed(task: &Task, kind: HelperKind, message: &str) -> Option<AgentState> {
+    (kind == HelperKind::CommitMessages && task.stage == Stage::Commit && !task.archived).then(|| {
+        AgentState::NeedsYou {
+            reason: HandbackReason::Error {
+                message: format!("Couldn't draft the commit messages: {message}"),
+            },
+        }
+    })
+}
+
+/// The Commit tab's Draft again: the commit-message helper once more, the card working meanwhile.
+pub fn redraft_commits(task: &Task) -> Result<Vec<Effect>> {
+    if task.stage != Stage::Commit {
+        return Err(Error::Invalid("Commit messages are drafted in Commit".into()));
+    }
+    Ok(vec![
+        Effect::RunHelper(HelperKind::CommitMessages),
+        Effect::SetState(AgentState::Working),
+    ])
+}
+
 #[cfg(test)]
 mod tests;

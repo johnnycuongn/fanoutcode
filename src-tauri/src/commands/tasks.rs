@@ -217,3 +217,10 @@ pub fn tasks_restore(app: AppHandle, state: State<'_, AppState>, id: TaskId) -> 
         pipeline::transition(task, StageAction::Restore, tctx)
     })
 }
+
+/// The Commit tab's Draft again: runs the commit-message helper once more for a task in Commit.
+#[tauri::command]
+#[specta::specta]
+pub fn tasks_draft_commits(app: AppHandle, state: State<'_, AppState>, id: TaskId) -> Result<ActionOutcome> {
+    run(&app, &state, &id, |task, _| pipeline::redraft_commits(task))
+}

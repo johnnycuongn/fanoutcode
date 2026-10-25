@@ -44,7 +44,10 @@ pub fn run_after(app: &AppHandle, task_id: &TaskId, kind: HelperKind, delay: Dur
     let (app2, id) = (app.clone(), task_id.clone());
     let handle = tauri::async_runtime::spawn(async move {
         tokio::time::sleep(delay).await;
-        log_err(&format!("the {kind:?} helper"), job(&app2, &id, kind).await);
+        if let Err(e) = job(&app2, &id, kind).await {
+            eprintln!("Team Code: the {kind:?} helper: {e}");
+            log_err("handing back a failed helper", hand_back_failure(&app2, &id, kind, &e));
+        }
     });
     let state = app.state::<AppState>();
     let old = state
@@ -54,6 +57,16 @@ pub fn run_after(app: &AppHandle, task_id: &TaskId, kind: HelperKind, delay: Dur
         .insert((task_id.clone(), kind), handle);
     if let Some(old) = old {
         old.abort();
+    }
+}
+
+/// A failed commit-message draft moves the card off "working" (`pipeline::on_helper_failed`).
+fn hand_back_failure(app: &AppHandle, id: &TaskId, kind: HelperKind, e: &teamcode_core::Error) -> Result<()> {
+    let state = app.state::<AppState>();
+    let task = db::tasks::require(&state.db.lock().expect("db lock"), id)?;
+    match pipeline::on_helper_failed(&task, kind, &e.to_string()) {
+        Some(next) => hook_feed::set_state(app, &state, id, next),
+        None => Ok(()),
     }
 }
 

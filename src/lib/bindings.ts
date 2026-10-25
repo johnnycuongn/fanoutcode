@@ -206,6 +206,17 @@ async tasksRestore(id: TaskId) : Promise<Result<ActionOutcome, string>> {
     else return { status: "error", error: e  as any };
 }
 },
+/**
+ * The Commit tab's Draft again: runs the commit-message helper once more for a task in Commit.
+ */
+async tasksDraftCommits(id: TaskId) : Promise<Result<ActionOutcome, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("tasks_draft_commits", { id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async viewsList(container: Container) : Promise<Result<View[], string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("views_list", { container }) };
