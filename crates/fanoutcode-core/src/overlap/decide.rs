@@ -29,7 +29,8 @@ pub struct DecisionOutcome {
 }
 
 /// The outcome of `decision` on `row`. For a denied shell command (§5.6) the only answers are Proceed and Hold:
-/// `OnTopFile`, `OnTopAll` and `Replace` all proceed, granting `AllFiles` on the other task. The other task is told
+/// `OnTopFile`, `OnTopAll` and `Replace` all proceed, granting one run of exactly that command over the other
+/// task's claims (`GrantScope::Command`; an edit grant would switch the git guard off). The other task is told
 /// nothing when there is none (an unattributed session) or the answer is Hold.
 pub fn outcome(
     decision: Decision,
@@ -54,7 +55,9 @@ pub fn outcome(
     if let Some(PendingDecision::Command { command }) = &row.pending {
         if decision != Decision::Hold {
             return DecisionOutcome {
-                grant: grant(GrantScope::AllFiles),
+                grant: grant(GrantScope::Command {
+                    command: command.trim().to_owned(),
+                }),
                 relation: Relation::GrantedOnTop,
                 other_relation: None,
                 my_prompt: Some(go_ahead_command(other_title, command)),
@@ -118,13 +121,17 @@ pub fn outcome(
     }
 }
 
-/// The other open decisions of `rows` that `grants` now covers (an `AllFiles` grant answers every file of its other
-/// task at once), `except` the one just decided.
+/// The other open decisions of `rows` that `grants` now covers, `except` the one just decided: an edit grant answers
+/// the edits it covers (an `AllFiles` grant every file of its other task at once), a `Command` grant the stops of
+/// that same command on its other task's files.
 pub fn covered_pending<'a>(rows: &'a [OverlapRow], grants: &GrantsFile, except: &OverlapRow) -> Vec<&'a OverlapRow> {
     rows.iter()
-        .filter(|r| r.pending.is_some())
         .filter(|r| !(r.repo_root == except.repo_root && r.path == except.path && r.other_task == except.other_task))
-        .filter(|r| grants.covers(&r.repo_root, &r.path, r.other_task.as_ref()))
+        .filter(|r| match &r.pending {
+            None => false,
+            Some(PendingDecision::Edit { .. }) => grants.covers(&r.repo_root, &r.path, r.other_task.as_ref()),
+            Some(PendingDecision::Command { command, .. }) => grants.allows_command(command, r.other_task.as_ref()),
+        })
         .collect()
 }
 
@@ -309,7 +316,31 @@ mod tests {
     }
 
     #[test]
-    fn a_command_proceeds_with_all_files_and_an_unattributed_other_is_told_nothing() {
+    fn a_command_proceed_answers_that_commands_rows_on_the_same_task_only() {
+        let cmd = |c: &str| {
+            Some(PendingDecision::Command {
+                command: c.into(),
+            })
+        };
+        let decided = row("src/a.ts", Some("t-b2"), cmd("git stash"), false);
+        let rows = [
+            decided.clone(),
+            row("src/b.ts", Some("t-b2"), cmd("git stash"), false),
+            row("src/c.ts", Some("t-c3"), cmd("git stash"), false),
+            row("src/d.ts", Some("t-b2"), cmd("git reset --hard"), false),
+            row("src/e.ts", Some("t-b2"), edit(), false),
+        ];
+        let mut grants = GrantsFile::default();
+        grants.add(outcome(Decision::OnTopAll, &decided, "C", "Login", now()).grant.unwrap());
+        let covered: Vec<&str> = covered_pending(&rows, &grants, &decided)
+            .iter()
+            .map(|r| r.path.as_str())
+            .collect();
+        assert_eq!(covered, vec!["src/b.ts"]);
+    }
+
+    #[test]
+    fn a_command_proceeds_with_a_command_grant_and_an_unattributed_other_is_told_nothing() {
         let cmd = Some(PendingDecision::Command {
             command: "git add -A".into(),
         });
@@ -321,7 +352,12 @@ mod tests {
                 "Login",
                 now(),
             );
-            assert_eq!(out.grant.unwrap().scope, GrantScope::AllFiles);
+            assert_eq!(
+                out.grant.unwrap().scope,
+                GrantScope::Command {
+                    command: "git add -A".into()
+                }
+            );
             assert_eq!(out.my_prompt, Some(go_ahead_command("Login", "git add -A")));
             assert!(!out.taken_over);
         }

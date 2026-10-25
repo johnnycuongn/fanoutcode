@@ -91,7 +91,7 @@ pub fn denial_rows(
         .claims
         .iter()
         .filter(|c| c.task_id.as_ref() != Some(own))
-        .filter(|c| !grants.covers(&file.repo_root, &c.path, c.task_id.as_ref()))
+        .filter(|c| !grants.allows_command(command, c.task_id.as_ref()))
         .collect();
     let named: Vec<&Claim> = match evaluate_git(command, repo, repo, &others) {
         Some((_, paths)) => others.iter().copied().filter(|c| paths.contains(&c.path)).collect(),
@@ -250,7 +250,15 @@ mod tests {
             claim("src/mine.ts", Some("t-a1")),
             claim("src/c.ts", Some("t-b2")),
         ]);
+        // C3's claims are already answered for this command; an edit grant on B2's c.ts answers nothing
         let mut grants = GrantsFile::default();
+        grants.add(Grant {
+            other_task: Some(id("t-c3")),
+            scope: GrantScope::Command {
+                command: "git add -A".into(),
+            },
+            granted_at: Utc::now(),
+        });
         grants.add(Grant {
             other_task: Some(id("t-b2")),
             scope: GrantScope::File {
@@ -273,7 +281,7 @@ mod tests {
             .iter()
             .map(|d| (d.path.as_str(), d.other_task.as_ref().map(TaskId::as_str)))
             .collect();
-        assert_eq!(keys, vec![("src/a.ts", Some("t-b2")), ("src/b.ts", Some("t-c3"))]);
+        assert_eq!(keys, vec![("src/a.ts", Some("t-b2")), ("src/c.ts", Some("t-b2"))]);
         assert!(rows.iter().all(|d| d.pending
             == PendingDecision::Command {
                 command: "git add -A".into()

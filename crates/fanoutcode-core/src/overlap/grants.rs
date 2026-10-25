@@ -12,12 +12,15 @@ use crate::domain::TaskId;
 use crate::memory::store::write_atomic;
 use crate::Result;
 
-/// What a grant covers: one file of one repo, or every file the other task claims.
+/// What a grant covers: one file of one repo or every file the other task claims (edits only), or one run of one
+/// exact shell command over the other task's claims (the git guard, §5.6; edit grants never allow a command).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(tag = "type")]
 pub enum GrantScope {
     File { repo: PathBuf, path: String },
     AllFiles,
+    /// Single use: removed from the grants file once the hook allows the command (`consume_command`).
+    Command { command: String },
 }
 
 /// One answer: this task may edit on top of `other_task`'s claims in `scope` (`other_task: None`: an unattributed
@@ -65,7 +68,16 @@ impl GrantsFile {
                 && match &g.scope {
                     GrantScope::AllFiles => true,
                     GrantScope::File { repo: r, path: p } => r == repo && p == path,
+                    GrantScope::Command { .. } => false,
                 }
+        })
+    }
+
+    /// Whether a `Command` grant lets this task run exactly `command` (both trimmed) over the claims of `other`.
+    pub fn allows_command(&self, command: &str, other: Option<&TaskId>) -> bool {
+        self.grants.iter().any(|g| {
+            g.other_task.as_ref() == other
+                && matches!(&g.scope, GrantScope::Command { command: c } if c.trim() == command.trim())
         })
     }
 
@@ -84,10 +96,31 @@ impl GrantsFile {
                 .iter()
                 .filter(|f| &f.repo_root == repo)
                 .any(|f| f.claims.iter().any(|c| &c.path == path && c.task_id == g.other_task)),
-            GrantScope::AllFiles => claims
+            GrantScope::AllFiles | GrantScope::Command { .. } => claims
                 .iter()
                 .any(|f| f.claims.iter().any(|c| c.task_id == g.other_task)),
         });
+    }
+}
+
+/// Spends the `Command` grants for exactly `command` in the grants file at `path`, once the hook has allowed it (a
+/// command grant is single use). Leaves the file alone when none matches; a failed write is reported on stderr (the
+/// hook fails open).
+pub fn consume_command(path: &Path, command: &str) {
+    // TODO(grants-file lock): this read-modify-write races the app's `write_grants`; take the grants-file lock being
+    // added to `AppState` (wired at merge) around it.
+    let mut file = read_grants(path);
+    let before = file.grants.len();
+    file.grants
+        .retain(|g| !matches!(&g.scope, GrantScope::Command { command: c } if c.trim() == command.trim()));
+    if file.grants.len() == before {
+        return;
+    }
+    let written = serde_json::to_vec(&file)
+        .map_err(crate::Error::from)
+        .and_then(|bytes| write_atomic(path, &bytes));
+    if let Err(e) = written {
+        eprintln!("fanoutcode claim-check: cannot update {}: {e}", path.display());
     }
 }
 
@@ -210,6 +243,31 @@ mod tests {
     }
 
     #[test]
+    fn a_command_grant_covers_no_edit_and_matches_its_command_trimmed() {
+        let g = GrantsFile {
+            grants: vec![Grant {
+                other_task: Some(id("t-b2")),
+                scope: GrantScope::Command {
+                    command: "git stash".into(),
+                },
+                granted_at: at(),
+            }],
+        };
+        let b = id("t-b2");
+        assert!(!g.covers(Path::new("/r"), "src/a.ts", Some(&b)));
+        assert!(g.allows_command(" git stash\n", Some(&b)));
+        assert!(!g.allows_command("git stash -u", Some(&b)));
+        assert!(!g.allows_command("git stash", Some(&id("t-c3"))));
+        assert!(!g.allows_command("git stash", None));
+        let dir = tempfile::tempdir().unwrap();
+        let path = write_grants(dir.path(), &id("t-a1"), &g).unwrap();
+        consume_command(&path, "git reset --hard");
+        assert_eq!(read_grants(&path), g, "another command spends nothing");
+        consume_command(&path, "git stash");
+        assert!(read_grants(&path).grants.is_empty());
+    }
+
+    #[test]
     fn read_is_empty_for_missing_file() {
         let dir = tempfile::tempdir().unwrap();
         assert_eq!(read_grants(&dir.path().join("none.json")), GrantsFile::default());
@@ -236,6 +294,9 @@ mod tests {
             GrantScope::File {
                 repo: "/r".into(),
                 path: "a.ts".into(),
+            },
+            GrantScope::Command {
+                command: "git stash".into(),
             },
         ] {
             let v = serde_json::to_value(&scope).unwrap();

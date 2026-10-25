@@ -11,7 +11,7 @@ use serde::Deserialize;
 
 use super::claims::{read_claims, Claim, ClaimsFile};
 use super::git_rules::{evaluate_git, rel_in};
-use super::grants::{read_grants, GrantsFile};
+use super::grants::{consume_command, read_grants, GrantsFile};
 use super::notes::drain_notes;
 use crate::domain::TaskId;
 use crate::hooks::{sh_single_quote, HookSpec};
@@ -123,11 +123,12 @@ fn check_bash(input: &CheckInput, own: &TaskId, claims: &[ClaimsFile], grants: &
         return CheckDecision::Allow;
     };
     for file in claims {
+        // edit grants never let a command through (§5.6); only an exact, single-use `Command` grant does
         let others: Vec<&Claim> = file
             .claims
             .iter()
             .filter(|c| c.task_id.as_ref() != Some(own))
-            .filter(|c| !grants.covers(&file.repo_root, &c.path, c.task_id.as_ref()))
+            .filter(|c| !grants.allows_command(command, c.task_id.as_ref()))
             .collect();
         let Some((_, paths)) = evaluate_git(command, &input.cwd, &file.repo_root, &others) else {
             continue;
@@ -290,6 +291,11 @@ pub fn run_check(stdin: &mut dyn Read, stdout: &mut dyn Write, args: &CheckArgs)
             }}))
         }
         CheckDecision::Allow => {
+            if args.guard_git && input.tool_name == "Bash" {
+                if let Some(command) = input.tool_input.get("command").and_then(|c| c.as_str()) {
+                    consume_command(&args.grants_path, command);
+                }
+            }
             // no `permissionDecision`: an explicit allow would skip the developer's own permission prompts
             let notes = drain_notes(&args.notes_path);
             (!notes.is_empty()).then(|| {
@@ -309,3 +315,7 @@ pub fn run_check(stdin: &mut dyn Read, stdout: &mut dyn Write, args: &CheckArgs)
 #[cfg(test)]
 #[path = "check_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "check_bash_tests.rs"]
+mod bash_tests;
