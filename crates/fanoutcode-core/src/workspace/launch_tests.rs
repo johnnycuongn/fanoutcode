@@ -126,6 +126,34 @@ fn guard_denies_writes_to_its_own_roots_file() {
 }
 
 #[test]
+fn the_database_files_are_denied_to_edits_and_guarded() {
+    let (fx, _s, _ws, t) = setup();
+    let conn = fx.db.lock().unwrap();
+    let task = db::tasks::require(&conn, &t.id).unwrap();
+    let data = fx.app_data.path();
+    let canonical = std::fs::canonicalize(data).unwrap();
+    let extras = launch_extras(&conn, &task, data, Path::new("/x"), Path::new("/h"), true, true).unwrap();
+    for name in ["fanoutcode.db", "fanoutcode.db-wal", "fanoutcode.db-shm"] {
+        for base in [data, canonical.as_path()] {
+            let rule = format!("Edit(/{})", base.join(name).display());
+            assert!(extras.deny.contains(&rule), "{rule} in {:?}", extras.deny);
+        }
+        for cmd in [
+            format!("rm -f '{}'", data.join(name).display()),
+            format!("echo x > '{}'", canonical.join(name).display()),
+            format!("cp /tmp/evil.db '{}'", data.join(name).display()),
+        ] {
+            assert!(guard_denies(data, &task.id, &cmd), "{cmd}");
+        }
+    }
+    assert!(!guard_denies(
+        data,
+        &task.id,
+        &format!("cp '{}' /tmp/backup.db", data.join("fanoutcode.db").display())
+    ));
+}
+
+#[test]
 fn the_guard_covers_both_forms_of_a_symlinked_app_data() {
     let (fx, _s, _ws, t) = setup();
     let conn = fx.db.lock().unwrap();
