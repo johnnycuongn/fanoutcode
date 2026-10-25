@@ -1,7 +1,17 @@
 //! The pure pieces of "Bring <base> in" (§6.3): reading the session's `Stop` after the integrate prompt, and the
 //! other task's intent excerpted from its memory folder for each overlapping path.
 
-use super::prompts::INTEGRATE_SENTINEL;
+use std::collections::BTreeSet;
+use std::path::Path;
+
+use chrono::{DateTime, Utc};
+
+use super::prompts::{ConflictCtx, INTEGRATE_SENTINEL};
+use super::OverlapRow;
+use crate::domain::{AgentState, HandbackReason, Stage, TaskId};
+use crate::memory::{IndexEntry, TimelineKind};
+use crate::pipeline::Effect;
+use crate::settings::Integration;
 
 /// What an integrating session's `Stop` means (§6.3).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -96,9 +106,140 @@ fn plan_lines(path: &str, md: &str) -> String {
     files.join("\n")
 }
 
+/// What `conflict_ctxs` reads of another task: its title and its memory folder's `spec.md` and `plan.md`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct OtherIntent {
+    pub title: String,
+    pub spec_md: String,
+    pub plan_md: String,
+}
+
+/// The integrate prompt's file list (§6.3): one entry per (path, other task) of the task's overlap rows, by path,
+/// each with the other task's `excerpts`. A row without another task, or whose task `intent_of` no longer knows,
+/// is "another session" with no excerpts.
+pub fn conflict_ctxs(rows: &[OverlapRow], intent_of: impl Fn(&TaskId) -> Option<OtherIntent>) -> Vec<ConflictCtx> {
+    let mut out = Vec::new();
+    let keys: BTreeSet<(&str, Option<&TaskId>)> =
+        rows.iter().map(|r| (r.path.as_str(), r.other_task.as_ref())).collect();
+    for (path, other) in keys {
+        let ctx = match other.and_then(&intent_of) {
+            Some(i) => {
+                let (spec_excerpt, plan_excerpt) = excerpts(path, &i.spec_md, &i.plan_md);
+                ConflictCtx {
+                    path: path.to_owned(),
+                    other_title: i.title,
+                    spec_excerpt,
+                    plan_excerpt,
+                }
+            }
+            None => ConflictCtx {
+                path: path.to_owned(),
+                other_title: "another session".to_owned(),
+                spec_excerpt: String::new(),
+                plan_excerpt: String::new(),
+            },
+        };
+        out.push(ctx);
+    }
+    out.sort_by(|a, b| (&a.path, &a.other_title).cmp(&(&b.path, &b.other_title)));
+    out
+}
+
+/// A branch name `git check-ref-format --branch` would accept (the base the developer confirms): no whitespace or
+/// control characters, none of `~^:?*[\`, no `..`, `//` or `@{`, not `@`, and no leading `-` or `/` nor trailing
+/// `/`, `.` or `.lock`.
+pub fn valid_branch(name: &str) -> bool {
+    !name.is_empty()
+        && name != "@"
+        && !name
+            .chars()
+            .any(|c| c.is_whitespace() || c.is_control() || "~^:?*[\\".contains(c))
+        && !["..", "//", "@{"].iter().any(|s| name.contains(s))
+        && !name.starts_with(['-', '/'])
+        && !name.ends_with(['/', '.'])
+        && !name.ends_with(".lock")
+}
+
+/// The effects of an integrating session's `Stop` (§6.3): `Done` returns the task to Idle and records the
+/// integration in the timeline (or the abort, when `aborted`); `Conflicted` hands back `MergeNeedsYou` with the
+/// conflicted paths of `repo`; `StillWorking` keeps it Working.
+pub fn stop_effects(
+    result: IntegrationResult,
+    base: &str,
+    aborted: bool,
+    repo: &Path,
+    conflicted: Vec<String>,
+    stage: Stage,
+    now: DateTime<Utc>,
+) -> Vec<Effect> {
+    match result {
+        IntegrationResult::Done => {
+            let detail = if aborted {
+                format!("aborted bringing {base} in")
+            } else {
+                format!("integrated {base}")
+            };
+            vec![
+                Effect::SetState(AgentState::Idle),
+                Effect::WriteIndex(IndexEntry {
+                    at: now,
+                    stage,
+                    kind: TimelineKind::Overlap { detail },
+                }),
+            ]
+        }
+        IntegrationResult::Conflicted => vec![Effect::SetState(AgentState::NeedsYou {
+            reason: HandbackReason::MergeNeedsYou {
+                repo: repo.to_owned(),
+                paths: conflicted,
+            },
+        })],
+        IntegrationResult::StillWorking => vec![Effect::SetState(AgentState::Working)],
+    }
+}
+
+fn verb(mode: Integration) -> &'static str {
+    match mode {
+        Integration::Merge => "merge",
+        Integration::Rebase => "rebase",
+    }
+}
+
+fn finish_with_sentinel() -> String {
+    format!("end your final message with this single line and nothing after it:\n{INTEGRATE_SENTINEL}\n")
+}
+
+/// **Resume** on the merge hand-back (§6.3): the developer's instructions, then the sentinel to end with.
+pub fn resume_prompt(instruction: &str, mode: Integration) -> String {
+    let verb = verb(mode);
+    format!(
+        "Fanout Code: continue the integration with these instructions: {}\n\nWhen the {verb} is finished, the \
+working tree is clean and the tests pass, {}",
+        instruction.trim(),
+        finish_with_sentinel()
+    )
+}
+
+/// **Abort** on the merge hand-back (§6.3): undo the merge or rebase and leave the branch as it was.
+pub fn abort_prompt(base: &str, mode: Integration) -> String {
+    format!(
+        "Fanout Code: the developer asks you to stop bringing `{base}` in. Run `git {} --abort` and leave the branch \
+as it was before the {}. Change nothing else. Then {}",
+        verb(mode),
+        verb(mode),
+        finish_with_sentinel()
+    )
+}
+
 #[cfg(test)]
 mod tests {
+    use chrono::{DateTime, Utc};
+
     use super::*;
+    use crate::domain::{AgentState, HandbackReason, Stage, TaskId};
+    use crate::memory::{IndexEntry, TimelineKind};
+    use crate::overlap::{OverlapRow, Relation};
+    use crate::pipeline::Effect;
 
     #[test]
     fn integration_result_rules() {
@@ -140,5 +281,150 @@ mod tests {
         assert_eq!(excerpts("src/x.ts", "no sections", ""), (String::new(), String::new()));
         let near = "## Files\n\n- src/auth/session.tsx\n- lib/src/auth/session.ts\n- `src/auth/session.ts`.\n";
         assert_eq!(excerpts("src/auth/session.ts", "", near).1, "- `src/auth/session.ts`.");
+    }
+
+    fn row(path: &str, other: Option<&str>) -> OverlapRow {
+        OverlapRow {
+            task_id: TaskId::parse("t-a1").unwrap(),
+            other_task: other.map(|o| TaskId::parse(o).unwrap()),
+            repo_root: "/wt/a".into(),
+            path: path.into(),
+            relation: Relation::PlannedBy,
+            pending: None,
+            held: false,
+            noted_out: false,
+            noted_in: false,
+            decided_at: None,
+            updated_at: "2026-10-25T10:00:00Z".parse().unwrap(),
+        }
+    }
+
+    #[test]
+    fn conflict_ctx_round_trips_through_serde() {
+        let c = ConflictCtx {
+            path: "src/a.ts".into(),
+            other_title: "Login".into(),
+            spec_excerpt: "## Summary\nSign in.".into(),
+            plan_excerpt: "- src/a.ts".into(),
+        };
+        let json = serde_json::to_value(&c).unwrap();
+        assert_eq!(json["other_title"], "Login");
+        assert_eq!(serde_json::from_value::<ConflictCtx>(json).unwrap(), c);
+    }
+
+    #[test]
+    fn conflict_ctxs_one_per_path_and_task_with_both_excerpts() {
+        let rows = [
+            row("src/b.ts", Some("t-b2")),
+            row("src/a.ts", Some("t-b2")),
+            row("src/a.ts", Some("t-b2")),
+            row("src/a.ts", None),
+            row("src/c.ts", Some("t-c3")),
+        ];
+        let intent_of = |id: &TaskId| {
+            (id.as_str() == "t-b2").then(|| OtherIntent {
+                title: "Login".into(),
+                spec_md: "# Login\n\n## Summary\nSign in.\n".into(),
+                plan_md: "## Files\n- src/a.ts — form\n- src/b.ts\n".into(),
+            })
+        };
+        let got = conflict_ctxs(&rows, intent_of);
+        let keys: Vec<(&str, &str)> = got.iter().map(|c| (c.path.as_str(), c.other_title.as_str())).collect();
+        assert_eq!(
+            keys,
+            [
+                ("src/a.ts", "Login"),
+                ("src/a.ts", "another session"),
+                ("src/b.ts", "Login"),
+                ("src/c.ts", "another session"),
+            ]
+        );
+        assert_eq!(got[0].spec_excerpt, "## Summary\nSign in.");
+        assert_eq!(got[0].plan_excerpt, "- src/a.ts — form");
+        assert_eq!((got[1].spec_excerpt.as_str(), got[1].plan_excerpt.as_str()), ("", ""));
+        assert!(conflict_ctxs(&[], intent_of).is_empty());
+    }
+
+    #[test]
+    fn valid_branch_accepts_names_git_accepts() {
+        for ok in ["main", "develop", "release/1.2", "feat/login-form", "v2_x"] {
+            assert!(valid_branch(ok), "{ok}");
+        }
+        for bad in [
+            "", " ", "main dev", "-main", "/main", "main/", "a..b", "a~1", "a^", "a:b", "a?", "a*", "a[b", "a\\b",
+            "x.lock", "x.", "a//b", "a@{1}", "@", "a\tb",
+        ] {
+            assert!(!valid_branch(bad), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn stop_effects_rules() {
+        let now: DateTime<Utc> = "2026-10-25T10:00:00Z".parse().unwrap();
+        let repo = Path::new("/wt/a");
+        let entry = |detail: &str| {
+            Effect::WriteIndex(IndexEntry {
+                at: now,
+                stage: Stage::Done,
+                kind: TimelineKind::Overlap { detail: detail.into() },
+            })
+        };
+        assert_eq!(
+            stop_effects(IntegrationResult::Done, "main", false, repo, vec![], Stage::Done, now),
+            [Effect::SetState(AgentState::Idle), entry("integrated main")]
+        );
+        assert_eq!(
+            stop_effects(IntegrationResult::Done, "main", true, repo, vec![], Stage::Done, now),
+            [Effect::SetState(AgentState::Idle), entry("aborted bringing main in")]
+        );
+        assert_eq!(
+            stop_effects(
+                IntegrationResult::Conflicted,
+                "main",
+                false,
+                repo,
+                vec!["src/a.ts".into()],
+                Stage::Done,
+                now
+            ),
+            [Effect::SetState(AgentState::NeedsYou {
+                reason: HandbackReason::MergeNeedsYou {
+                    repo: repo.into(),
+                    paths: vec!["src/a.ts".into()],
+                },
+            })]
+        );
+        assert_eq!(
+            stop_effects(
+                IntegrationResult::StillWorking,
+                "main",
+                false,
+                repo,
+                vec![],
+                Stage::Done,
+                now
+            ),
+            [Effect::SetState(AgentState::Working)]
+        );
+    }
+
+    #[test]
+    fn resume_and_abort_prompts_end_with_the_sentinel() {
+        let resume = resume_prompt("  keep the new session expiry from Login  ", Integration::Merge);
+        assert!(resume.starts_with(
+            "Fanout Code: continue the integration with these instructions: keep the new session expiry from Login\n"
+        ));
+        assert!(resume.contains("When the merge is finished"), "{resume}");
+        let abort = abort_prompt("main", Integration::Rebase);
+        assert!(
+            abort.contains("`git rebase --abort`") && abort.contains("`main`"),
+            "{abort}"
+        );
+        let merge_abort = abort_prompt("main", Integration::Merge);
+        assert!(merge_abort.contains("`git merge --abort`"), "{merge_abort}");
+        for p in [resume, abort, merge_abort] {
+            assert_eq!(p.trim_end().lines().last(), Some(INTEGRATE_SENTINEL));
+            assert!(!p.contains("commit") && !p.contains("push"), "{p}");
+        }
     }
 }

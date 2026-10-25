@@ -13,6 +13,7 @@ pub mod linking;
 pub mod menu;
 pub mod observation;
 pub mod observe;
+pub mod overlap_integrate;
 pub mod provider;
 pub mod pty;
 pub mod secrets;

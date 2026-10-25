@@ -1,5 +1,6 @@
 //! Branch questions for "Bring <base> in" (Plan 11, §6.3): the checked-out branch, the repo's default branch, a
-//! merge or rebase stopped on conflicts, and the merge-base of two revisions. Re-exported from `git`.
+//! merge or rebase stopped on conflicts (and its unmerged paths), and the merge-base of two revisions. Re-exported
+//! from `git`.
 
 use std::path::Path;
 
@@ -40,17 +41,25 @@ pub async fn has_conflicts(repo: &Path) -> Result<bool> {
             return Ok(true);
         }
     }
+    Ok(!conflicted_paths(repo).await?.is_empty())
+}
+
+/// The unmerged paths `status` lists (both sides changed, or one deleted), in its order.
+pub async fn conflicted_paths(repo: &Path) -> Result<Vec<String>> {
     let out = run(repo, &["status", "--porcelain=v1", "-z"]).await?;
     let mut records = out.split('\0').filter(|r| !r.is_empty());
-    while let Some(xy) = records.next().and_then(|rec| rec.get(..2)) {
+    let mut paths = Vec::new();
+    while let Some(rec) = records.next() {
+        let Some(xy) = rec.get(..2) else { continue };
         if UNMERGED.contains(&xy) {
-            return Ok(true);
-        }
-        if xy.contains('R') || xy.contains('C') {
+            if let Some(path) = rec.get(3..) {
+                paths.push(path.to_owned());
+            }
+        } else if xy.contains('R') || xy.contains('C') {
             records.next(); // a rename's old name is a bare path record
         }
     }
-    Ok(false)
+    Ok(paths)
 }
 
 /// `git merge-base <a> <b>`.
@@ -109,8 +118,10 @@ mod tests {
         commit_all(r.path(), "ours");
         assert!(run(r.path(), &["merge", "-q", "other"]).await.is_err());
         assert!(has_conflicts(r.path()).await.unwrap());
+        assert_eq!(conflicted_paths(r.path()).await.unwrap(), ["a.txt"]);
         git(r.path(), &["merge", "--abort"]).await;
         assert!(!has_conflicts(r.path()).await.unwrap());
+        assert!(conflicted_paths(r.path()).await.unwrap().is_empty());
     }
 
     #[tokio::test]

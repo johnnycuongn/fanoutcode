@@ -95,6 +95,10 @@ pub struct AppState {
     pub session_open: Mutex<()>,
     /// Each Codex session's idle state at the last tick, so a change updates the task once.
     pub codex_idle: Mutex<HashMap<fanoutcode_core::domain::SessionId, bool>>,
+    /// Tasks bringing their base branch in (Plan 11, §6.3), with the files the integrate prompt listed.
+    pub integrating: Mutex<HashMap<TaskId, Vec<fanoutcode_core::overlap::prompts::ConflictCtx>>>,
+    /// Integrating tasks the developer asked to abort: their sentinel records no integration.
+    pub integration_aborts: Mutex<std::collections::HashSet<TaskId>>,
 }
 
 impl AppState {
@@ -141,6 +145,8 @@ impl AppState {
             driver: Arc::new(OwnedDriver),
             session_open: Mutex::new(()),
             codex_idle: Mutex::default(),
+            integrating: Mutex::default(),
+            integration_aborts: Mutex::default(),
         })
     }
 

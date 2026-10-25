@@ -1,5 +1,7 @@
 //! Every overlap prompt text (spec §5.4, §5.5, §6.1–§6.3).
 
+use serde::{Deserialize, Serialize};
+
 use super::Decision;
 use crate::domain::{AgentState, Stage};
 use crate::pipeline::handback::chip_text;
@@ -38,8 +40,8 @@ pub struct OtherSummary {
 }
 
 /// One file the integrate prompt lists, with the other task that touched it on the base side and that task's
-/// spec summary and plan excerpt (§6.3).
-#[derive(Debug, Clone, PartialEq)]
+/// spec summary and plan excerpt (§6.3). Also what the merge hand-back pane shows (`overlap_integration_context`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 pub struct ConflictCtx {
     pub path: String,
     pub other_title: String,

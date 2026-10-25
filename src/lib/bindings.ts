@@ -1065,6 +1065,74 @@ async jiraTransition(projectId: ProjectId, key: string, transitionId: string) : 
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+/**
+ * **Bring <base> in**: lists the task's overlapping files with the other tasks' intent, marks it integrating and
+ * asks its session to merge (or rebase onto) the base branch.
+ */
+async overlapIntegrate(taskId: TaskId) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("overlap_integrate", { taskId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Stores the base branch the developer confirmed.
+ */
+async overlapSetBase(taskId: TaskId, branch: string) : Promise<Result<Task, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("overlap_set_base", { taskId, branch }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * The base to suggest: the stored one, else the home repo's default branch (`origin/HEAD`, `main`, `master`).
+ */
+async overlapBaseSuggestion(taskId: TaskId) : Promise<Result<string | null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("overlap_base_suggestion", { taskId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * **Resume** on the merge hand-back: continue the integration with the developer's instructions.
+ */
+async overlapResume(taskId: TaskId, instruction: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("overlap_resume", { taskId, instruction }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * **Abort** on the merge hand-back: undo the merge or rebase; its sentinel records no integration.
+ */
+async overlapAbort(taskId: TaskId) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("overlap_abort", { taskId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * The files the integrate prompt listed, with the other tasks' intent; rebuilt from the overlap rows when the app
+ * was relaunched since.
+ */
+async overlapIntegrationContext(taskId: TaskId) : Promise<Result<ConflictCtx[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("overlap_integration_context", { taskId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
@@ -1145,6 +1213,11 @@ export type ChangedFile = { path: string; status: FileStatus; added: number; rem
  * Distinct agents that touched it, first seen first.
  */
 owners: string[]; shared: boolean; source: ChangeSource }
+/**
+ * One file the integrate prompt lists, with the other task that touched it on the base side and that task's
+ * spec summary and plan excerpt (§6.3). Also what the merge hand-back pane shows (`overlap_integration_context`).
+ */
+export type ConflictCtx = { path: string; other_title: string; spec_excerpt: string; plan_excerpt: string }
 /**
  * What a window, a view or a board shows.
  */
