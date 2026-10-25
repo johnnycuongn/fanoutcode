@@ -1,6 +1,5 @@
 // Positions from elkjs (bundled build, main thread): stress for the hub graph, layered left-to-right for the flow
 // canvas with the agents docked along the bottom (§10.7 "Arrangement").
-import ELK from "elkjs/lib/elk.bundled.js";
 import type { ElkNode } from "elkjs/lib/elk-api";
 import type { TeamArrangement } from "@/lib/bindings";
 import { stackDone } from "./positions";
@@ -20,7 +19,13 @@ const AGENT_GAP = 16;
 const DOCK_GAP = 80;
 const STACK_LEFT = 280;
 
-const elk = new ELK();
+type Elk = InstanceType<typeof import("elkjs/lib/elk.bundled.js").default>;
+let elkLoad: Promise<Elk> | null = null;
+/** elkjs (about 1.4 MB) loads on the first layout, so the Team tab renders before it arrives. */
+function elk(): Promise<Elk> {
+  elkLoad ??= import("elkjs/lib/elk.bundled.js").then((m) => new m.default());
+  return elkLoad;
+}
 
 export function nodeSize(node: CanvasNode): { width: number; height: number } {
   if (node.kind === "step") return node.data.status === "active" ? NODE_SIZE.step : NODE_SIZE.stepCollapsed;
@@ -42,7 +47,7 @@ async function run(
       .filter((e) => ids.has(e.source) && ids.has(e.target))
       .map((e) => ({ id: e.id, sources: [e.source], targets: [e.target] })),
   };
-  const out = await elk.layout(graph);
+  const out = await (await elk()).layout(graph);
   return (out.children ?? []).map((c) => ({ node_id: c.id, x: c.x ?? 0, y: c.y ?? 0 }));
 }
 
