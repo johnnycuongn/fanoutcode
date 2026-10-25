@@ -66,6 +66,7 @@ fn a_denied_write_takes_the_newest_matching_call_as_its_snapshot() {
     let rows = denial_rows(
         &id("t-a1"),
         Path::new("/r"),
+        None,
         Some("src/a.ts"),
         None,
         Some(&id("t-b2")),
@@ -91,6 +92,7 @@ fn a_denied_write_without_its_call_waits_for_the_snapshot() {
     let rows = denial_rows(
         &id("t-a1"),
         Path::new("/r"),
+        None,
         Some("src/a.ts"),
         None,
         None,
@@ -163,6 +165,7 @@ fn a_denied_command_opens_one_decision_per_claimed_path_it_touches() {
         &id("t-a1"),
         Path::new("/r"),
         None,
+        None,
         Some("git add -A"),
         Some(&id("t-b2")),
         Some(&file),
@@ -192,6 +195,7 @@ fn a_command_whose_claims_moved_still_opens_a_decision() {
             &id("t-a1"),
             Path::new("/r"),
             None,
+            None,
             Some(command),
             Some(&id("t-b2")),
             Some(&file),
@@ -214,6 +218,7 @@ fn a_denied_command_the_root_cannot_place_falls_back_to_the_named_task() {
         &id("t-a1"),
         Path::new("/r"),
         None,
+        None,
         Some("git add a.ts"),
         Some(&id("t-b2")),
         Some(&file),
@@ -234,6 +239,7 @@ fn a_denied_command_the_root_cannot_place_falls_back_to_the_named_task() {
         &id("t-a1"),
         Path::new("/r"),
         None,
+        None,
         Some("git add -A"),
         None,
         None,
@@ -247,7 +253,7 @@ fn a_denied_command_the_root_cannot_place_falls_back_to_the_named_task() {
 fn command_kind_names_what_the_command_does_to_the_other_tasks_work() {
     let held = [claim("src/a.ts", Some("t-b2"))];
     let refs: Vec<&Claim> = held.iter().collect();
-    let kind = |c: &str| command_kind(c, Path::new("/r"), &refs);
+    let kind = |c: &str| command_kind(c, Path::new("/r"), Path::new("/r"), &refs);
     for c in [
         "git commit -am wip",
         "git add -A",
@@ -305,4 +311,36 @@ fn is_stash_reads_the_git_subcommand() {
     ] {
         assert!(!is_stash(c), "{c}");
     }
+}
+
+#[test]
+fn a_relative_command_from_a_subfolder_lists_only_the_files_it_touches() {
+    let file = claims(vec![
+        claim("src/a.ts", Some("t-b2")),
+        claim("src/b.ts", Some("t-b2")),
+        claim("a.ts", Some("t-b2")),
+    ]);
+    let rows = |cwd: Option<&Path>| {
+        denial_rows(
+            &id("t-a1"),
+            Path::new("/r"),
+            cwd,
+            None,
+            Some("git add a.ts"),
+            Some(&id("t-b2")),
+            Some(&file),
+            &GrantsFile::default(),
+            &[],
+        )
+    };
+    let from_src = rows(Some(Path::new("/r/src")));
+    assert_eq!(from_src.len(), 1, "{from_src:?}");
+    assert_eq!(from_src[0].path, "src/a.ts");
+    assert!(
+        matches!(&from_src[0].pending, PendingDecision::Command { paths, kind, .. } if paths == &vec!["src/a.ts".to_owned()] && *kind == CommandKind::Commits)
+    );
+    // without a cwd (an older line) it is read from the repo root
+    let from_root = rows(None);
+    assert_eq!(from_root.len(), 1);
+    assert_eq!(from_root[0].path, "a.ts");
 }

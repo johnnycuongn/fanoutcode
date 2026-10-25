@@ -305,13 +305,22 @@ fn append_event(log: &Path, event: &str, payload: &serde_json::Value) {
     }
 }
 
-/// `{repo, path, command, other_task}` as `event`: `ClaimDenied` for a stop, `ClaimNoted` for an overlap
+/// `{repo, path, command, cwd, other_task}` as `event`: `ClaimDenied` for a stop, `ClaimNoted` for an overlap
 /// allowed with "Ask before editing" off.
-fn log_claim(log: &Path, event: &str, repo: &Path, path: Option<&str>, command: Option<&str>, other: Option<&Claim>) {
+fn log_claim(
+    log: &Path,
+    event: &str,
+    repo: &Path,
+    path: Option<&str>,
+    command: Option<&str>,
+    other: Option<&Claim>,
+    cwd: &Path,
+) {
     let payload = serde_json::json!({
         "repo": repo,
         "path": path,
         "command": command,
+        "cwd": cwd,
         "other_task": other.and_then(|c| c.task_id.as_ref()),
     });
     append_event(log, event, &payload);
@@ -379,7 +388,15 @@ pub fn run_check(stdin: &mut dyn Read, stdout: &mut dyn Write, args: &CheckArgs)
             other,
             ..
         } if !args.ask_before => {
-            log_claim(&args.log_path, "ClaimNoted", &repo, Some(&path), None, other.as_ref());
+            log_claim(
+                &args.log_path,
+                "ClaimNoted",
+                &repo,
+                Some(&path),
+                None,
+                other.as_ref(),
+                &input.cwd,
+            );
             CheckDecision::Allow
         }
         d => d,
@@ -399,6 +416,7 @@ pub fn run_check(stdin: &mut dyn Read, stdout: &mut dyn Write, args: &CheckArgs)
                 path.as_deref(),
                 command.as_deref(),
                 other.as_ref(),
+                &input.cwd,
             );
             Some(serde_json::json!({"hookSpecificOutput": {
                 "hookEventName": "PreToolUse",

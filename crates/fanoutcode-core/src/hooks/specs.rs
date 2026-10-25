@@ -212,6 +212,7 @@ mod tests {
                 repo: "/r".into(),
                 path: Some("a.ts".into()),
                 command: None,
+                cwd: Some("/r/src".into()),
                 other_task: Some(crate::domain::TaskId::parse("t-b2").unwrap()),
             },
             HookEvent::ClaimNoted {

@@ -84,6 +84,7 @@ pub fn on_claim_denied(app: &AppHandle, state: &AppState, ev: &TaskEvent) -> Res
         repo,
         path,
         command,
+        cwd,
         other_task,
     } = &ev.event
     else {
@@ -120,6 +121,7 @@ pub fn on_claim_denied(app: &AppHandle, state: &AppState, ev: &TaskEvent) -> Res
     let rows = denial::denial_rows(
         id,
         &repo,
+        cwd.as_deref(),
         path.as_deref(),
         command.as_deref(),
         other.as_ref(),

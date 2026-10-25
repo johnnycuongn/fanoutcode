@@ -10,7 +10,7 @@ describe("events", () => {
     expect(kindOf(fx.unknown(4, "Fancy"))).toBe("unknown");
     const denied = {
       ...fx.unknown(5, "x"),
-      event: { type: "ClaimDenied", repo: "/r", path: "a.ts", command: null, other_task: "t-b2" },
+      event: { type: "ClaimDenied", repo: "/r", path: "a.ts", command: null, cwd: null, other_task: "t-b2" },
     } as const;
     expect(kindOf(denied)).toBe("overlap");
   });

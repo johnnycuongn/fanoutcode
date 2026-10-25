@@ -62,6 +62,7 @@ export const fx = {
       repo: "/repo/app",
       path: held.path ?? null,
       command: held.command ?? null,
+      cwd: null,
       other_task: otherTask,
     }),
   claimNoted: (seq: number, path: string, otherTask: string | null = null): TaskEvent =>

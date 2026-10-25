@@ -116,11 +116,11 @@ pub fn stages_only(command: &str) -> bool {
     subs.iter().any(|(s, _)| s == "add") && !subs.iter().any(|(s, _)| s == "commit")
 }
 
-/// What a stopped `command` would do to the claims of `claimed` in `repo` (§5.6): the kind of the rule
-/// `evaluate_git` catches from the repo root, else (a command the root cannot place, such as relative paths from a
-/// subdirectory) the first git subcommand it names; a command it cannot read at all counts as discarding.
-pub fn command_kind(command: &str, repo: &Path, claimed: &[&Claim]) -> CommandKind {
-    if let Some((rule, _)) = evaluate_git(command, repo, repo, claimed) {
+/// What a stopped `command`, run in `cwd`, would do to the claims of `claimed` in `repo` (§5.6): the kind of the rule
+/// `evaluate_git` catches, else (a command it cannot place) the first git subcommand it names; a command it cannot
+/// read at all counts as discarding.
+pub fn command_kind(command: &str, cwd: &Path, repo: &Path, claimed: &[&Claim]) -> CommandKind {
+    if let Some((rule, _)) = evaluate_git(command, cwd, repo, claimed) {
         return rule_kind(rule);
     }
     git_subcommands(command)
@@ -136,13 +136,14 @@ pub fn command_kind(command: &str, repo: &Path, claimed: &[&Claim]) -> CommandKi
 /// The pending decisions one `ClaimDenied` of task `own` opens in `repo`:
 /// - a denied write (`path`): one, with the newest of `recent` that writes that file as its snapshot, else an `Edit`
 ///   with a null input that a later `PreToolUse` fills in;
-/// - a denied command: one per claimed path of another task it touches (`evaluate_git` from the repo root), else one
-///   per claim of `other` in the repo, else (the claims moved before the line was read) one per claim of anyone else
+/// - a denied command: one per claimed path of another task it touches (`evaluate_git` from the `cwd` the hook
+///   logged, else from the repo root), else one per claim of `other` in the repo, else (the claims moved before the line was read) one per claim of anyone else
 ///   left in the repo, each with the command. Empty without claims (nothing to key them on).
 #[allow(clippy::too_many_arguments)]
 pub fn denial_rows(
     own: &TaskId,
     repo: &Path,
+    cwd: Option<&Path>,
     path: Option<&str>,
     command: Option<&str>,
     other: Option<&TaskId>,
@@ -176,7 +177,8 @@ pub fn denial_rows(
         .filter(|c| c.task_id.as_ref() != Some(own))
         .filter(|c| !grants.allows_command(command, &file.repo_root, c.task_id.as_ref()))
         .collect();
-    let touched: Vec<&Claim> = match evaluate_git(command, repo, repo, &others) {
+    let cwd = cwd.unwrap_or(repo);
+    let touched: Vec<&Claim> = match evaluate_git(command, cwd, repo, &others) {
         Some((_, paths)) => others.iter().copied().filter(|c| paths.contains(&c.path)).collect(),
         None => Vec::new(),
     };
@@ -186,7 +188,7 @@ pub fn denial_rows(
         .into_iter()
         .find(|v| !v.is_empty())
         .unwrap_or_else(|| others.clone());
-    let kind = command_kind(command, repo, &others);
+    let kind = command_kind(command, cwd, repo, &others);
     named
         .iter()
         .map(|c| {

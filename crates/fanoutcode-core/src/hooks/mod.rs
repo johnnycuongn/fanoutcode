@@ -80,11 +80,13 @@ pub enum HookEvent {
         context_used_pct: f32,
     },
     /// Written by the `claim-check` hook itself (Plan 11): a write to `path`, or the shell `command`, was denied
-    /// because `other_task` (or an unattributed session, `None`) has uncommitted changes there.
+    /// because `other_task` (or an unattributed session, `None`) has uncommitted changes there. `cwd` is where the
+    /// session ran it (`None` on a line from an older hook), so a relative command is read from there.
     ClaimDenied {
         repo: PathBuf,
         path: Option<String>,
         command: Option<String>,
+        cwd: Option<PathBuf>,
         other_task: Option<TaskId>,
     },
     /// Written by the `claim-check` hook with "Ask before editing another task's files" off (§8): the write to `path`

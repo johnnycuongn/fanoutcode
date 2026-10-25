@@ -1,7 +1,7 @@
 //! The event-log line parser (Review Focus 1): `EventName<TAB>rfc3339<TAB>payload`. A partial tail waits for its
 //! newline; a payload that is not JSON is kept as `Unknown` and never stops the tailer.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Utc};
 use serde_json::Value;
@@ -87,6 +87,7 @@ fn event_from(name: &str, p: &Value) -> HookEvent {
             repo: text(p, "repo").into(),
             path: opt_text(p, "path"),
             command: opt_text(p, "command"),
+            cwd: opt_text(p, "cwd").map(PathBuf::from),
             other_task: task_id(p, "other_task"),
         },
         "ClaimNoted" => HookEvent::ClaimNoted {
@@ -312,9 +313,13 @@ mod tests {
                 repo: "/r".into(),
                 path: Some("src/a.ts".into()),
                 command: None,
+                cwd: None,
                 other_task: Some(b.clone()),
             }
         );
+        let line = "ClaimDenied\t2026-10-25T10:00:00Z\t{\"repo\":\"/r\",\"command\":\"git add a.ts\",\"cwd\":\"/r/src\",\"other_task\":null}";
+        assert!(matches!(parse_line(&a, 2, line).unwrap().event,
+            HookEvent::ClaimDenied { cwd: Some(ref d), .. } if d == Path::new("/r/src")));
         let line =
             "ClaimDenied\t2026-10-25T10:00:00Z\t{\"repo\":\"/r\",\"command\":\"git add -A\",\"other_task\":null}";
         assert!(matches!(parse_line(&a, 2, line).unwrap().event,

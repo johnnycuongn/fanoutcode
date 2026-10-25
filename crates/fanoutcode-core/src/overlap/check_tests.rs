@@ -210,6 +210,7 @@ fn denies_other_tasks_claim_with_reason_and_logs_claim_denied() {
             repo: h.root.clone(),
             path: Some("src/a.ts".into()),
             command: None,
+            cwd: Some(h.root.clone()),
             other_task: Some(id("t-b2")),
         }
     );

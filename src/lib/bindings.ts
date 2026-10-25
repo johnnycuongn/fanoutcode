@@ -1332,9 +1332,10 @@ export type HandbackReason =
 export type HookEvent = { type: "SessionStart"; session_id: string; transcript_path: string } | { type: "UserPromptSubmit" } | { type: "PreToolUse"; tool: string; input: JsonValue } | { type: "PostToolUse"; tool: string; input: JsonValue; response: JsonValue } | { type: "SubagentStart"; agent_id: string; agent_type: string; description: string | null } | { type: "SubagentStop"; agent_id: string } | { type: "PermissionRequest"; tool: string } | { type: "Notification"; message: string } | { type: "Stop"; last_assistant_message: string; background_tasks: number } | { type: "StopFailure"; message: string } | { type: "StatusLine"; cost_usd: number; input_tokens: number; output_tokens: number; context_used_pct: number } | 
 /**
  * Written by the `claim-check` hook itself (Plan 11): a write to `path`, or the shell `command`, was denied
- * because `other_task` (or an unattributed session, `None`) has uncommitted changes there.
+ * because `other_task` (or an unattributed session, `None`) has uncommitted changes there. `cwd` is where the
+ * session ran it (`None` on a line from an older hook), so a relative command is read from there.
  */
-{ type: "ClaimDenied"; repo: string; path: string | null; command: string | null; other_task: TaskId | null } | 
+{ type: "ClaimDenied"; repo: string; path: string | null; command: string | null; cwd: string | null; other_task: TaskId | null } | 
 /**
  * Written by the `claim-check` hook with "Ask before editing another task's files" off (§8): the write to `path`
  * overlapped `other_task`'s uncommitted changes and was allowed. Nothing pins on it.
