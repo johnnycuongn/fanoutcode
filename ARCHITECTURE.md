@@ -88,6 +88,22 @@ forwards them to Plans 04 and 05. `pipeline::detect_handback` reads a `Stop` for
 shell's task commands lock the database, compute, apply, release the lock, dispatch, then emit `task-changed` and
 `needs-you`.
 
+Plan 05 adds observation. In the core: `hooks` (the per-task hook commands, `HookSpec`, the event-log parser, plan
+steps and `Step N · role:` dispatches, subagent attribution, the chip feed, the subscriber registry), `git` (the `git`
+binary only: status, numstat, show, base, Done check, watch filter), `worktree` (both conventions and
+`settings_for`), `changes` (the task's change set: hook edits, Bash-call windows, manual includes, persisted in
+`task_files`), `testrun` (the owned test runner with a shared replay buffer), `helpers` (metered single-turn calls
+through livespec-core: naming, briefs, spec watcher, commit drafts, the LiveSpec lane plan and run), `cost`
+(transcript usage once per message, hourly buckets per task, stage, model and agent, scoped summaries) and `activity`
+(the board card snapshot). In the shell: `hooks_tailer` tails `<app_data>/events/<task-id>.jsonl` from saved cursors
+(replayed at launch, before any window) and hands each event to `hook_feed`, which sets the chip state through the
+pipeline, feeds the change set, the cost ledger and the activity tracker, emits `team-event` and publishes to
+`hooks_tailer::subscribe` subscribers (Plan 04 registers there); `git_watcher` watches each task's repos with a
+500 ms debounce, rebuilds the change set, emits `git-changes`, moves a Commit-stage task to Done once its files are
+committed and triggers the spec watcher in Review; `observation` records the base on Build entry and runs
+`CreateWorktree`; `helpers` runs `RunHelper(kind)` one slot per task and kind; `provider` resolves livespec-core
+providers from `model_provider` plus LiveSpec's own `<app_config>/livespec.json`.
+
 ## Persistence
 
 SQLite at `<app_data>/teamcode.db` (WAL, foreign keys on), migrated at startup by `db::open` from
@@ -156,17 +172,20 @@ knows nothing about windows or views. Other features import only `src/features/b
 
 ## Where to change things
 
-| To change             | Edit                                                                          |
-| --------------------- | ----------------------------------------------------------------------------- |
-| A shared type         | `crates/teamcode-core/src/domain.rs`, then `npm run bindings`                 |
-| The schema            | a new `crates/teamcode-core/migrations/00NN_<name>.sql` plus `db::MIGRATIONS` |
-| A command             | `src-tauri/src/commands/<domain>.rs` and `src-tauri/src/specta.rs`            |
-| A setting             | one row in `settings_table!` in `crates/teamcode-core/src/settings/keys.rs`   |
-| A stage's behaviour   | `crates/teamcode-core/src/pipeline/enter.rs` and `pipeline/mod.rs`            |
-| A shipped prompt      | `crates/teamcode-core/src/prompts/templates.rs`                               |
-| An event              | `src-tauri/src/events.rs` and `src-tauri/src/specta.rs`                       |
-| Colours, fonts, radii | `src/styles.css`                                                              |
-| Theme switching       | `src/lib/theme.ts`                                                            |
-| A lint rule           | `eslint/rules/` and `eslint.config.js`                                        |
-| A primitive           | `src/components/ui/<Name>.tsx`, `index.ts`, and its example page              |
-| A board card or menu  | `src/features/board/components/TaskCard.tsx`, `menu.ts`                       |
+| To change              | Edit                                                                          |
+| ---------------------- | ----------------------------------------------------------------------------- |
+| A shared type          | `crates/teamcode-core/src/domain.rs`, then `npm run bindings`                 |
+| The schema             | a new `crates/teamcode-core/migrations/00NN_<name>.sql` plus `db::MIGRATIONS` |
+| A command              | `src-tauri/src/commands/<domain>.rs` and `src-tauri/src/specta.rs`            |
+| A setting              | one row in `settings_table!` in `crates/teamcode-core/src/settings/keys.rs`   |
+| A stage's behaviour    | `crates/teamcode-core/src/pipeline/enter.rs` and `pipeline/mod.rs`            |
+| A shipped prompt       | `crates/teamcode-core/src/prompts/templates.rs`                               |
+| An event               | `src-tauri/src/events.rs` and `src-tauri/src/specta.rs`                       |
+| Colours, fonts, radii  | `src/styles.css`                                                              |
+| Theme switching        | `src/lib/theme.ts`                                                            |
+| A lint rule            | `eslint/rules/` and `eslint.config.js`                                        |
+| What a hook event does | `src-tauri/src/hook_feed.rs`; parsing in `crates/teamcode-core/src/hooks/`    |
+| A headless helper      | `crates/teamcode-core/src/helpers/` and `src-tauri/src/helpers.rs`            |
+| Cost accounting        | `crates/teamcode-core/src/cost/`                                              |
+| A primitive            | `src/components/ui/<Name>.tsx`, `index.ts`, and its example page              |
+| A board card or menu   | `src/features/board/components/TaskCard.tsx`, `menu.ts`                       |
