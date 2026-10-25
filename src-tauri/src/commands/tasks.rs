@@ -4,9 +4,10 @@
 use chrono::{Local, Utc};
 use serde::Serialize;
 use tauri::{AppHandle, State};
-use teamcode_core::domain::{Container, Project, ProjectId, Stage, Task, TaskId, WorkspaceId};
+use teamcode_core::domain::{Container, ProjectId, Stage, Task, TaskId, WorkspaceId};
+use teamcode_core::helpers::HelperKind;
 use teamcode_core::memory::TaskFolder;
-use teamcode_core::pipeline::{self, ctx, Effect, NewTask, StageAction, TaskPatch};
+use teamcode_core::pipeline::{self, Effect, NewTask, StageAction, TaskPatch};
 use teamcode_core::{db, Error, Result};
 
 use super::parse_container;
@@ -18,11 +19,6 @@ use crate::{effects, state::AppState};
 pub struct ActionOutcome {
     pub task: Task,
     pub toasts: Vec<String>,
-}
-
-fn project_of(conn: &rusqlite::Connection, task: &Task) -> Result<Project> {
-    db::projects::get(conn, &task.project_id)?
-        .ok_or_else(|| Error::Invalid(format!("Unknown project {}", task.project_id)))
 }
 
 /// Dispatches, notifies, and returns the outcome. Called with no lock held.
@@ -47,51 +43,54 @@ pub(crate) fn run(
     app: &AppHandle,
     state: &AppState,
     id: &TaskId,
-    compute: impl FnOnce(&Task, &pipeline::TransitionCtx) -> Result<Vec<Effect>>,
+    compute: impl Fn(&Task, &pipeline::TransitionCtx) -> Result<Vec<Effect>>,
 ) -> Result<ActionOutcome> {
     run_with(app, state, id, None, compute)
 }
 
 /// `run` for a stage action: the session runner needs it to tell Start fresh session and Archive apart (Plan 04).
+/// An action that starts the task's first session binds its links first, so its prompt lists them (Plan 10).
 pub(crate) fn run_with(
     app: &AppHandle,
     state: &AppState,
     id: &TaskId,
     action: Option<&StageAction>,
-    compute: impl FnOnce(&Task, &pipeline::TransitionCtx) -> Result<Vec<Effect>>,
+    compute: impl Fn(&Task, &pipeline::TransitionCtx) -> Result<Vec<Effect>>,
 ) -> Result<ActionOutcome> {
     let id = TaskId::parse(id.as_str())?;
-    let applied = {
+    let (applied, needs_briefs) = {
         let mut conn = state.db.lock().expect("db lock");
-        let task = db::tasks::require(&conn, &id)?;
-        let project = project_of(&conn, &task)?;
         let now = Utc::now();
-        let tctx = ctx::build_transition_ctx(
+        let prepared = pipeline::prepare_action(
             &conn,
-            &task,
-            &project,
+            &id,
             &state.config_dir,
             &state.data_dir,
             now,
             state.last_test(&id),
+            compute,
         )?;
-        let effects = compute(&task, &tctx)?;
-        pipeline::apply(
+        let task = prepared.task;
+        let applied = pipeline::apply(
             &mut conn,
             &TaskFolder::open(task.memory_dir.clone()),
             &task,
-            effects,
+            prepared.effects,
             now,
-        )?
+        )?;
+        (applied, prepared.needs_briefs)
     };
+    if needs_briefs {
+        crate::helpers::run(app, &id, HelperKind::ProjectBrief);
+    }
     finish(app, state, applied.task, action, applied.external)
 }
 
 /// A stage action the app itself takes (Done detection, a test result): `tasks_action` without the webview. The
 /// toasts have no window to go to, so they are logged.
 pub(crate) fn run_action(app: &AppHandle, state: &AppState, id: &TaskId, action: StageAction) -> Result<Task> {
-    let outcome = run_with(app, state, id, Some(&action.clone()), |task, tctx| {
-        pipeline::transition(task, action, tctx)
+    let outcome = run_with(app, state, id, Some(&action), |task, tctx| {
+        pipeline::transition(task, action.clone(), tctx)
     })?;
     for t in &outcome.toasts {
         eprintln!("Team Code: {} ({})", t, outcome.task.id);
@@ -198,9 +197,8 @@ pub fn tasks_action(
     id: TaskId,
     action: StageAction,
 ) -> Result<ActionOutcome> {
-    let named = action.clone();
-    run_with(&app, &state, &id, Some(&named), |task, tctx| {
-        pipeline::transition(task, action, tctx)
+    run_with(&app, &state, &id, Some(&action), |task, tctx| {
+        pipeline::transition(task, action.clone(), tctx)
     })
 }
 

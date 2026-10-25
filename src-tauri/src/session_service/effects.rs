@@ -182,7 +182,7 @@ pub fn codex_tick(app: &AppHandle) {
     }
     for (task, idle) in changed {
         let state_now = if idle { AgentState::Idle } else { AgentState::Working };
-        let r = crate::commands::tasks::run(app, &state, &task, |_, _| Ok(vec![Effect::SetState(state_now)]));
+        let r = crate::commands::tasks::run(app, &state, &task, |_, _| Ok(vec![Effect::SetState(state_now.clone())]));
         log_err(&format!("updating the Codex task {task}"), r);
     }
 }
