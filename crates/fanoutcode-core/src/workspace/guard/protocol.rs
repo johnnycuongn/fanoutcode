@@ -39,19 +39,37 @@ struct HookInput {
     cwd: Option<PathBuf>,
 }
 
+/// What the guard enforces when its roots file is missing, unreadable or malformed: the session was told to read
+/// it, so it was removed or emptied, perhaps by the agent itself. The whole app data folder (`<app_data>` of
+/// `<app_data>/guards/<id>.guard.json`) is then guarded, so the agent cannot finish switching the guard off; the
+/// protected linked roots are not known and fail open, the `Edit` deny rules still holding them.
+fn fallback_roots(roots_file: &Path) -> Option<RootsFile> {
+    let app_data = roots_file.parent()?.parent()?;
+    let home = std::env::var_os("HOME").map_or_else(|| PathBuf::from("/"), PathBuf::from);
+    Some(RootsFile {
+        protected: Vec::new(),
+        app_files: vec![app_data.to_owned()],
+        home_dir: home,
+    })
+}
+
 /// Reads one hook payload from `stdin` and prints a deny decision for a Bash command that writes under a protected
-/// root. Always returns 0: a missing roots file or malformed input is reported on stderr and allowed (fail open; the
-/// `Edit` deny rules remain the hard guarantee).
+/// root or one of the app's own folders. Always returns 0. Malformed input is reported on stderr and allowed (fail
+/// open; the `Edit` deny rules remain the hard guarantee); a roots file that cannot be read fails closed for the app
+/// data folder only (`fallback_roots`).
 pub fn run_guard(stdin: &mut dyn Read, stdout: &mut dyn Write, roots_file: &Path) -> i32 {
-    let roots: RootsFile = match std::fs::read(roots_file)
+    let read: Option<RootsFile> = std::fs::read(roots_file)
         .ok()
-        .and_then(|b| serde_json::from_slice(&b).ok())
-    {
+        .and_then(|b| serde_json::from_slice(&b).ok());
+    let roots = match read.or_else(|| {
+        eprintln!(
+            "fanoutcode guard: cannot read {}; guarding the app data folder only",
+            roots_file.display()
+        );
+        fallback_roots(roots_file)
+    }) {
         Some(r) => r,
-        None => {
-            eprintln!("fanoutcode guard: cannot read {}; allowing", roots_file.display());
-            return 0;
-        }
+        None => return 0,
     };
     let mut text = String::new();
     let input: HookInput = match stdin

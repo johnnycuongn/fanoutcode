@@ -192,6 +192,30 @@ mod protocol {
     }
 
     #[test]
+    fn a_corrupt_roots_file_still_protects_app_data() {
+        let dir = tempfile::tempdir().unwrap();
+        let data = std::fs::canonicalize(dir.path()).unwrap();
+        let roots = data.join("guards/t-1.guard.json");
+        let run = |cmd: &str| {
+            let mut out = Vec::new();
+            run_guard(&mut hook_json(cmd, "/w/web").as_slice(), &mut out, &roots);
+            String::from_utf8(out).unwrap().contains("\"deny\"")
+        };
+        let write = format!("echo x > {}/grants/t-1.json", data.display());
+        // missing (the agent removed it), then corrupt (the agent emptied it)
+        assert!(run(&write), "missing roots file");
+        std::fs::create_dir_all(roots.parent().unwrap()).unwrap();
+        std::fs::write(&roots, "").unwrap();
+        assert!(run(&write), "empty roots file");
+        std::fs::write(&roots, "{").unwrap();
+        assert!(run(&write), "malformed roots file");
+        assert!(run(&format!("rm {}", roots.display())));
+        // anything else is allowed as before
+        assert!(!run("echo x > /w/web/out.txt"));
+        assert!(!run(&format!("cat {}/grants/t-1.json", data.display())));
+    }
+
+    #[test]
     fn run_guard_fails_open_on_bad_input_or_missing_roots() {
         let mut out = Vec::new();
         assert_eq!(

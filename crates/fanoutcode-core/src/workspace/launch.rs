@@ -11,7 +11,7 @@ use super::briefs::cached_brief;
 use super::context_docs::{context_dir, list_rows};
 use super::fragments::{reference_lines, LinkContext, LinkedProject};
 use super::guard::prepare_guard;
-use super::link::{bind_links, link_status, links_for, load_links, same_root, save_links, LinkStatus};
+use super::link::{bind_links, canonical_root, link_status, links_for, load_links, same_root, save_links, LinkStatus};
 use super::policy::{deny_rules, protected_roots};
 use super::rows;
 use super::store::member_projects;
@@ -134,11 +134,12 @@ pub struct LaunchExtras {
     pub claim_check: Option<HookSpec>,
 }
 
-/// The app's folders the claim-check hook trusts (Plan 11): every task's grants, the claims, the queued notes and the
-/// event logs. Every Claude Code task gets `Edit` deny rules for them and the Bash guard refusing shell writes there,
-/// whatever the overlap settings, so the agent cannot grant itself, clear a claim or forge a log line.
+/// The app's folders its hooks trust (Plan 11): every task's grants, the claims, the queued notes, the event logs, the
+/// Bash guard's roots files and the generated Claude settings. Every Claude Code task gets `Edit` deny rules for them
+/// and the Bash guard refusing shell writes there, whatever the overlap settings, so the agent cannot grant itself,
+/// clear a claim, forge a log line or switch a guard off.
 pub fn overlap_dirs(app_data: &Path) -> Vec<PathBuf> {
-    ["grants", "claims", "notes", "events"]
+    ["grants", "claims", "notes", "events", "guards", "claude-settings"]
         .iter()
         .map(|d| app_data.join(d))
         .collect()
@@ -204,7 +205,16 @@ pub fn launch_extras(
             deny.push(rule);
         }
     }
-    let guard = prepare_guard(app_data, exe, &task.id, &protected, &app_files, home)?;
+    // the guard compares paths as written, so it gets both forms of each folder, as the deny rules do
+    let mut guarded: Vec<PathBuf> = Vec::new();
+    for d in &app_files {
+        for form in [d.clone(), canonical_root(d)] {
+            if !guarded.contains(&form) {
+                guarded.push(form);
+            }
+        }
+    }
+    let guard = prepare_guard(app_data, exe, &task.id, &protected, &guarded, home)?;
     // only the home project's cache and, when bound to one, the workspace's: never another project's
     let mut containers = vec![Container::Project {
         id: task.project_id.clone(),
@@ -385,7 +395,7 @@ mod tests {
                 git,
             )
             .unwrap();
-            for dir in ["grants", "claims", "notes", "events"] {
+            for dir in ["grants", "claims", "notes", "events", "guards", "claude-settings"] {
                 for base in [data, canonical.as_path()] {
                     let rule = format!("Edit(/{}/**)", base.join(dir).display());
                     assert!(extras.deny.contains(&rule), "{rule} in {:?}", extras.deny);
@@ -399,6 +409,51 @@ mod tests {
         shell.agent_kind = AgentKind::Shell;
         let none = launch_extras(&conn, &shell, data, Path::new("/x"), Path::new("/h"), true, true).unwrap();
         assert!(none.deny.is_empty() && none.guard.is_none());
+    }
+
+    /// Runs the task's Bash guard (the roots file `launch_extras` wrote under `app_data`) on `command`.
+    fn guard_denies(app_data: &Path, task: &TaskId, command: &str) -> bool {
+        let roots = app_data.join("guards").join(format!("{task}.guard.json"));
+        let input = serde_json::json!({"tool_name": "Bash", "tool_input": {"command": command}, "cwd": "/"});
+        let mut out = Vec::new();
+        crate::workspace::guard::run_guard(&mut input.to_string().as_bytes(), &mut out, &roots);
+        String::from_utf8(out).unwrap().contains("\"deny\"")
+    }
+
+    #[test]
+    fn guard_denies_writes_to_its_own_roots_file() {
+        let (fx, _s, _ws, t) = setup();
+        let conn = fx.db.lock().unwrap();
+        let task = db::tasks::require(&conn, &t.id).unwrap();
+        let data = fx.app_data.path();
+        launch_extras(&conn, &task, data, Path::new("/x"), Path::new("/h"), true, true).unwrap();
+        let roots = data.join("guards").join(format!("{}.guard.json", task.id));
+        assert!(roots.exists());
+        for cmd in [
+            format!("echo '{{}}' > '{}'", roots.display()),
+            format!("rm -f '{}'", roots.display()),
+            format!("echo x > '{}/claude-settings/t-1.json'", data.display()),
+        ] {
+            assert!(guard_denies(data, &task.id, &cmd), "{cmd}");
+        }
+        assert!(!guard_denies(data, &task.id, &format!("cat '{}'", roots.display())));
+    }
+
+    #[test]
+    fn the_guard_covers_both_forms_of_a_symlinked_app_data() {
+        let (fx, _s, _ws, t) = setup();
+        let conn = fx.db.lock().unwrap();
+        let task = db::tasks::require(&conn, &t.id).unwrap();
+        let base = tempfile::tempdir().unwrap();
+        let real = std::fs::canonicalize(base.path()).unwrap().join("real");
+        std::fs::create_dir(&real).unwrap();
+        let alias = real.with_file_name("alias");
+        std::os::unix::fs::symlink(&real, &alias).unwrap();
+        launch_extras(&conn, &task, &alias, Path::new("/x"), Path::new("/h"), true, true).unwrap();
+        for data in [&alias, &real] {
+            let cmd = format!("echo x > '{}/grants/t-a1.json'", data.display());
+            assert!(guard_denies(&alias, &task.id, &cmd), "{cmd}");
+        }
     }
 
     #[test]
