@@ -4,6 +4,7 @@
 
 pub mod context_docs;
 pub mod file;
+pub mod open;
 pub(crate) mod rows;
 pub mod store;
 #[cfg(test)]

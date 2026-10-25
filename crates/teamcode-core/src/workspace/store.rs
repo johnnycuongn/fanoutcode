@@ -219,6 +219,37 @@ impl WorkspaceStore {
         self.after_change(id).map(|_| ())
     }
 
+    /// A record with a given id (opening a file whose id is unknown here); no file is written.
+    pub(crate) fn insert_record(
+        &self,
+        id: &WorkspaceId,
+        name: &str,
+        file_path: &Path,
+        policy: LinkPolicy,
+    ) -> Result<()> {
+        rows::insert(&self.conn(), id, name, Some(file_path), policy)
+    }
+
+    /// Replaces the mirrored rows (the record's settings, fragments, agents) from a file, without writing it back.
+    pub(crate) fn replace_from_file(
+        &self,
+        id: &WorkspaceId,
+        file: &WorkspaceFile,
+        members: &[WorkspaceProject],
+    ) -> Result<()> {
+        let conn = self.conn();
+        let tx = conn.unchecked_transaction()?;
+        rows::set_column(&tx, id, "name", &file.name)?;
+        rows::set_column(&tx, id, "policy", &enum_str(&file.policy)?)?;
+        rows::set_members(&tx, id, members)?;
+        rows::set_map_column(&tx, id, "fragments_json", &file.prompt_fragments)?;
+        rows::set_map_column(&tx, id, "agents_json", &file.agents)?;
+        rows::clear_settings(&tx, id)?;
+        rows::upsert_settings(&tx, id, &file.settings)?;
+        tx.commit()?;
+        Ok(())
+    }
+
     /// Points the record at `path` with nothing unsaved.
     pub(crate) fn set_file_clean(&self, id: &WorkspaceId, path: &Path) -> Result<()> {
         let conn = self.conn();
@@ -280,6 +311,11 @@ impl WorkspaceStore {
 
     /// Hook for the watcher (Task 4).
     fn after_save_as(&self, _id: &WorkspaceId, _path: &Path) {}
+
+    /// Hook for the watcher (Task 4): a file opened outside app data is watched.
+    pub(crate) fn after_open(&self, id: &WorkspaceId, path: &Path) {
+        self.after_save_as(id, path)
+    }
 
     /// Ends every mutation: writes through while the file is in app data, else marks the record dirty.
     pub(crate) fn after_change(&self, id: &WorkspaceId) -> Result<Workspace> {
@@ -440,7 +476,11 @@ mod tests {
     fn set_policy_marks_protected_projects() {
         let (fx, s, ws) = store_with_both("Shop");
         let ws = s
-            .set_policy(&ws.id, LinkPolicy::ReadAndModifyOnRequest, std::slice::from_ref(&fx.web.id))
+            .set_policy(
+                &ws.id,
+                LinkPolicy::ReadAndModifyOnRequest,
+                std::slice::from_ref(&fx.web.id),
+            )
             .unwrap();
         let web = ws.projects.iter().find(|p| p.project_id == fx.web.id).unwrap();
         assert!(

@@ -155,3 +155,12 @@ pub fn upsert_settings(
     }
     Ok(())
 }
+
+/// Removes every mirrored workspace-scope row (all but `jira`).
+pub fn clear_settings(conn: &Connection, id: &WorkspaceId) -> Result<()> {
+    conn.execute(
+        "DELETE FROM settings WHERE scope_kind = 'workspace' AND scope_id = ?1 AND key <> ?2",
+        params![id.as_str(), UNMIRRORED_SETTING],
+    )?;
+    Ok(())
+}
