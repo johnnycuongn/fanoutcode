@@ -22,6 +22,9 @@ const project = {
   agent_kind: "ClaudeCode",
   detail_level: null,
   cost_overview: true,
+  ask_before_other_tasks_files: true,
+  guard_git_for_other_tasks: true,
+  worktree_integration: "Merge",
 } as unknown as Settings;
 describe("ProjectSettings", () => {
   beforeEach(() => {
@@ -99,5 +102,23 @@ describe("ProjectSettings", () => {
     expect(screen.getByText("/r/alpha/docs/tasks")).toHaveClass("truncate");
     expect(screen.getByRole("button", { name: "Choose folder…" }).parentElement).toHaveClass("flex-wrap");
     expect(screen.getByRole("button", { name: "Use app storage" })).toBeInTheDocument();
+  });
+  it("renders the Working together group with defaults", () => {
+    render(<ProjectSettings projectId="proj-a1" />);
+    const group = screen.getByRole("region", { name: "Working together" });
+    expect(group).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "Ask before editing another task's files" })).toBeChecked();
+    expect(screen.getByRole("switch", { name: "Guard git against other tasks' uncommitted work" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "Merge" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "Rebase" })).not.toBeChecked();
+  });
+  it("toggling saves the key at project scope", () => {
+    render(<ProjectSettings projectId="proj-a1" />);
+    fireEvent.click(screen.getByRole("switch", { name: "Ask before editing another task's files" }));
+    expect(commands.settingsSet).toHaveBeenCalledWith(scope, "ask_before_other_tasks_files", false);
+    fireEvent.click(screen.getByRole("switch", { name: "Guard git against other tasks' uncommitted work" }));
+    expect(commands.settingsSet).toHaveBeenCalledWith(scope, "guard_git_for_other_tasks", false);
+    fireEvent.click(screen.getByRole("radio", { name: "Rebase" }));
+    expect(commands.settingsSet).toHaveBeenCalledWith(scope, "worktree_integration", "Rebase");
   });
 });

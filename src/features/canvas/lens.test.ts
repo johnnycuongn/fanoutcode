@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { miniDiff, byFileLens, eventStreamLens, streamAgents } from "./lens";
 import { deriveCanvas } from "./model";
-import { sampleBuild, samplePlan, ROOTS, MEMORY_DIR } from "./fixtures";
+import { fx, sampleBuild, samplePlan, ROOTS, MEMORY_DIR } from "./fixtures";
+import { tasksStore } from "@/lib/stores/tasksStore";
+import { makeTask } from "@/test/fixtures";
 
 const events = sampleBuild();
 const model = deriveCanvas({ steps: samplePlan(), events, memoryDir: MEMORY_DIR, roots: ROOTS });
@@ -77,5 +79,31 @@ describe("eventStreamLens", () => {
   it("offers the target's agents as filter chips", () => {
     expect(streamAgents(model, { kind: "agent", id: "agent:a2" })).toEqual(["a2"]);
     expect(streamAgents(model, { kind: "file", id: "file:/repo/app/src/a.ts" })).toEqual(["a1", "a2"]);
+  });
+});
+
+describe("overlap rows", () => {
+  it("event stream shows OverlapDecided and OverlapNoted as muted rows with the path and the other task", () => {
+    tasksStore.set((s) => ({ ...s, byId: { "t-b2": makeTask({ id: "t-b2", title: "Login" }) } }));
+    const more = [
+      ...events,
+      fx.overlapDecided(30, "src/a.ts", "t-b2", "GoAhead"),
+      fx.overlapNoted(31, "src/a.ts", "t-b2", "out"),
+      fx.overlapNoted(32, "src/b.ts", "t-zz", "in"),
+    ];
+    const rows = eventStreamLens(model, more, { kind: "agent", id: "main" }, none).filter((r) => r.seq >= 30);
+    expect(rows.map((r) => [r.seq, r.kind, r.muted, r.target])).toEqual([
+      [32, "hook", true, "note from t-zz: src/b.ts"],
+      [31, "hook", true, "note sent to Login: src/a.ts"],
+      [30, "hook", true, "decided GoAhead: src/a.ts · Login"],
+    ]);
+  });
+  it("event stream shows ClaimDenied as a muted edit held or command held row", () => {
+    const more = [...events, fx.claimDenied(30, { path: "src/a.ts" }), fx.claimDenied(31, { command: "git stash" })];
+    const rows = eventStreamLens(model, more, { kind: "agent", id: "main" }, none).filter((r) => r.seq >= 30);
+    expect(rows.map((r) => [r.kind, r.muted, r.target])).toEqual([
+      ["hook", true, "command held: git stash"],
+      ["hook", true, "edit held: src/a.ts"],
+    ]);
   });
 });

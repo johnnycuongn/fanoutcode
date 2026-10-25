@@ -44,7 +44,7 @@ export function kindOf(e: TaskEvent): HookKind {
       return "stop-failure";
     case "StatusLine":
       return "status-line";
-    // Plan 11: the claim-check hook's denials and the app's own overlap lines; Team view rows come in Task 20
+    // Plan 11: the claim-check hook's denials and the app's own overlap lines
     case "ClaimDenied":
     case "OverlapDecided":
     case "OverlapNoted":
@@ -104,6 +104,26 @@ export function asHookDetail(e: TaskEvent): { tool?: string; message?: string } 
       return { message: e.event.message };
     default:
       return {};
+  }
+}
+
+/** An overlap line (Plan 11): a held edit or command, a decision, or a note sent or received about another task. */
+export type OverlapDetail =
+  | { kind: "held"; path: string | null; command: string | null; otherTask: string | null }
+  | { kind: "decided"; path: string; otherTask: string | null; decision: string }
+  | { kind: "noted"; path: string; otherTask: string; direction: string };
+
+export function asOverlap(e: TaskEvent): OverlapDetail | null {
+  const v = e.event;
+  switch (v.type) {
+    case "ClaimDenied":
+      return { kind: "held", path: v.path, command: v.command, otherTask: v.other_task };
+    case "OverlapDecided":
+      return { kind: "decided", path: v.path, otherTask: v.other_task, decision: v.decision };
+    case "OverlapNoted":
+      return { kind: "noted", path: v.path, otherTask: v.other_task, direction: v.direction };
+    default:
+      return null;
   }
 }
 
