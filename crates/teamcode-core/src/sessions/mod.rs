@@ -2,9 +2,15 @@
 //! terminal. The shell's `pty.rs` implements `PtySpawner` with portable-pty; `session_service.rs` wires the rest.
 
 pub mod batch;
+pub mod driver;
+#[cfg(any(test, feature = "test-support"))]
+pub mod fake;
 pub mod flow;
+pub mod launch;
 pub mod scrollback;
 
 pub use batch::Batcher;
+pub use driver::{ExitFn, GracefulExit, OutputFn, OwnedDriver, Pty, PtySpawner, SessionDriver, SpawnSpec, STOP_GRACE};
 pub use flow::FlowControl;
+pub use launch::LaunchSpec;
 pub use scrollback::{Scrollback, ScrollbackBuffer};
