@@ -312,7 +312,12 @@ async fn on_settled(app: &AppHandle, task_id: &TaskId) -> Result<()> {
             let conn = state.db.lock().expect("db lock");
             repos
                 .iter()
-                .map(|r| Ok((r.clone(), overlap::store::taken_over_paths(&conn, task_id, r)?)))
+                .map(|r| {
+                    Ok((
+                        r.clone(),
+                        overlap::store::taken_over_paths_for(&conn, task_id, r, &files)?,
+                    ))
+                })
                 .collect::<Result<Vec<_>>>()?
         };
         let pending = changes::done_paths(&repos, &files, previous.as_ref(), &taken_over);

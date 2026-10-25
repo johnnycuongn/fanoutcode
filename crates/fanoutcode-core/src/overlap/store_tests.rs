@@ -247,3 +247,61 @@ fn fresh_session_clears_pending_and_unpins() {
         Some(AgentState::Working)
     );
 }
+
+#[test]
+fn a_taken_over_path_counts_again_once_the_loser_edits_it() {
+    use crate::changes::{done_paths, AttributedFile, ChangeSource, MAIN_AGENT};
+    let conn = test_conn();
+    // t-a1 replaced t-b2's changes in src/a.ts at 10:00
+    upsert(
+        &conn,
+        &OverlapRow {
+            decided_at: Some(at("2026-10-25T10:00:00Z")),
+            ..row("t-a1", Some("t-b2"), "src/a.ts", Relation::TakenOver)
+        },
+    )
+    .unwrap();
+    let file = |path: &str, when: &str| AttributedFile {
+        repo_root: "/r".into(),
+        path: path.into(),
+        agent_id: MAIN_AGENT.into(),
+        source: ChangeSource::Hook,
+        added_at: at(when),
+    };
+    let repo = Path::new("/r");
+    let repos = [PathBuf::from("/r")];
+    // t-b2 still has only its other file: src/a.ts stays out of its Done check
+    let before = [file("src/b.ts", "2026-10-25T09:00:00Z")];
+    let taken = vec![(
+        PathBuf::from("/r"),
+        taken_over_paths_for(&conn, &id("t-b2"), repo, &before).unwrap(),
+    )];
+    assert_eq!(taken[0].1, vec!["src/a.ts".to_owned()]);
+    assert_eq!(
+        done_paths(&repos, &before, None, &taken),
+        vec![(PathBuf::from("/r"), vec!["src/b.ts".to_owned()])]
+    );
+    // an attribution older than the decision does not bring it back either
+    let stale = [
+        file("src/a.ts", "2026-10-25T09:30:00Z"),
+        file("src/b.ts", "2026-10-25T09:00:00Z"),
+    ];
+    assert_eq!(
+        taken_over_paths_for(&conn, &id("t-b2"), repo, &stale).unwrap(),
+        vec!["src/a.ts".to_owned()]
+    );
+    // t-b2 edits src/a.ts again after the Replace: it is t-b2's to commit once more
+    let after = [
+        file("src/a.ts", "2026-10-25T10:05:00Z"),
+        file("src/b.ts", "2026-10-25T09:00:00Z"),
+    ];
+    let taken = vec![(
+        PathBuf::from("/r"),
+        taken_over_paths_for(&conn, &id("t-b2"), repo, &after).unwrap(),
+    )];
+    assert!(taken[0].1.is_empty());
+    assert_eq!(
+        done_paths(&repos, &after, None, &taken),
+        vec![(PathBuf::from("/r"), vec!["src/a.ts".to_owned(), "src/b.ts".to_owned()])]
+    );
+}
