@@ -15,10 +15,11 @@ vi.mock("@/features/board", () => ({
 vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: () => ({ setTitle, setBadgeCount: vi.fn(), isFocused: async () => true }),
 }));
-import { mockBindings, commands } from "@/test/mockBindings";
+import { mockBindings, commands, events } from "@/test/mockBindings";
 import { makeProject, makeView } from "@/test/fixtures";
 import { projectContainer } from "@/lib/stores/tasksStore";
 import { leaf, EMPTY_PANE } from "@/features/views";
+import { overlapStore } from "@/features/overlap";
 import { shellStore } from "../store";
 import { ShellLayout } from "./ShellLayout";
 
@@ -94,5 +95,17 @@ describe("ShellLayout", () => {
     const before = shellStore.get().sidebarOpen;
     fireEvent.keyDown(window, { key: "\\", metaKey: true });
     expect(shellStore.get().sidebarOpen).toBe(!before);
+  });
+  it("starts the overlap events with the window and stops them on unmount", async () => {
+    overlapStore.reset();
+    events.overlapChanged.listen.mockClear();
+    const { unmount } = render(<ShellLayout />);
+    await vi.waitFor(() => expect(events.overlapChanged.listen).toHaveBeenCalledTimes(1));
+    act(() => events.overlapChanged.emitForTest({ task_id: "task-b2", count: 2, pending: 1 }));
+    expect(overlapStore.get().counts["task-b2"]).toEqual({ count: 2, pending: 1 });
+    unmount();
+    await new Promise((r) => setTimeout(r, 0));
+    events.overlapChanged.emitForTest({ task_id: "task-b2", count: 5, pending: 0 });
+    expect(overlapStore.get().counts["task-b2"]).toEqual({ count: 2, pending: 1 });
   });
 });

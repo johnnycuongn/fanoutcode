@@ -7,6 +7,7 @@ import { loadProjects, projectsStore } from "@/lib/stores/projectsStore";
 import { containerKey, loadTasks, setContainerProjects, startTasksEvents } from "@/lib/stores/tasksStore";
 import { appScope, loadSettings, projectScope, scopeFor } from "@/features/settings";
 import { loadViews, startViewsEvents } from "@/features/views";
+import { startOverlapEvents } from "@/features/overlap";
 import { initWindow, setProjectLayer, setWindowWidth } from "./store";
 
 async function firstLoad(info: WindowInfo, container: Container) {
@@ -51,6 +52,7 @@ export function useShellEvents(info: WindowInfo | null): { ready: boolean; dirty
     void firstLoad(info, c).finally(() => live && setReady(true));
     const offTasks = startTasksEvents();
     const offViews = startViewsEvents();
+    const offOverlaps = startOverlapEvents();
     const offWorkspace = events.workspaceChanged.listen((e) => {
       if (c.type === "Workspace" && e.payload.workspace.id === c.id) setDirty(e.payload.workspace.dirty);
     });
@@ -62,6 +64,7 @@ export function useShellEvents(info: WindowInfo | null): { ready: boolean; dirty
       live = false;
       offTasks();
       offViews();
+      offOverlaps();
       void Promise.resolve(offWorkspace).then((fn) => fn?.());
       observer.disconnect();
     };
