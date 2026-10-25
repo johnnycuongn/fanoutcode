@@ -9,7 +9,8 @@ use teamcode_core::{Error, Result};
 
 use crate::commands::tests as test_runs;
 use crate::commands::{
-    activity, canvas, context_docs, cost, git, hooks, livespec, memory, projects, sessions, settings, tasks, views,
+    activity, canvas, context_docs, cost, git, hooks, jira, livespec, memory, projects, sessions, settings, tasks,
+    views,
     windows, workspaces,
 };
 use crate::events::{
@@ -121,6 +122,18 @@ pub fn builder() -> Builder<tauri::Wry> {
             context_docs::context_docs_add,
             context_docs::context_docs_remove,
             context_docs::context_docs_fetch,
+            context_docs::context_docs_trust,
+            jira::jira_link,
+            jira::jira_link_workspace,
+            jira::jira_unlink,
+            jira::jira_status,
+            jira::jira_issue,
+            jira::jira_cached,
+            jira::jira_search,
+            jira::jira_comment,
+            jira::jira_create_task,
+            jira::jira_transitions,
+            jira::jira_transition,
         ])
         .events(collect_events![
             TaskChanged,
@@ -218,6 +231,11 @@ mod tests {
             "workspacesPreviewOpen",
             "workspacesConfirmOpen",
             "contextDocsFetch",
+            "jiraLink",
+            "jiraCreateTask",
+            "jiraStatus",
+            "jiraIssue",
+            "jiraComment",
         ] {
             assert!(ts.contains(&format!("async {command}(")), "{command}");
         }
@@ -230,6 +248,11 @@ mod tests {
             "LinkStatus",
             "ContextDoc",
             "WorkspaceImportPreview",
+            "Issue",
+            "JiraSite",
+            "JiraLinkStatus",
+            "CachedIssue",
+            "Transition",
         ] {
             assert!(ts.contains(&format!("export type {ty} = ")), "{ty}");
         }

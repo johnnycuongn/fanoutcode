@@ -922,6 +922,117 @@ async contextDocsFetch(container: Container, id: string) : Promise<Result<string
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+/**
+ * Confirms a reference that came from a workspace file, so it may be read and named in prompts.
+ */
+async contextDocsTrust(container: Container, id: string) : Promise<Result<ContextDoc, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("context_docs_trust", { container, id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async jiraLink(projectId: ProjectId, site: string, email: string, token: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("jira_link", { projectId, site, email, token }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * The workspace's default site, inherited by its projects without their own.
+ */
+async jiraLinkWorkspace(workspaceId: WorkspaceId, site: string, email: string, token: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("jira_link_workspace", { workspaceId, site, email, token }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Removes the site at the scope's most specific layer and its token.
+ */
+async jiraUnlink(scope: Scope) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("jira_unlink", { scope }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async jiraStatus(projectId: ProjectId) : Promise<Result<JiraLinkStatus, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("jira_status", { projectId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * A live fetch, cached for the project.
+ */
+async jiraIssue(projectId: ProjectId, key: string) : Promise<Result<Issue, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("jira_issue", { projectId, key }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async jiraCached(projectId: ProjectId) : Promise<Result<CachedIssue[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("jira_cached", { projectId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async jiraSearch(projectId: ProjectId, query: string) : Promise<Result<Issue[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("jira_search", { projectId, query }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async jiraComment(projectId: ProjectId, key: string, body: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("jira_comment", { projectId, key, body }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * A task from the issue: its intent written from the issue, its Jira key set, its title the summary.
+ */
+async jiraCreateTask(projectId: ProjectId, key: string, workspaceId: WorkspaceId | null) : Promise<Result<Task, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("jira_create_task", { projectId, key, workspaceId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async jiraTransitions(projectId: ProjectId, key: string) : Promise<Result<Transition[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("jira_transitions", { projectId, key }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async jiraTransition(projectId: ProjectId, key: string, transitionId: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("jira_transition", { projectId, key, transitionId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
@@ -981,6 +1092,7 @@ export type AgentState = { type: "Working" } | { type: "NeedsYou"; reason: Handb
  * One step of a path from the root to a `Split`.
  */
 export type Branch = "First" | "Second"
+export type CachedIssue = { issue: Issue; fetched_at: string }
 export type CanvasLayout = "AutoReflow" | "Pinned"
 /**
  * Where one canvas node sits; `node_id` is the webview's `agent:<id>`, `step:<n>` or `file:<path>`.
@@ -1080,6 +1192,15 @@ warning: string | null; path: string; exists: boolean; is_dir: boolean;
  * No project with this root is open in Team Code yet.
  */
 new_to_app: boolean; protected: boolean }
+export type Issue = { key: string; summary: string; status: string; assignee: string | null; issue_type: string; 
+/**
+ * Plain text from the ADF description.
+ */
+description: string; url: string; updated: string }
+/**
+ * The site a project uses and whether it comes from a workspace rather than the project itself.
+ */
+export type JiraLinkStatus = { site: JiraSite | null; inherited: boolean }
 /**
  * A linked Atlassian site. `account` names the keychain entry holding the API token (e.g. `jira:project:p-1`); the
  * token itself never leaves the keychain except into a request. Owned here (A19).
@@ -1300,6 +1421,7 @@ export type TestFinished = { task_id: TaskId; code: number }
  * The `theme` setting. `System` follows macOS; the webview resolves it (`src/lib/theme.ts`).
  */
 export type ThemePreference = "System" | "Light" | "Dark"
+export type Transition = { id: string; name: string }
 export type View = { id: ViewId; container: Container; name: string; order: number; layout: LayoutNode }
 export type ViewId = string
 export type ViewsChanged = { container: Container }

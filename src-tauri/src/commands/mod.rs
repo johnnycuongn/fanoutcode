@@ -11,6 +11,7 @@ pub mod context_docs;
 pub mod cost;
 pub mod git;
 pub mod hooks;
+pub mod jira;
 pub mod livespec;
 pub mod memory;
 pub mod projects;

@@ -19,6 +19,7 @@ use teamcode_core::domain::WorkspaceId;
 use teamcode_core::helpers::livespec_run::RunSlots;
 use teamcode_core::helpers::HelperKind;
 use teamcode_core::hooks::attribution::Correlator;
+use teamcode_core::jira::cache::IssueCache;
 use teamcode_core::pipeline::TestRun;
 use teamcode_core::sessions::{OwnedDriver, PtySpawner, SessionDriver, SessionRegistry};
 use teamcode_core::settings::{keys, resolve, Scope};
@@ -43,6 +44,8 @@ pub struct AppState {
     /// Workspace records and their file mirrors (Plan 10).
     pub workspaces: WorkspaceStore,
     pub context_docs: ContextDocs,
+    /// The per-project Jira issue cache.
+    pub issue_cache: IssueCache,
     pub workspace_watcher: Arc<WorkspaceFileWatcher>,
     /// The watcher's reports, taken by `setup` to emit `workspace-file-changed`.
     pub workspace_file_changes: Mutex<Option<std::sync::mpsc::Receiver<WorkspaceId>>>,
@@ -108,6 +111,7 @@ impl AppState {
         Ok(Self {
             workspaces: WorkspaceStore::new(db.clone(), data_dir.to_owned(), Some(workspace_watcher.clone())),
             context_docs: ContextDocs::new(db.clone()),
+            issue_cache: IssueCache::new(db.clone()),
             workspace_watcher,
             workspace_file_changes: Mutex::new(Some(rx)),
             db,

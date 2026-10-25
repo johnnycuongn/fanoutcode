@@ -62,6 +62,16 @@ pub fn issue_url(site_url: &str, key: &str) -> String {
     format!("{}/browse/{key}", site_url.trim_end_matches('/'))
 }
 
+/// JQL for what the developer typed: an exact key, else a text search, newest first.
+pub fn search_jql(query: &str) -> String {
+    let q = query.trim();
+    if valid_issue_key(&q.to_ascii_uppercase()) {
+        return format!("key = \"{}\"", q.to_ascii_uppercase());
+    }
+    let escaped = q.replace('\\', "\\\\").replace('"', "\\\"");
+    format!("text ~ \"{escaped}*\" ORDER BY updated DESC")
+}
+
 /// `^[A-Z][A-Z0-9_]*-[0-9]+$`.
 pub fn valid_issue_key(key: &str) -> bool {
     let Some((project, number)) = key.split_once('-') else {
@@ -402,5 +412,11 @@ mod tests {
             Err(Error::Invalid(_))
         ));
         assert!(valid_issue_key("PROJ-12") && !valid_issue_key("proj-12") && !valid_issue_key("PROJ"));
+    }
+
+    #[test]
+    fn search_is_a_key_lookup_or_an_escaped_text_search() {
+        assert_eq!(search_jql("proj-12"), "key = \"PROJ-12\"");
+        assert_eq!(search_jql("log\"in"), "text ~ \"log\\\"in*\" ORDER BY updated DESC");
     }
 }

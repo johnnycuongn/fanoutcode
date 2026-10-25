@@ -280,6 +280,19 @@ impl ContextDocs {
         replace_rows(&self.conn(), container, docs)
     }
 
+    /// The developer confirmed a reference that came from a workspace file: it may now be read and named in prompts.
+    pub fn trust(&self, container: &Container, id: &str) -> Result<ContextDoc> {
+        let (scope_kind, scope_id) = scope_of(container);
+        let n = self.conn().execute(
+            "UPDATE context_docs SET trusted = 1 WHERE id = ?1 AND scope_kind = ?2 AND scope_id = ?3",
+            [id, scope_kind, scope_id],
+        )?;
+        if n == 0 {
+            return Err(Error::Invalid("Unknown reference id.".into()));
+        }
+        self.get(id)
+    }
+
     pub fn set_fetched(&self, id: &str, at: DateTime<Utc>) -> Result<()> {
         self.conn().execute(
             "UPDATE context_docs SET fetched_at = ?1 WHERE id = ?2",
@@ -440,6 +453,9 @@ mod tests {
         let at = Utc::now();
         d.set_fetched(&a.id, at).unwrap();
         assert!(d.get(&a.id).unwrap().fetched_at.is_some());
+        let other = Container::Project { id: fx.api.id.clone() };
+        assert!(d.trust(&other, &a.id).is_err(), "only within its own container");
+        assert!(d.trust(&ws1(), &a.id).unwrap().trusted);
         d.remove(&ws1(), &a.id).unwrap();
         assert!(d.list(&ws1()).unwrap().is_empty());
         assert!(matches!(d.get(&a.id), Err(Error::Invalid(_))));

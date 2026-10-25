@@ -8,6 +8,7 @@ pub mod git_watcher;
 pub mod helpers;
 pub mod hook_feed;
 pub mod hooks_tailer;
+pub mod jira_transitions;
 pub mod linking;
 pub mod observation;
 pub mod observe;
@@ -76,6 +77,7 @@ pub fn run() {
             std::thread::spawn(livespec_core::shell_env::login_shell_path);
             git_watcher::GitWatcher::start(app.handle());
             workspace_sync::start(app.handle());
+            jira_transitions::install(app.handle());
             let state = app.state::<AppState>();
             let open = {
                 let conn = state.db.lock().expect("db lock");

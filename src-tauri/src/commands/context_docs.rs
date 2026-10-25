@@ -62,6 +62,21 @@ pub fn context_docs_remove(app: AppHandle, state: State<'_, AppState>, container
     Ok(())
 }
 
+/// Confirms a reference that came from a workspace file, so it may be read and named in prompts.
+#[tauri::command]
+#[specta::specta]
+pub fn context_docs_trust(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    container: Container,
+    id: String,
+) -> Result<ContextDoc> {
+    let container = parse_container(&container)?;
+    let doc = state.context_docs.trust(&container, &id)?;
+    announce(&app, container);
+    Ok(doc)
+}
+
 /// Fetches the reference's text now, caches it and returns it for a preview. Confluence pages use the Atlassian
 /// site linked for Jira at the container's scope and its token from the keychain; the token never leaves the shell.
 #[tauri::command]
