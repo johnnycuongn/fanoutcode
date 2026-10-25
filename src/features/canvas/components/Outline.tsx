@@ -3,15 +3,11 @@ import { useMemo, type ReactElement } from "react";
 import { Badge, Checkbox, Chip, cx } from "@/components/ui";
 import { asSwatch } from "@/lib/format";
 import { MiniMarkdown } from "@/livespec/MiniMarkdown";
+import { formatDuration } from "../format";
 import { buildOutline, type OutlineEntry } from "../outline";
 import { showRepoBadges } from "../repo";
 import { eventsUntil } from "../replay";
 import { useCanvas } from "../store";
-
-export function formatDuration(ms: number | null): string {
-  if (ms === null) return "";
-  return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`;
-}
 
 function StreamRow({ entry }: { entry: OutlineEntry }): ReactElement {
   return (
