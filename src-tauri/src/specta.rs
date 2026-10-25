@@ -9,7 +9,7 @@ use teamcode_core::{Error, Result};
 
 use crate::commands::tests as test_runs;
 use crate::commands::{
-    activity, cost, git, hooks, livespec, memory, projects, sessions, settings, tasks, views, windows,
+    activity, canvas, cost, git, hooks, livespec, memory, projects, sessions, settings, tasks, views, windows,
 };
 use crate::events::{
     CostUpdated, GitChanges, NeedsYou, SessionAttached, SessionExited, SessionQueueChanged, SpecWatcher, TaskChanged,
@@ -73,6 +73,8 @@ pub fn builder() -> Builder<tauri::Wry> {
             git::git_commit,
             hooks::hooks_list,
             hooks::hooks_plan_steps,
+            canvas::canvas_positions_get,
+            canvas::canvas_positions_set,
             test_runs::tests_run,
             test_runs::tests_stop,
             test_runs::tests_add_linked,

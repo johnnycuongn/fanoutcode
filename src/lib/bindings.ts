@@ -474,6 +474,28 @@ async hooksPlanSteps(taskId: TaskId) : Promise<Result<PlanDoc, string>> {
 }
 },
 /**
+ * The task's saved canvas positions, ordered by node id; empty when none were saved.
+ */
+async canvasPositionsGet(taskId: TaskId) : Promise<Result<CanvasPosition[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("canvas_positions_get", { taskId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Replaces every saved canvas position of the task.
+ */
+async canvasPositionsSet(taskId: TaskId, positions: CanvasPosition[]) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("canvas_positions_set", { taskId, positions }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Starts the task's tests, or attaches to the run in flight; streams its output and returns its exit code.
  */
 async testsRun(taskId: TaskId, onOutput: TAURI_CHANNEL<number[]>) : Promise<Result<number, string>> {
@@ -705,6 +727,10 @@ export type AgentState = { type: "Working" } | { type: "NeedsYou"; reason: Handb
  */
 export type Branch = "First" | "Second"
 export type CanvasLayout = "AutoReflow" | "Pinned"
+/**
+ * Where one canvas node sits; `node_id` is the webview's `agent:<id>`, `step:<n>` or `file:<path>`.
+ */
+export type CanvasPosition = { node_id: string; x: number; y: number }
 /**
  * Why a file is in the task's set. `Worktree` also marks the "Other changes", which are only seen in the tree.
  */

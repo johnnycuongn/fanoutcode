@@ -6,6 +6,7 @@ use teamcode_core::settings::Scope;
 use teamcode_core::Result;
 
 pub mod activity;
+pub mod canvas;
 pub mod cost;
 pub mod git;
 pub mod hooks;

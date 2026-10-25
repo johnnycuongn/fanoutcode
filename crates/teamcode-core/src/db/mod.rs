@@ -26,6 +26,7 @@ pub const MIGRATIONS: &[(u32, &str, &str)] = &[
     (1, "initial", include_str!("../../migrations/0001_initial.sql")),
     (3, "core", include_str!("../../migrations/0003_core.sql")),
     (5, "observation", include_str!("../../migrations/0005_observation.sql")),
+    (9, "canvas", include_str!("../../migrations/0009_canvas.sql")),
 ];
 
 /// Opens (creating parent folders on first launch), enables WAL and foreign keys, then migrates.

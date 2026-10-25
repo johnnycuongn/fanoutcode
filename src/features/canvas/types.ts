@@ -1,6 +1,8 @@
 // The canvas's own types (webview-only; nothing here crosses IPC). The model modules turn plan steps and the task's
 // hook events into these; the components render them. Wire shapes come from src/lib/bindings.ts only.
-import type { DetailLevel, TaskEvent } from "@/lib/bindings";
+import type { CanvasPosition, DetailLevel, TaskEvent } from "@/lib/bindings";
+
+export type { CanvasPosition };
 
 export type StepStatus = "upcoming" | "active" | "done";
 export type TeamViewMode = "canvas" | "outline";
