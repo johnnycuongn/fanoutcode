@@ -7,6 +7,7 @@ pub mod file;
 pub mod import;
 pub mod link;
 pub mod open;
+pub mod policy;
 pub(crate) mod rows;
 pub mod store;
 #[cfg(test)]
