@@ -7,10 +7,11 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{json, Map, Value};
 
-use crate::domain::TaskId;
+use crate::domain::{Task, TaskId, WorktreeChoice, WorktreeConvention};
 use crate::hooks::HookSpec;
 use crate::ids::valid_id;
-use crate::Error;
+use crate::roster::{self, AgentDef};
+use crate::{worktree, Error};
 
 /// A program, its arguments, its working directory and the extra environment it gets.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -132,6 +133,99 @@ pub fn settings_path(app_data: &Path, task_id: &TaskId) -> Result<PathBuf, Error
         .join(format!("{}.json", task_id.as_str())))
 }
 
+/// A task's Claude Code launch.
+pub struct ClaudeLaunch<'a> {
+    pub task: &'a Task,
+    pub project_root: &'a Path,
+    pub settings_path: &'a Path,
+    pub agents: &'a [AgentDef],
+    pub convention: WorktreeConvention,
+    /// Start fresh session: never `--resume`.
+    pub fresh: bool,
+}
+
+/// `claude --settings <p> [--agents <json>] [--add-dir <memory>] [--add-dir <linked>]… [--worktree <name>]
+/// [--resume <id>]`, in that order. The cwd is the project root, except a Team Code-managed worktree, which must
+/// exist already (`Precondition("worktree not created")`). Under Claude Code's convention the agent works inside
+/// `.claude/worktrees/<name>`, so the memory folder is outside its cwd and always gets `--add-dir`.
+pub fn claude_launch(input: &ClaudeLaunch) -> Result<LaunchSpec, Error> {
+    let task = input.task;
+    let worktree_on = task.worktree == WorktreeChoice::On;
+    let cwd = match (worktree_on, input.convention) {
+        (true, WorktreeConvention::TeamCodeManaged) => task
+            .worktree_path
+            .clone()
+            .ok_or_else(|| Error::Precondition("worktree not created".into()))?,
+        _ => input.project_root.to_owned(),
+    };
+    let mut args = vec!["--settings".to_owned(), input.settings_path.display().to_string()];
+    if !input.agents.is_empty() {
+        args.extend(["--agents".to_owned(), agents_json(input.agents)]);
+    }
+    if worktree_on || !task.memory_dir.starts_with(&cwd) {
+        args.extend(["--add-dir".to_owned(), task.memory_dir.display().to_string()]);
+    }
+    for root in &task.linked_roots {
+        args.extend(["--add-dir".to_owned(), root.display().to_string()]);
+    }
+    if worktree_on && input.convention == WorktreeConvention::ClaudeCode {
+        args.extend(["--worktree".to_owned(), worktree_name(task)]);
+    }
+    if let (Some(id), false) = (&task.claude_session_id, input.fresh) {
+        args.extend(["--resume".to_owned(), id.clone()]);
+    }
+    Ok(LaunchSpec {
+        program: "claude".into(),
+        args,
+        cwd,
+        env: session_env(Some(&task.id)),
+    })
+}
+
+/// `codex` in `cwd`, no arguments; Codex has no hooks or settings file.
+pub fn codex_launch(cwd: &Path) -> LaunchSpec {
+    LaunchSpec {
+        program: "codex".into(),
+        args: Vec::new(),
+        cwd: cwd.to_owned(),
+        env: session_env(None),
+    }
+}
+
+/// A login shell in `cwd`.
+pub fn shell_launch(cwd: &Path, shell: &str) -> LaunchSpec {
+    LaunchSpec {
+        program: shell.to_owned(),
+        args: vec!["-l".into()],
+        cwd: cwd.to_owned(),
+        env: session_env(None),
+    }
+}
+
+/// The `--agents` JSON: `{"<name>":{"description","prompt",["tools"],["model"]}}`, compact.
+pub fn agents_json(agents: &[AgentDef]) -> String {
+    roster::to_agents_json(agents)
+}
+
+/// The Claude Code worktree name: Plan 05's task slug (`worktree::slug_of`), so `claude --worktree <name>` lands
+/// at the `.claude/worktrees/<slug>` path the task records.
+pub fn worktree_name(task: &Task) -> String {
+    worktree::slug_of(task)
+}
+
+/// Every session's extra environment; `TEAMCODE_TASK_ID` only for a task's session.
+pub fn session_env(task: Option<&TaskId>) -> Vec<(String, String)> {
+    let mut env = vec![
+        ("TERM".to_owned(), "xterm-256color".to_owned()),
+        ("COLORTERM".to_owned(), "truecolor".to_owned()),
+        ("TEAMCODE_SESSION".to_owned(), "1".to_owned()),
+    ];
+    if let Some(id) = task {
+        env.push(("TEAMCODE_TASK_ID".to_owned(), id.as_str().to_owned()));
+    }
+    env
+}
+
 #[cfg(test)]
 mod tests {
     use std::os::unix::fs::PermissionsExt;
@@ -238,5 +332,124 @@ mod tests {
         GeneratedSettings::default().write(&p).unwrap();
         assert_eq!(std::fs::metadata(&p).unwrap().permissions().mode() & 0o777, 0o600);
         assert_eq!(std::fs::read_to_string(&p).unwrap().trim(), "{}");
+    }
+
+    // --- launch builders (Task 7) ---
+
+    use crate::roster::RosterLevel;
+
+    const SETTINGS: &str = "/ad/claude-settings/t-1.json";
+
+    fn task(worktree: WorktreeChoice, memory_dir: &str) -> Task {
+        let mut t = crate::test_support::task_fixture("t-1", "p-1");
+        t.worktree = worktree;
+        t.memory_dir = memory_dir.into();
+        t
+    }
+
+    fn input<'a>(t: &'a Task, agents: &'a [AgentDef], convention: WorktreeConvention, fresh: bool) -> ClaudeLaunch<'a> {
+        ClaudeLaunch {
+            task: t,
+            project_root: Path::new("/repo"),
+            settings_path: Path::new(SETTINGS),
+            agents,
+            convention,
+            fresh,
+        }
+    }
+
+    #[test]
+    fn plain_launch_without_worktree_or_links() {
+        let t = task(WorktreeChoice::Off, "/ad/projects/p-1/tasks/2026-10-24-add-login");
+        let l = claude_launch(&input(&t, &[], WorktreeConvention::ClaudeCode, false)).unwrap();
+        assert_eq!(l.program, "claude");
+        assert_eq!(l.cwd, PathBuf::from("/repo"));
+        assert_eq!(
+            l.args,
+            [
+                "--settings",
+                SETTINGS,
+                "--add-dir",
+                "/ad/projects/p-1/tasks/2026-10-24-add-login"
+            ]
+        );
+    }
+
+    #[test]
+    fn memory_inside_cwd_needs_no_add_dir() {
+        let t = task(WorktreeChoice::Off, "/repo/docs/tasks/2026-10-24-x");
+        let l = claude_launch(&input(&t, &[], WorktreeConvention::ClaudeCode, false)).unwrap();
+        assert!(!l.args.contains(&"--add-dir".to_string()));
+    }
+
+    #[test]
+    fn claude_convention_worktree_adds_flag_and_keeps_root_cwd() {
+        let t = task(WorktreeChoice::On, "/repo/docs/tasks/2026-10-24-x");
+        let l = claude_launch(&input(&t, &[], WorktreeConvention::ClaudeCode, false)).unwrap();
+        assert_eq!(l.cwd, PathBuf::from("/repo"));
+        // the name is Plan 05's slug (the folder name without its date), so it matches `.claude/worktrees/<slug>`
+        assert!(l.args.windows(2).any(|w| w == ["--worktree", "x"]));
+        assert!(l
+            .args
+            .windows(2)
+            .any(|w| w == ["--add-dir", "/repo/docs/tasks/2026-10-24-x"])); // memory is outside the worktree cwd
+    }
+
+    #[test]
+    fn managed_convention_uses_worktree_path_as_cwd() {
+        let mut t = task(WorktreeChoice::On, "/repo/docs/tasks/2026-10-24-x");
+        t.worktree_path = Some("/repo/.worktrees/x".into());
+        let l = claude_launch(&input(&t, &[], WorktreeConvention::TeamCodeManaged, false)).unwrap();
+        assert_eq!(l.cwd, PathBuf::from("/repo/.worktrees/x"));
+        assert!(!l.args.contains(&"--worktree".to_string()));
+        t.worktree_path = None;
+        assert_eq!(
+            claude_launch(&input(&t, &[], WorktreeConvention::TeamCodeManaged, false)).unwrap_err(),
+            Error::Precondition("worktree not created".into())
+        );
+    }
+
+    #[test]
+    fn linked_roots_agents_and_resume_in_order() {
+        let mut t = task(WorktreeChoice::Off, "/ad/m");
+        t.linked_roots = vec!["/other".into()];
+        t.claude_session_id = Some("abc".into());
+        let agents = vec![AgentDef {
+            name: "frontend".into(),
+            description: "UI".into(),
+            prompt: "You do UI".into(),
+            tools: vec![],
+            model: None,
+            origin: RosterLevel::App,
+        }];
+        let l = claude_launch(&input(&t, &agents, WorktreeConvention::ClaudeCode, false)).unwrap();
+        assert_eq!(
+            l.args,
+            [
+                "--settings",
+                SETTINGS,
+                "--agents",
+                r#"{"frontend":{"description":"UI","prompt":"You do UI"}}"#,
+                "--add-dir",
+                "/ad/m",
+                "--add-dir",
+                "/other",
+                "--resume",
+                "abc"
+            ]
+        );
+        let fresh = claude_launch(&input(&t, &agents, WorktreeConvention::ClaudeCode, true)).unwrap();
+        assert!(!fresh.args.contains(&"--resume".to_string()));
+    }
+
+    #[test]
+    fn codex_and_shell_launch() {
+        assert_eq!(codex_launch(Path::new("/w")).program, "codex");
+        let s = shell_launch(Path::new("/w"), "/bin/zsh");
+        assert_eq!(
+            (s.program.as_str(), s.args.as_slice()),
+            ("/bin/zsh", &["-l".to_string()][..])
+        );
+        assert!(session_env(Some(&tid("t-1"))).contains(&("TEAMCODE_TASK_ID".into(), "t-1".into())));
     }
 }
