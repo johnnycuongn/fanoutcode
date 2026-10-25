@@ -20,6 +20,7 @@ in `docs/superpowers/specs/2026-10-24-team-code-design.md`. Each implementation 
 - [The board](#the-board)
 - [Sessions and terminals](#sessions-and-terminals)
 - [The task page and dock](#the-task-page-and-dock)
+- [The Team canvas](#the-team-canvas)
 - [Where to change things](#where-to-change-things)
 
 ## At a glance
@@ -234,6 +235,31 @@ A task opens in a pane as `TaskPage` (`src/features/task-page`), which Plan 06's
 - Every IPC-touching store takes its command set as a parameter; `src/lib/ipcResult.ts`'s `live(...)` builds one over
   the generated `commands` that resolves to the value and rejects with the error string.
 
+## The Team canvas
+
+The Team tab (`src/features/canvas`, spec §10.7) draws a task's team from `plan.md` and its hook event log. Plan 08's
+dock and Swap body render it through `renderTeam`; Plan 06's `PaneContentHost` renders `CanvasPane` for
+`PaneContent::TeamCanvas`.
+
+- **Model, pure and DOM-free**: `events.ts` (accessors over `HookEvent`, tool-call pairing, de-duplicated seqs) →
+  `attribution.ts` (agents from `SubagentStart` and `Step N · role:` dispatches) → `files.ts` (edits, deltas, shared
+  files) → `steps.ts` (status from plan.md ticks, owners, tool line, progress, cost) → `model.ts` `deriveCanvas` →
+  `graph.ts` (hub graph or flow canvas, and the `layoutKey` that decides when to re-lay out). `adapters.ts` is the
+  only reader of Plan 05's `PlanDoc`, `RepoChanges` and `CostSummary` field names. Replay derives from a prefix of
+  the log (`replay.ts`).
+- **Store**: `canvasState.ts` holds one reference-counted entry per open task and re-derives on every input change;
+  `store.ts` loads it (`hooks_list`, `hooks_plan_steps`, `git_changes`, `cost_summary`, `settings_get`,
+  `canvas_positions_get`) and keeps it live (`team-event`, `task-changed`, `git-changes`, `cost-updated`);
+  `layoutRunner.ts` debounces elkjs layouts (150 ms) and saves positions (500 ms) through `canvas_positions_set`.
+- **Layout**: `layout.ts` runs elkjs (loaded on first use) — stress plus an overlap pass for the hub graph, layered
+  left-to-right for the flow canvas with agents docked below; `positions.ts` applies Auto re-flow or Pinned.
+- **Rendering**: React Flow (`components/TeamCanvas.tsx`) over plain card components (`components/cards/`), edges
+  between facing handles, a 300 ms spring (150 ms ease under reduced motion), Outline mode, the drill-in panel (By
+  file and Event stream lenses) and the replay scrubber. `#/dev/canvas` is a dev-only playground fed from fixtures.
+- **Smoke suite**: `npm run e2e` runs Playwright (WebKit, installed into `node_modules`) against the Vite dev server
+  in `e2e` mode, where `src/main.tsx` installs `e2e/fixtures/mockTauri.ts` before the first render. A command the
+  app calls at load without a handler there fails the suite by name.
+
 ## Where to change things
 
 | To change              | Edit                                                                            |
@@ -256,3 +282,5 @@ A task opens in a pane as `TaskPage` (`src/features/task-page`), which Plan 06's
 | How an agent launches  | `crates/teamcode-core/src/sessions/launch.rs`, `src-tauri/src/session_service/` |
 | When prompts are sent  | `crates/teamcode-core/src/sessions/inject.rs`, `session_service/effects.rs`     |
 | The terminal pane      | `src/features/views/useXterm.ts`, `components/TerminalPane.tsx`                 |
+| What the canvas shows  | `src/features/canvas/` model modules (`attribution.ts`, `files.ts`, `steps.ts`) |
+| Smoke-suite IPC mocks  | `e2e/fixtures/mockTauri.ts` and `e2e/fixtures/seed.ts`                          |

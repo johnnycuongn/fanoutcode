@@ -35,6 +35,8 @@ npm run bindings                                   # regenerate src/lib/bindings
 npm run bindings:check                             # fails when bindings.ts is stale (CI runs it)
 npm run format                                     # Prettier --write
 npm run build                                      # tsc + vite build
+npm run e2e                                        # Playwright smoke suite (WebKit in node_modules:
+                                                   #   PLAYWRIGHT_BROWSERS_PATH=0 npx playwright install webkit)
 ```
 
 ## Rules that lint enforces
