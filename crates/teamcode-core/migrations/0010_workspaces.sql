@@ -34,3 +34,13 @@ CREATE TABLE jira_links (
     fetched_at TEXT NOT NULL,
     PRIMARY KEY (project_id, issue_key)
 );
+
+-- The (project, canonical root) pairs a task was bound to at its first session start; protection is decided by
+-- project id, never by matching path text. `Task.linked_roots` keeps the roots for `--add-dir`.
+CREATE TABLE task_links (
+    task_id TEXT NOT NULL REFERENCES tasks (id) ON DELETE CASCADE,
+    ord INTEGER NOT NULL,
+    project_id TEXT,
+    root TEXT NOT NULL,
+    PRIMARY KEY (task_id, ord)
+);
