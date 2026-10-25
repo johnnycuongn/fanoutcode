@@ -14,12 +14,13 @@ pub mod others;
 pub mod prompts;
 pub mod store;
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::domain::TaskId;
+use crate::domain::{AgentState, HandbackReason, TaskId};
 
 /// How a file in this task's footprint or change set relates to the other task's work on it (§7).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
@@ -76,6 +77,35 @@ pub struct OverlapRow {
     pub noted_in: bool,
     pub decided_at: Option<DateTime<Utc>>,
     pub updated_at: DateTime<Utc>,
+}
+
+/// The chip feed's derived state while `pending` decisions wait (§5.4): suppressed (`None`, so the caller keeps the
+/// pinned `NeedsYou`) while any is pending; with none, `derived` unchanged.
+pub fn pinned(pending: u32, derived: Option<AgentState>) -> Option<AgentState> {
+    if pending > 0 {
+        None
+    } else {
+        derived
+    }
+}
+
+/// The hand-back reason a task's pending rows pin it to (§5.4): none pending, `None`; every pending row held,
+/// `HoldingFor` the first held row's other task (its title, "another session" when unattributed); otherwise
+/// `FileInUse` with the pending count.
+pub fn pin_for(rows: &[OverlapRow], titles: &HashMap<TaskId, String>) -> Option<HandbackReason> {
+    let pending: Vec<&OverlapRow> = rows.iter().filter(|r| r.pending.is_some()).collect();
+    let first = pending.first()?;
+    if pending.iter().all(|r| r.held) {
+        let other = first
+            .other_task
+            .as_ref()
+            .and_then(|id| titles.get(id).cloned())
+            .unwrap_or_else(|| "another session".to_owned());
+        return Some(HandbackReason::HoldingFor { other });
+    }
+    Some(HandbackReason::FileInUse {
+        pending: pending.len() as u32,
+    })
 }
 
 #[cfg(test)]
@@ -163,5 +193,91 @@ mod tests {
             decided_at: None,
             ..serde_json::from_value(json).unwrap()
         });
+    }
+
+    fn row(other: Option<&str>, pending: bool, held: bool) -> OverlapRow {
+        OverlapRow {
+            task_id: TaskId::parse("t-a1").unwrap(),
+            other_task: other.map(|o| TaskId::parse(o).unwrap()),
+            repo_root: "/r".into(),
+            path: "src/a.ts".into(),
+            relation: Relation::Claimed,
+            pending: pending.then(|| PendingDecision::Command {
+                command: "git add -A".into(),
+            }),
+            held,
+            noted_out: false,
+            noted_in: false,
+            decided_at: None,
+            updated_at: "2026-10-25T10:00:00Z".parse().unwrap(),
+        }
+    }
+
+    fn titles() -> HashMap<TaskId, String> {
+        HashMap::from([
+            (TaskId::parse("t-b2").unwrap(), "Login".to_owned()),
+            (TaskId::parse("t-c3").unwrap(), "Billing".to_owned()),
+        ])
+    }
+
+    fn replied() -> AgentState {
+        AgentState::NeedsYou {
+            reason: HandbackReason::Replied {
+                first_line: "done".into(),
+            },
+        }
+    }
+
+    #[test]
+    fn pin_overrides_working_and_replied_while_pending() {
+        assert_eq!(pinned(1, Some(AgentState::Working)), None);
+        assert_eq!(pinned(3, Some(replied())), None);
+        assert_eq!(pinned(2, None), None);
+    }
+
+    #[test]
+    fn no_pin_without_pending() {
+        for derived in [Some(AgentState::Working), Some(replied()), Some(AgentState::Idle), None] {
+            assert_eq!(pinned(0, derived.clone()), derived);
+        }
+    }
+
+    #[test]
+    fn all_held_pins_holding_for() {
+        let rows = [
+            row(Some("t-c3"), false, false),
+            row(Some("t-b2"), true, true),
+            row(Some("t-c3"), true, true),
+        ];
+        assert_eq!(
+            pin_for(&rows, &titles()),
+            Some(HandbackReason::HoldingFor { other: "Login".into() })
+        );
+        assert_eq!(
+            pin_for(&[row(None, true, true)], &titles()),
+            Some(HandbackReason::HoldingFor {
+                other: "another session".into()
+            })
+        );
+    }
+
+    #[test]
+    fn any_unheld_pins_file_in_use_with_the_count() {
+        let rows = [
+            row(Some("t-b2"), true, true),
+            row(Some("t-c3"), true, false),
+            row(None, true, false),
+            row(Some("t-b2"), false, false),
+        ];
+        assert_eq!(
+            pin_for(&rows, &titles()),
+            Some(HandbackReason::FileInUse { pending: 3 })
+        );
+    }
+
+    #[test]
+    fn none_pending_pins_nothing() {
+        assert_eq!(pin_for(&[], &titles()), None);
+        assert_eq!(pin_for(&[row(Some("t-b2"), false, true)], &titles()), None);
     }
 }
