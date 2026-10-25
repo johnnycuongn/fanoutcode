@@ -8,6 +8,7 @@ import type { TaskSettings } from "@/features/task-page";
 import { dockStore, type DockStore } from "../store";
 import { GROWN_HEIGHT, resolveTab, visibleTabs } from "../tabRules";
 import type { DockTab } from "../types";
+import { CommitTab } from "./CommitTab";
 import { DockTabStrip } from "./DockTabStrip";
 import { MemoryTab } from "./MemoryTab";
 import { TestTab } from "./TestTab";
@@ -35,10 +36,10 @@ function body(tab: DockTab, p: DockProps): ReactNode {
       return <TicketTab key={p.task.id} task={p.task} />;
     case "test":
       return <TestTab key={p.task.id} task={p.task} projects={p.projects ?? []} />;
+    case "commit":
+      return <CommitTab key={p.task.id} task={p.task} settings={p.settings} />;
     case "team":
       return p.teamSlot ?? <EmptyState size="sm" title="The team view arrives with the canvas" />;
-    default:
-      return <EmptyState size="sm" title="Nothing here yet" />;
   }
 }
 
