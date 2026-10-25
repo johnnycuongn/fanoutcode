@@ -169,7 +169,8 @@ pub fn settings_for(conn: &rusqlite::Connection, task: &Task, root: &Path) -> Re
 
 /// The `CreateWorktree` effect: the worktree path and branch the task records. Managed: `git worktree add` now
 /// (blocking, reusing an existing `fo/<slug>` branch); Claude Code's own: only its path, since `claude --worktree`
-/// creates it at launch.
+/// creates it at launch. The shell records the home checkout's `git::current_branch` as the task's `base_branch`
+/// when it creates a managed worktree; Claude Code's convention gets its base confirmed later (Plan 11, §6.3).
 pub fn prepare(
     task: &Task,
     root: &Path,
