@@ -1,7 +1,17 @@
 // Outline mode (§10.7): plan.md as a live checklist whose active steps expand into their agents' tool and hook
 // stream. `belongsTo` and `hookText` are shared with the drill-in lenses.
 import type { TaskEvent } from "@/lib/bindings";
-import { agentOf, asHookDetail, asStop, asSubagentStart, asSubagentStop, kindOf } from "./events";
+import { tasksStore } from "@/lib/stores/tasksStore";
+import {
+  agentOf,
+  asHookDetail,
+  asOverlap,
+  asStop,
+  asSubagentStart,
+  asSubagentStop,
+  kindOf,
+  type OverlapDetail,
+} from "./events";
 import type { AgentNodeData, CanvasModel, StepNodeData, ToolCall } from "./types";
 
 export type OutlineEntry = {
@@ -15,7 +25,15 @@ export type OutlineEntry = {
 };
 export type OutlineItem = { step: StepNodeData; expanded: boolean; agents: string[]; stream: OutlineEntry[] };
 
-const HOOK_KINDS = new Set(["agent-start", "agent-stop", "permission", "notification", "stop", "stop-failure"]);
+const HOOK_KINDS = new Set([
+  "agent-start",
+  "agent-stop",
+  "permission",
+  "notification",
+  "stop",
+  "stop-failure",
+  "overlap",
+]);
 
 /** The event is the agent's own, or the start or stop of that subagent. */
 export function belongsTo(e: TaskEvent, agentId: string): boolean {
@@ -26,7 +44,28 @@ export function isHookRow(e: TaskEvent): boolean {
   return HOOK_KINDS.has(kindOf(e));
 }
 
+/** The other task by its title when this window knows it, else by its id. */
+function taskName(id: string): string {
+  return tasksStore.get().byId[id]?.title ?? id;
+}
+
+function overlapText(o: OverlapDetail): string {
+  const other = o.otherTask === null ? "" : ` · ${taskName(o.otherTask)}`;
+  switch (o.kind) {
+    case "held":
+      return o.path !== null ? `edit held: ${o.path}${other}` : `command held: ${o.command ?? ""}${other}`;
+    case "decided":
+      return `decided ${o.decision}: ${o.path}${other}`;
+    case "noted":
+      return o.direction === "in"
+        ? `note from ${taskName(o.otherTask)}: ${o.path}`
+        : `note sent to ${taskName(o.otherTask)}: ${o.path}`;
+  }
+}
+
 export function hookText(e: TaskEvent): string {
+  const overlap = asOverlap(e);
+  if (overlap) return overlapText(overlap);
   const start = asSubagentStart(e);
   if (start) return `started: ${start.description ?? start.agent_type}`;
   if (asSubagentStop(e)) return "stopped";

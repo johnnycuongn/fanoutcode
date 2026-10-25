@@ -56,6 +56,18 @@ export const fx = {
   statusLine: (seq: number, costUsd: number): TaskEvent =>
     ev(seq, null, { type: "StatusLine", cost_usd: costUsd, input_tokens: 0, output_tokens: 0, context_used_pct: 0 }),
   unknown: (seq: number, name: string): TaskEvent => ev(seq, null, { type: "Unknown", name }),
+  claimDenied: (seq: number, held: { path?: string; command?: string }, otherTask: string | null = null): TaskEvent =>
+    ev(seq, null, {
+      type: "ClaimDenied",
+      repo: "/repo/app",
+      path: held.path ?? null,
+      command: held.command ?? null,
+      other_task: otherTask,
+    }),
+  overlapDecided: (seq: number, path: string, otherTask: string | null, decision: string): TaskEvent =>
+    ev(seq, null, { type: "OverlapDecided", repo: "/repo/app", path, other_task: otherTask, decision }),
+  overlapNoted: (seq: number, path: string, otherTask: string, direction: "in" | "out"): TaskEvent =>
+    ev(seq, null, { type: "OverlapNoted", repo: "/repo/app", path, other_task: otherTask, direction }),
 };
 
 const step = (number: number, title: string, files: string[], after: number[] = [], repo: string | null = null) => ({
