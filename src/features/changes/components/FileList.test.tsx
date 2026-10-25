@@ -2,7 +2,39 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { expect, test, vi } from "vitest";
 import { parseReviewNotes } from "../reviewNotes";
 import { repos } from "../testing/fixtures";
+import type { OverlapRow } from "@/lib/bindings";
 import { FileList } from "./FileList";
+
+const overlap = (over: Partial<OverlapRow>): OverlapRow => ({
+  task_id: "task-01",
+  other_task: "task-02",
+  repo_root: "/w/api",
+  path: "src/a.ts",
+  relation: "GrantedOnTop",
+  pending: null,
+  held: false,
+  noted_out: false,
+  noted_in: false,
+  decided_at: null,
+  updated_at: "2026-10-25T08:00:00Z",
+  ...over,
+});
+
+test("FileList shows the relation chip", () => {
+  const overlaps = [overlap({}), overlap({ repo_root: "/w/web", path: "src/a.ts", relation: "Committed" })];
+  render(
+    <FileList
+      repos={repos()}
+      notes={[]}
+      overlaps={overlaps}
+      selected={null}
+      onSelect={() => {}}
+      onInclude={() => {}}
+    />,
+  );
+  expect(screen.getByRole("option", { name: /src\/a\.ts/ }).textContent).toContain("granted on top");
+  expect(screen.getByRole("option", { name: /src\/b\.ts/ }).textContent).not.toMatch(/committed|granted/);
+});
 
 test("groups files by repo name, shows change bars and the include control for Other changes", () => {
   const onInclude = vi.fn();

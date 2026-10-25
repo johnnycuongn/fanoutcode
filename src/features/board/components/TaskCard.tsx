@@ -3,6 +3,7 @@ import { memo, type KeyboardEvent, type MouseEvent, type ReactElement, type Reac
 import { Badge, Tooltip, cx } from "@/components/ui";
 import type { AgentKind, CostSummary, DetailLevel, Priority, Project, Task } from "@/lib/bindings";
 import { swatchClass } from "@/lib/theme";
+import { overlapsText } from "@/features/overlap";
 import { chipFor } from "../chipText";
 import { formatCost, formatTokens } from "../cost";
 import type { CardActivity, OpenTarget } from "../types";
@@ -29,6 +30,8 @@ export type TaskCardProps = {
   onHover?(): void;
   /** The `…` button; clicks inside it never open the task. */
   menu: ReactNode;
+  /** How many files this task shares with other tasks (§7); a badge shows when above zero. */
+  overlaps?: number;
   /** Replaces the title while renaming. */
   titleSlot?: ReactNode;
   ref?: Ref<HTMLElement>;
@@ -67,7 +70,7 @@ function CardTooltip({ activity, cost }: { activity: CardActivity; cost: CostSum
 
 function TaskCardImpl(props: TaskCardProps): ReactElement {
   const { task, level, activity, project, showProject, costOverview, cost, focused, dragging, disabled } = props;
-  const { onOpen, onFocus, onHover, menu, titleSlot, ref, handleProps } = props;
+  const { onOpen, onFocus, onHover, menu, titleSlot, ref, handleProps, overlaps = 0 } = props;
   const { onKeyDown: dndKeyDown, ...handle } = (handleProps ?? {}) as { onKeyDown?: (e: KeyboardEvent) => void };
   const agent = AGENTS[task.agent_kind];
   const colour = task.color;
@@ -134,6 +137,11 @@ function TaskCardImpl(props: TaskCardProps): ReactElement {
         </div>
         <div className="flex items-center gap-1.5 text-xs">
           <CardChip model={chipFor(task)} />
+          {overlaps > 0 && (
+            <Badge size="sm" className="shrink-0">
+              {overlapsText(overlaps)}
+            </Badge>
+          )}
           <span
             role="img"
             aria-label={agent.name}

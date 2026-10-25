@@ -34,6 +34,16 @@ const task = makeTask({
 });
 
 describe("TaskCard", () => {
+  it("card shows the overlap badge only when overlaps exist", () => {
+    const { rerender } = mountUi(<TaskCard {...base} task={task} level="Simple" />);
+    expect(screen.queryByText(/overlap/)).toBeNull();
+    rerender(<TaskCard {...base} task={task} level="Simple" overlaps={0} />);
+    expect(screen.queryByText(/overlap/)).toBeNull();
+    rerender(<TaskCard {...base} task={task} level="Simple" overlaps={1} />);
+    expect(screen.getByText("1 overlap")).toBeInTheDocument();
+    rerender(<TaskCard {...base} task={task} level="Simple" overlaps={3} />);
+    expect(screen.getByText("3 overlaps")).toBeInTheDocument();
+  });
   it("Simple shows title, priority flag, Jira key, chip, agent avatar and elapsed time, and nothing else", () => {
     mountUi(<TaskCard {...base} task={task} level="Simple" />);
     expect(screen.getByText("Add login")).toBeInTheDocument();

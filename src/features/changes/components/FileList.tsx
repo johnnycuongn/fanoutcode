@@ -1,9 +1,11 @@
 // The Changes tab's left column: each repo's changed files with change bars and note counts, the repo's "Other
 // changes" (seen in the tree, not attributed to the task) with an Include control, and the notes on files outside
-// the change set, which are listed rather than dropped (Review Focus 1).
+// the change set, which are listed rather than dropped (Review Focus 1). A file another task also touches carries its
+// relation chip (§7).
 import { useState, type ReactElement } from "react";
 import { Badge, Button, Chip, cx } from "@/components/ui";
-import type { ChangedFile, FileStatus, RepoChanges } from "@/lib/bindings";
+import type { ChangedFile, FileStatus, OverlapRow, RepoChanges } from "@/lib/bindings";
+import { fileRelationLabels } from "@/features/overlap";
 import { barWidths, fileRefsOf, repoNamesOf } from "../files";
 import { notesForFile, unplacedNotes } from "../reviewNotes";
 import type { Selection } from "../store";
@@ -12,6 +14,8 @@ import type { ReviewNote } from "../types";
 export interface FileListProps {
   repos: RepoChanges[];
   notes: ReviewNote[];
+  /** The task's overlap rows; absent or empty shows no relation chips. */
+  overlaps?: OverlapRow[];
   selected: Selection | null;
   onSelect(s: Selection): void;
   onInclude(s: Selection): void;
@@ -24,6 +28,7 @@ function Row(p: {
   file: ChangedFile;
   max: number;
   notes: ReviewNote[];
+  relations: string[];
   selected: boolean;
   onSelect(): void;
 }): ReactElement {
@@ -53,6 +58,11 @@ function Row(p: {
       <span className="min-w-0 flex-1 truncate font-mono" title={p.file.path}>
         {p.file.path}
       </span>
+      {p.relations.map((label) => (
+        <Chip key={label} size="sm">
+          {label}
+        </Chip>
+      ))}
       {security && (
         <Chip size="sm" tone="bad">
           security
@@ -92,6 +102,7 @@ function Repo(p: { repo: RepoChanges; name: string; home: boolean; props: FileLi
             file={f}
             max={max}
             notes={notesForFile(props.notes, p.names, { repo: name, home: p.home, path: f.path })}
+            relations={fileRelationLabels(props.overlaps ?? [], repo.repo_root, f.path)}
             selected={props.selected?.repo === repo.repo_root && props.selected.path === f.path}
             onSelect={() => props.onSelect({ repo: repo.repo_root, path: f.path })}
           />

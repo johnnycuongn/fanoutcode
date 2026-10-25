@@ -1,6 +1,9 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { expect, test, vi } from "vitest";
-vi.mock("@/lib/bindings", async () => ({ events: (await import("@/test/taskPageFixtures")).fakeEvents }));
+vi.mock("@/lib/bindings", async () => ({
+  events: (await import("@/test/taskPageFixtures")).fakeEvents,
+  commands: { overlapList: vi.fn(async () => ({ status: "ok", data: [] })) },
+}));
 import { makeTask } from "@/test/taskPageFixtures";
 import { createChangesStore } from "../store";
 import { fakeIpc } from "../testing/fixtures";
