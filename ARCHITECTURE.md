@@ -19,6 +19,7 @@ in `docs/superpowers/specs/2026-10-24-team-code-design.md`. Each implementation 
 - [UI primitives](#ui-primitives)
 - [The board](#the-board)
 - [Sessions and terminals](#sessions-and-terminals)
+- [The task page and dock](#the-task-page-and-dock)
 - [Where to change things](#where-to-change-things)
 
 ## At a glance
@@ -205,6 +206,33 @@ Every task's agent and every plain terminal is a PTY the app owns (Plan 04, spec
   - The colours come from the `--term-*` variables of the palette `terminalTheme.ts` picks, so hex values stay in
     `styles.css`.
   - A session held by another pane shows `TerminalPlaceholder` (Bring here / Bring back).
+
+## The task page and dock
+
+A task opens in a pane as `TaskPage` (`src/features/task-page`), which Plan 06's `PaneContentHost` renders for
+`PaneContent::Task` and whose `TaskPageHandle` receives the task chords (⌘⏎, ⌘E, ⌘⇧A, ⌘J, ⌘⇧J, ⌃`).
+
+- **Task records** stay in Plan 06's `tasksStore`; the page reads and writes them only through
+  `task-page/taskSource.ts`. Page-local state (settings, queued action, cost, context meter) is `taskPageStore`.
+- **Sessions**: the page calls `sessions_open` (idempotent: start or resume) for Plan through Commit and keys
+  `TerminalPane` on `primary_session`, so Start fresh session remounts the terminal.
+- **Decisions** are pure functions with tests: `primaryActionFor`/`forwardActionFor` (the button per stage and
+  hand-back, shared with the palette and card menu), `dock/tabRules.ts` (visible tabs, default tab, stage entry),
+  `dock/placement.ts` (⌘⇧J per Team placement), `dock/memory.ts` (which memory file, when to re-read).
+- **Spec stage**: `spec-editor` binds LiveSpec's draft and notes panes (copied into `src/livespec/`) to `spec.md`
+  with a 500 ms autosave; `SpecSession` debounces `livespec_analyze`, saving first; Approve flushes the save and
+  refuses to advance when it failed.
+- **Dock** (`src/features/dock`): Memory, Team (Plan 09's `renderTeam` slot), Changes, Ticket, Test, Commit, bottom
+  or right, tab and height remembered per stage (`localStorage` `teamcode.dock`). `DockSplit` animates grows with
+  `transitionFor`.
+- **Changes** (`src/features/changes`): `git_changes`/`git_diff` into a CodeMirror 6 merge view (unified or side by
+  side), the working side saved with `git_file_write`; review.md notes are line decorations whose cards are React
+  portals into block widgets. A `git-changes` event over unsaved edits marks the file stale (Reload or Overwrite).
+- **Test** owns the `tests_run` channel (start-or-attach with replay); **Commit** reads `git_drafts` and offers
+  Commit only with "Team Code may commit" on. **Ticket** goes through `dock/jira.ts` until Plan 10's `jira_*`
+  bindings land.
+- Every IPC-touching store takes its command set as a parameter; `src/lib/ipcResult.ts`'s `live(...)` builds one over
+  the generated `commands` that resolves to the value and rejects with the error string.
 
 ## Where to change things
 
