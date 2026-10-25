@@ -10,6 +10,7 @@ pub mod hook_feed;
 pub mod hooks_tailer;
 pub mod jira_transitions;
 pub mod linking;
+pub mod menu;
 pub mod observation;
 pub mod observe;
 pub mod provider;
@@ -31,6 +32,9 @@ pub fn run() {
     let specta = specta::builder();
     tauri::Builder::default()
         .invoke_handler(specta.invoke_handler())
+        // an explicit menu: Tauri's default binds Close Window to ⌘W, which closes the focused pane here
+        .menu(menu::build)
+        .on_menu_event(menu::on_menu_event)
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
