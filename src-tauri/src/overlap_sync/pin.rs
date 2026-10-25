@@ -189,7 +189,11 @@ pub fn note_edit_call(app: &AppHandle, state: &AppState, id: &TaskId, call: Edit
 pub fn clear_task(app: &AppHandle, state: &AppState, task: &Task) -> Result<()> {
     store::clear_pending(&state.db.lock().expect("db lock"), &task.id)?;
     state.pinned.lock().expect("pinned lock").remove(&task.id);
-    remove_if_there(&grants::grants_path(&state.data_dir, &task.id));
+    let grants_file = grants::grants_path(&state.data_dir, &task.id);
+    grants::with_grants_lock(&grants_file, || {
+        remove_if_there(&grants_file);
+        Ok(())
+    })?;
     if task.archived {
         remove_if_there(&notes::notes_path(&state.data_dir, &task.id));
         state

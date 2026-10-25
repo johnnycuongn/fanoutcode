@@ -114,9 +114,13 @@ pub async fn decide(
     let out = outcome(decision, &row, &me.title, &other_title, now);
 
     if let Some(g) = out.grant.clone() {
-        let mut held = grants::read_grants(&grants::grants_path(&state.data_dir, task_id));
-        held.add(g);
-        grants::write_grants(&state.data_dir, task_id, &held)?;
+        // the claim-check hook spends command grants under the same lock
+        let path = grants::grants_path(&state.data_dir, task_id);
+        grants::with_grants_lock(&path, || {
+            let mut held = grants::read_grants(&path);
+            held.add(g);
+            grants::write_grants(&state.data_dir, task_id, &held).map(|_| ())
+        })?;
     }
     {
         let conn = state.db.lock().expect("db lock");

@@ -11,7 +11,7 @@ use serde::Deserialize;
 
 use super::claims::{read_claims, Claim, ClaimsFile};
 use super::git_rules::{evaluate_git, rel_in};
-use super::grants::{consume_command, read_grants, GrantsFile};
+use super::grants::{read_grants, take_commands, GrantsFile};
 use super::notes::drain_notes;
 use crate::domain::TaskId;
 use crate::hooks::{sh_single_quote, HookSpec};
@@ -128,7 +128,7 @@ fn check_bash(input: &CheckInput, own: &TaskId, claims: &[ClaimsFile], grants: &
             .claims
             .iter()
             .filter(|c| c.task_id.as_ref() != Some(own))
-            .filter(|c| !grants.allows_command(command, c.task_id.as_ref()))
+            .filter(|c| !grants.allows_command(command, &file.repo_root, c.task_id.as_ref()))
             .collect();
         let Some((_, paths)) = evaluate_git(command, &input.cwd, &file.repo_root, &others) else {
             continue;
@@ -145,6 +145,33 @@ fn check_bash(input: &CheckInput, own: &TaskId, claims: &[ClaimsFile], grants: &
         };
     }
     CheckDecision::Allow
+}
+
+/// The `Command` grants a Bash call needs to pass the git guard: each repo and other task whose claims the command
+/// touches there, found segment hit by segment hit as `check_bash` would once every earlier hit was granted.
+fn command_grants_needed(input: &CheckInput, own: &TaskId, claims: &[ClaimsFile]) -> Vec<(PathBuf, Option<TaskId>)> {
+    let Some(command) = input.tool_input.get("command").and_then(|c| c.as_str()) else {
+        return Vec::new();
+    };
+    let mut needed: Vec<(PathBuf, Option<TaskId>)> = Vec::new();
+    for file in claims {
+        let mut others: Vec<&Claim> = file.claims.iter().filter(|c| c.task_id.as_ref() != Some(own)).collect();
+        while let Some((_, paths)) = evaluate_git(command, &input.cwd, &file.repo_root, &others) {
+            let hit: Vec<Option<TaskId>> = others
+                .iter()
+                .filter(|c| paths.contains(&c.path))
+                .map(|c| c.task_id.clone())
+                .collect();
+            others.retain(|c| !hit.contains(&c.task_id));
+            for other in hit {
+                let key = (file.repo_root.clone(), other);
+                if !needed.contains(&key) {
+                    needed.push(key);
+                }
+            }
+        }
+    }
+    needed
 }
 
 /// Decides one tool call of `own_task`'s session against the claims of its repos and its grants.
@@ -269,7 +296,20 @@ pub fn run_check(stdin: &mut dyn Read, stdout: &mut dyn Write, args: &CheckArgs)
     };
     let claims: Vec<ClaimsFile> = args.claims_paths.iter().filter_map(|p| read_claims(p)).collect();
     let grants = read_grants(&args.grants_path);
-    let out = match evaluate(&input, &args.task_id, &claims, &grants, args.guard_git) {
+    let mut decision = evaluate(&input, &args.task_id, &claims, &grants, args.guard_git);
+    if decision == CheckDecision::Allow && args.guard_git && input.tool_name == "Bash" {
+        // a command over another task's claims runs only once its single-use grants are spent on disk
+        let needed = command_grants_needed(&input, &args.task_id, &claims);
+        let command = input
+            .tool_input
+            .get("command")
+            .and_then(|c| c.as_str())
+            .unwrap_or_default();
+        if !needed.is_empty() && !take_commands(&args.grants_path, command, &needed) {
+            decision = evaluate(&input, &args.task_id, &claims, &GrantsFile::default(), true);
+        }
+    }
+    let out = match decision {
         CheckDecision::Deny {
             repo,
             path,
@@ -291,11 +331,6 @@ pub fn run_check(stdin: &mut dyn Read, stdout: &mut dyn Write, args: &CheckArgs)
             }}))
         }
         CheckDecision::Allow => {
-            if args.guard_git && input.tool_name == "Bash" {
-                if let Some(command) = input.tool_input.get("command").and_then(|c| c.as_str()) {
-                    consume_command(&args.grants_path, command);
-                }
-            }
             // no `permissionDecision`: an explicit allow would skip the developer's own permission prompts
             let notes = drain_notes(&args.notes_path);
             (!notes.is_empty()).then(|| {

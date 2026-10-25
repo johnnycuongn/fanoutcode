@@ -5,7 +5,7 @@ use serde_json::json;
 
 use super::*;
 use crate::overlap::claims::write_claims;
-use crate::overlap::grants::{write_grants, Grant, GrantScope};
+use crate::overlap::grants::{take_command, with_grants_lock, write_grants, Grant, GrantScope};
 
 fn id(s: &str) -> TaskId {
     TaskId::parse(s).unwrap()
@@ -56,13 +56,18 @@ fn grant(other: &str, scope: GrantScope) -> GrantsFile {
     }
 }
 
-fn command_grant(other: &str, command: &str) -> GrantsFile {
+fn command_grant_in(other: &str, command: &str, repo: &Path) -> GrantsFile {
     grant(
         other,
         GrantScope::Command {
+            repo: repo.to_owned(),
             command: command.into(),
         },
     )
+}
+
+fn command_grant(other: &str, command: &str) -> GrantsFile {
+    command_grant_in(other, command, Path::new("/r"))
 }
 
 #[test]
@@ -134,7 +139,7 @@ fn command_grant_allows_exactly_that_command_once() {
     // through the files on disk: allowed once, then the grant is spent
     let (_dir, root, args) = hook();
     let data = args.grants_path.parent().unwrap().parent().unwrap().to_owned();
-    let mut grants = command_grant("t-b2", "git stash");
+    let mut grants = command_grant_in("t-b2", "git stash", &root);
     grants.grants.push(Grant {
         other_task: Some(id("t-b2")),
         scope: GrantScope::File {
@@ -171,4 +176,65 @@ fn command_grant_does_not_cover_a_different_command() {
         decide("git stash", &command_grant("t-c3", "git stash")),
         CheckDecision::Deny { .. }
     ));
+}
+
+#[test]
+fn command_grant_is_scoped_to_its_repo() {
+    assert!(matches!(
+        decide(
+            "git stash",
+            &command_grant_in("t-b2", "git stash", Path::new("/elsewhere"))
+        ),
+        CheckDecision::Deny { .. }
+    ));
+    assert_eq!(
+        decide("git stash", &command_grant("t-b2", "git stash")),
+        CheckDecision::Allow
+    );
+}
+
+#[test]
+fn a_command_grant_is_used_up_before_the_command_is_allowed() {
+    let (_dir, root, args) = hook();
+    let data = args.grants_path.parent().unwrap().parent().unwrap().to_owned();
+    write_grants(&data, &id("t-a1"), &command_grant_in("t-b2", "git stash", &root)).unwrap();
+    let b = id("t-b2");
+    assert!(take_command(&args.grants_path, " git stash", &root, Some(&b)));
+    assert!(
+        read_grants(&args.grants_path).grants.is_empty(),
+        "spent on disk before the hook answers"
+    );
+    assert!(
+        !take_command(&args.grants_path, "git stash", &root, Some(&b)),
+        "only once"
+    );
+    // nothing to take: a grant for another repo or task is not this one
+    write_grants(&data, &id("t-a1"), &command_grant_in("t-b2", "git stash", &root)).unwrap();
+    assert!(!take_command(
+        &args.grants_path,
+        "git stash",
+        Path::new("/elsewhere"),
+        Some(&b)
+    ));
+    assert!(!take_command(&args.grants_path, "git stash", &root, Some(&id("t-c3"))));
+    assert_eq!(read_grants(&args.grants_path).grants.len(), 1);
+    assert!(!denied(&args, &root, "git stash"));
+    assert!(read_grants(&args.grants_path).grants.is_empty());
+}
+
+#[cfg(unix)]
+#[test]
+fn a_failed_consume_denies() {
+    use std::os::unix::fs::PermissionsExt;
+    let (_dir, root, args) = hook();
+    let data = args.grants_path.parent().unwrap().parent().unwrap().to_owned();
+    write_grants(&data, &id("t-a1"), &command_grant_in("t-b2", "git stash", &root)).unwrap();
+    // the lock file exists, but the grants file cannot be rewritten: the grant cannot be spent
+    with_grants_lock(&args.grants_path, || Ok(())).unwrap();
+    let dir = args.grants_path.parent().unwrap().to_owned();
+    std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o555)).unwrap();
+    let still_denied = denied(&args, &root, "git stash");
+    std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).unwrap();
+    assert!(still_denied, "a grant that could not be spent allows nothing");
+    assert_eq!(read_grants(&args.grants_path).grants.len(), 1);
 }

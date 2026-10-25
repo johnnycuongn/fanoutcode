@@ -22,8 +22,10 @@ pub enum GrantScope {
         path: String,
     },
     AllFiles,
-    /// Single use: removed from the grants file once the hook allows the command (`consume_command`).
+    /// Single use: taken out of the grants file before the hook allows the command (`take_command`). `repo` is
+    /// the repo the denied command ran in; the grant matches the command only there.
     Command {
+        repo: PathBuf,
         command: String,
     },
 }
@@ -78,12 +80,10 @@ impl GrantsFile {
         })
     }
 
-    /// Whether a `Command` grant lets this task run exactly `command` (both trimmed) over the claims of `other`.
-    pub fn allows_command(&self, command: &str, other: Option<&TaskId>) -> bool {
-        self.grants.iter().any(|g| {
-            g.other_task.as_ref() == other
-                && matches!(&g.scope, GrantScope::Command { command: c } if c.trim() == command.trim())
-        })
+    /// Whether a `Command` grant lets this task run exactly `command` (both trimmed) in `repo` over the claims of
+    /// `other`.
+    pub fn allows_command(&self, command: &str, repo: &Path, other: Option<&TaskId>) -> bool {
+        self.grants.iter().any(|g| command_matches(g, command, repo, other))
     }
 
     /// Adds `grant`, replacing an earlier one with the same other task and scope.
@@ -108,25 +108,68 @@ impl GrantsFile {
     }
 }
 
-/// Spends the `Command` grants for exactly `command` in the grants file at `path`, once the hook has allowed it (a
-/// command grant is single use). Leaves the file alone when none matches; a failed write is reported on stderr (the
-/// hook fails open).
-pub fn consume_command(path: &Path, command: &str) {
-    // TODO(grants-file lock): this read-modify-write races the app's `write_grants`; take the grants-file lock being
-    // added to `AppState` (wired at merge) around it.
-    let mut file = read_grants(path);
-    let before = file.grants.len();
-    file.grants
-        .retain(|g| !matches!(&g.scope, GrantScope::Command { command: c } if c.trim() == command.trim()));
-    if file.grants.len() == before {
-        return;
+fn command_matches(g: &Grant, command: &str, repo: &Path, other: Option<&TaskId>) -> bool {
+    g.other_task.as_ref() == other
+        && matches!(&g.scope, GrantScope::Command { repo: r, command: c } if r == repo && c.trim() == command.trim())
+}
+
+/// `<grants>.lock`, the sibling every writer of the grants file locks.
+fn lock_path(path: &Path) -> PathBuf {
+    let mut p = path.as_os_str().to_owned();
+    p.push(".lock");
+    PathBuf::from(p)
+}
+
+/// Runs `f` holding the exclusive advisory lock on `<path>.lock` (created, with its directory, when missing). Every
+/// read-modify-write of a grants file goes through it: the app's decisions and prunes, and the hook's
+/// `take_command`. The lock is released when `f` returns.
+pub fn with_grants_lock<T>(path: &Path, f: impl FnOnce() -> Result<T>) -> Result<T> {
+    let lock = lock_path(path);
+    if let Some(dir) = lock.parent() {
+        std::fs::create_dir_all(dir)?;
     }
-    let written = serde_json::to_vec(&file)
-        .map_err(crate::Error::from)
-        .and_then(|bytes| write_atomic(path, &bytes));
-    if let Err(e) = written {
-        eprintln!("fanoutcode claim-check: cannot update {}: {e}", path.display());
-    }
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(&lock)?;
+    file.lock()?;
+    let out = f();
+    let _ = file.unlock();
+    out
+}
+
+/// Takes one `Command` grant for each of `needed` (a repo and the other task whose claims the command touches there)
+/// out of the grants file at `path`, under the lock: re-read, every one present, removed, written atomically. True
+/// only when all were there and the write succeeded; otherwise the file is left as it was and the hook denies.
+pub fn take_commands(path: &Path, command: &str, needed: &[(PathBuf, Option<TaskId>)]) -> bool {
+    let taken = with_grants_lock(path, || {
+        let mut file = read_grants(path);
+        for (repo, other) in needed {
+            let Some(i) = file
+                .grants
+                .iter()
+                .position(|g| command_matches(g, command, repo, other.as_ref()))
+            else {
+                return Ok(false);
+            };
+            file.grants.remove(i);
+        }
+        write_atomic(path, &serde_json::to_vec(&file)?)?;
+        Ok(true)
+    });
+    taken.unwrap_or_else(|e| {
+        eprintln!(
+            "fanoutcode claim-check: cannot spend a grant in {}: {e}",
+            path.display()
+        );
+        false
+    })
+}
+
+/// `take_commands` for one repo and other task.
+pub fn take_command(path: &Path, command: &str, repo: &Path, other: Option<&TaskId>) -> bool {
+    take_commands(path, command, &[(repo.to_owned(), other.cloned())])
 }
 
 #[cfg(test)]
@@ -253,23 +296,26 @@ mod tests {
             grants: vec![Grant {
                 other_task: Some(id("t-b2")),
                 scope: GrantScope::Command {
+                    repo: "/r".into(),
                     command: "git stash".into(),
                 },
                 granted_at: at(),
             }],
         };
-        let b = id("t-b2");
-        assert!(!g.covers(Path::new("/r"), "src/a.ts", Some(&b)));
-        assert!(g.allows_command(" git stash\n", Some(&b)));
-        assert!(!g.allows_command("git stash -u", Some(&b)));
-        assert!(!g.allows_command("git stash", Some(&id("t-c3"))));
-        assert!(!g.allows_command("git stash", None));
+        let (b, r) = (id("t-b2"), Path::new("/r"));
+        assert!(!g.covers(r, "src/a.ts", Some(&b)));
+        assert!(g.allows_command(" git stash\n", r, Some(&b)));
+        assert!(!g.allows_command("git stash", Path::new("/s"), Some(&b)));
+        assert!(!g.allows_command("git stash -u", r, Some(&b)));
+        assert!(!g.allows_command("git stash", r, Some(&id("t-c3"))));
+        assert!(!g.allows_command("git stash", r, None));
         let dir = tempfile::tempdir().unwrap();
         let path = write_grants(dir.path(), &id("t-a1"), &g).unwrap();
-        consume_command(&path, "git reset --hard");
+        assert!(!take_command(&path, "git reset --hard", r, Some(&b)));
         assert_eq!(read_grants(&path), g, "another command spends nothing");
-        consume_command(&path, "git stash");
+        assert!(take_command(&path, "git stash", r, Some(&b)));
         assert!(read_grants(&path).grants.is_empty());
+        assert!(path.with_file_name("t-a1.json.lock").exists());
     }
 
     #[test]
@@ -301,6 +347,7 @@ mod tests {
                 path: "a.ts".into(),
             },
             GrantScope::Command {
+                repo: "/r".into(),
                 command: "git stash".into(),
             },
         ] {

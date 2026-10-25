@@ -91,7 +91,7 @@ pub fn denial_rows(
         .claims
         .iter()
         .filter(|c| c.task_id.as_ref() != Some(own))
-        .filter(|c| !grants.allows_command(command, c.task_id.as_ref()))
+        .filter(|c| !grants.allows_command(command, &file.repo_root, c.task_id.as_ref()))
         .collect();
     let named: Vec<&Claim> = match evaluate_git(command, repo, repo, &others) {
         Some((_, paths)) => others.iter().copied().filter(|c| paths.contains(&c.path)).collect(),
@@ -255,6 +255,7 @@ mod tests {
         grants.add(Grant {
             other_task: Some(id("t-c3")),
             scope: GrantScope::Command {
+                repo: "/r".into(),
                 command: "git add -A".into(),
             },
             granted_at: Utc::now(),

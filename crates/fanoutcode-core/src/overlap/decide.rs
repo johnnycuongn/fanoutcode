@@ -56,6 +56,7 @@ pub fn outcome(
         if decision != Decision::Hold {
             return DecisionOutcome {
                 grant: grant(GrantScope::Command {
+                    repo: row.repo_root.clone(),
                     command: command.trim().to_owned(),
                 }),
                 relation: Relation::GrantedOnTop,
@@ -130,7 +131,9 @@ pub fn covered_pending<'a>(rows: &'a [OverlapRow], grants: &GrantsFile, except: 
         .filter(|r| match &r.pending {
             None => false,
             Some(PendingDecision::Edit { .. }) => grants.covers(&r.repo_root, &r.path, r.other_task.as_ref()),
-            Some(PendingDecision::Command { command, .. }) => grants.allows_command(command, r.other_task.as_ref()),
+            Some(PendingDecision::Command { command, .. }) => {
+                grants.allows_command(command, &r.repo_root, r.other_task.as_ref())
+            }
         })
         .collect()
 }
@@ -355,6 +358,7 @@ mod tests {
             assert_eq!(
                 out.grant.unwrap().scope,
                 GrantScope::Command {
+                    repo: "/r".into(),
                     command: "git add -A".into()
                 }
             );

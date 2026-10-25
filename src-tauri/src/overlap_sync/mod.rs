@@ -151,8 +151,7 @@ pub async fn rebuild_claims(app: &AppHandle, repo: &Path) -> Result<()> {
 /// Drops the task's grants whose claims are gone, reading the claims of its other repos from disk.
 fn prune_grants(state: &AppState, a: &Active, fresh: &ClaimsFile) -> Result<()> {
     let path = grants::grants_path(&state.data_dir, &a.task.id);
-    let mut held = grants::read_grants(&path);
-    if held.grants.is_empty() {
+    if grants::read_grants(&path).grants.is_empty() {
         return Ok(());
     }
     let others: Vec<ClaimsFile> = a
@@ -162,12 +161,16 @@ fn prune_grants(state: &AppState, a: &Active, fresh: &ClaimsFile) -> Result<()> 
         .filter_map(|r| claims::read_claims(&claims::claims_path(&state.data_dir, r)))
         .collect();
     let all: Vec<&ClaimsFile> = std::iter::once(fresh).chain(&others).collect();
-    let before = held.clone();
-    held.prune(&all);
-    if held != before {
-        grants::write_grants(&state.data_dir, &a.task.id, &held)?;
-    }
-    Ok(())
+    // under the lock the claim-check hook spends command grants with: re-read, prune, write
+    grants::with_grants_lock(&path, || {
+        let mut held = grants::read_grants(&path);
+        let before = held.clone();
+        held.prune(&all);
+        if held != before {
+            grants::write_grants(&state.data_dir, &a.task.id, &held)?;
+        }
+        Ok(())
+    })
 }
 
 /// Whether `b` is worth recomputing when `a` changed: the same project, a shared repo, or a link between them.
