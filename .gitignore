@@ -9,3 +9,5 @@ src-tauri/gen
 .worktrees/
 coverage
 .DS_Store
+test-results/
+playwright-report/

@@ -6,8 +6,17 @@ import "./styles.css";
 
 startThemeSync();
 
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
+// The Playwright smoke suite runs the dev server in `e2e` mode and needs the Tauri IPC mocked before the first
+// render. Vite replaces MODE statically, so a production build drops this branch and the mock chunk.
+const boot =
+  import.meta.env.MODE === "e2e"
+    ? import("../e2e/fixtures/mockTauri").then((m) => m.installTauriMocks())
+    : Promise.resolve();
+
+void boot.then(() =>
+  createRoot(document.getElementById("root")!).render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  ),
 );

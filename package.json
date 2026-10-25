@@ -14,7 +14,8 @@
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "prepare": "lefthook install"
+    "prepare": "lefthook install",
+    "e2e": "PLAYWRIGHT_BROWSERS_PATH=0 playwright test"
   },
   "dependencies": {
     "@codemirror/commands": "^6.11.1",
@@ -56,6 +57,7 @@
     "vaul": "^1.1.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@tailwindcss/vite": "^4",
     "@tauri-apps/cli": "^2",
     "@testing-library/dom": "^10",

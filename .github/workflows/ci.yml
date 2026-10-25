@@ -25,3 +25,5 @@ jobs:
       - run: cargo test --workspace
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: npm run build
+      - run: PLAYWRIGHT_BROWSERS_PATH=0 npx playwright install --with-deps webkit
+      - run: npm run e2e
