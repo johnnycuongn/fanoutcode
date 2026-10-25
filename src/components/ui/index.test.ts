@@ -2,7 +2,7 @@ import { expect, test } from "vitest";
 import * as ui from "./index";
 import { PRIMITIVES } from "./index";
 
-test("PRIMITIVES names the twenty-six primitives of spec §15.3 in order, then Slider (Plan 09) and AppMark", () => {
+test("PRIMITIVES names the twenty-six primitives of spec §15.3 in order, then Slider (Plan 09), AppMark, RadioGroup and DiffText (Plan 11)", () => {
   expect(Object.keys(PRIMITIVES)).toEqual([
     "Button",
     "IconButton",
@@ -32,6 +32,8 @@ test("PRIMITIVES names the twenty-six primitives of spec §15.3 in order, then S
     "Resizable",
     "Slider",
     "AppMark",
+    "RadioGroup",
+    "DiffText",
   ]);
 });
 

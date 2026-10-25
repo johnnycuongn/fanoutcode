@@ -58,6 +58,10 @@ const setCounts = (count: number, pending: number) =>
 beforeEach(() => {
   overlapStore.reset();
   commands.overlapList.mockReset();
+  commands.gitDiff.mockResolvedValue({
+    status: "ok",
+    data: { repo_root: "/r", path: "src/a.ts", status: "Modified", before: "", after: "x\n", binary: false },
+  });
 });
 
 test("shows Overlap with the count and amber while pending", async () => {
@@ -83,7 +87,7 @@ test("selects Overlap once when a decision becomes pending", async () => {
 
   setCounts(1, 1);
   expect(screen.getByRole("tab", { name: /Overlap/ })).toHaveAttribute("data-state", "active");
-  expect(screen.getByText("Overlaps load here")).toBeTruthy();
+  expect(await screen.findByRole("heading", { name: /is also changing src\/a\.ts/ })).toBeTruthy();
   expect(d.store.get().tabByStage.Build).toBe("team");
 
   fireEvent.mouseDown(screen.getByRole("tab", { name: "Team" }));
