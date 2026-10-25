@@ -9,6 +9,9 @@ use tokio::process::Command;
 
 use crate::{Error, Result};
 
+mod branches;
+pub use branches::{current_branch, default_branch, has_conflicts, merge_base};
+
 /// `git -C <repo> <args…>` with stdout captured. A non-zero exit is `Error::Git` with git's stderr.
 pub async fn run(repo: &Path, args: &[&str]) -> Result<String> {
     run_with_input(repo, args, None).await
