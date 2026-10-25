@@ -131,8 +131,11 @@ settings. It reads the tool input's path, canonicalises it, finds the repo it be
   It also appends one line to this task's event log, `ClaimDenied<TAB>…<TAB>{path, repo, other_task}`, so the app
   learns of the stop through the transport it already tails.
 
-Fail open, like the guard: an unreadable claims or grants file, or malformed input, is reported on stderr and allowed.
-The hook never waits on the developer. Timeout 5 s, as the other hooks.
+An unreadable claims file, or malformed input, is reported on stderr and allowed (fail open, like the guard): without
+claims there is nothing to protect, and a broken file must not stop every session. An unreadable grants file counts as
+no grants, so a write over another task's claim is denied and the developer is asked again: a grant only ever widens
+what a session may do, so losing one must never allow more than the developer said. The hook never waits on the
+developer. Timeout 5 s, as the other hooks.
 
 ### 5.4 The hand-back
 
