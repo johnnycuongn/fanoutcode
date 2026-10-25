@@ -1,6 +1,8 @@
 //! The git guard's second rule set (§5.6): which shell commands would stage, commit, restore, stash, reset or clean
 //! paths another active task claims. Best effort, like the Bash guard: segment by segment with a running cwd
-//! (`cd`, `git -C`), no interpreter is inspected.
+//! (`cd`, `git -C`), into the string of `sh -c` / `bash -c` (and zsh, dash), but no script file or other interpreter
+//! is inspected. Pathspecs understand `:/`, `:(top)`, excludes and `*` / `?` / `[…]` globs; other magic is read as a
+//! plain path.
 
 use std::path::{Path, PathBuf};
 
@@ -12,11 +14,19 @@ use crate::workspace::guard::shell_words::segments;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GitRule {
     CommitAll,
+    /// A commit naming no path: whatever is staged, including another task's staged claims.
+    CommitStaged,
     AddAll,
     CommitPath,
     AddPath,
     CheckoutPath,
+    /// `checkout -f` / `--force`: throws away every uncommitted change.
+    CheckoutForce,
+    /// `switch -f` / `--force` / `--discard-changes`.
+    SwitchForce,
     RestorePath,
+    /// `git rm` of a claimed path, or a directory holding one.
+    Remove,
     Stash,
     ResetHard,
     Clean,
@@ -57,7 +67,8 @@ fn resolve(word: &str, cwd: &Path) -> PathBuf {
     clean(&cwd.join(word))
 }
 
-/// The claimed paths a pathspec names: the path itself, everything under it as a directory, or all at the root.
+/// The claimed paths a repo-relative path names: the path itself, everything under it as a directory, or all at the
+/// root.
 fn matching<'a>(spec: &str, claimed: &[&'a Claim]) -> Vec<&'a str> {
     claimed
         .iter()
@@ -122,14 +133,89 @@ fn all_paths(claimed: &[&Claim]) -> Vec<String> {
     claimed.iter().map(|c| c.path.clone()).collect()
 }
 
-/// The claimed paths the given pathspecs (resolved against `dir`) name in `repo`.
+/// Git's pathspec wildcard match, without `:(glob)` magic: `*` and `?` cross `/`, `[…]` is a set (`!` or `^`
+/// negates, `a-z` ranges).
+fn glob_match(pat: &[char], text: &[char]) -> bool {
+    match pat.split_first() {
+        None => text.is_empty(),
+        Some(('*', rest)) => (0..=text.len()).any(|i| glob_match(rest, &text[i..])),
+        Some(('?', rest)) => !text.is_empty() && glob_match(rest, &text[1..]),
+        Some(('[', rest)) => {
+            let Some(close) = rest.iter().skip(1).position(|c| *c == ']').map(|i| i + 1) else {
+                return text.first() == Some(&'[') && glob_match(rest, &text[1..]);
+            };
+            let Some(ch) = text.first() else { return false };
+            let (negate, set) = match rest[..close].split_first() {
+                Some(('!' | '^', set)) => (true, set),
+                _ => (false, &rest[..close]),
+            };
+            let mut hit = false;
+            let mut i = 0;
+            while i < set.len() {
+                if i + 2 < set.len() && set[i + 1] == '-' {
+                    hit |= (set[i]..=set[i + 2]).contains(ch);
+                    i += 3;
+                } else {
+                    hit |= set[i] == *ch;
+                    i += 1;
+                }
+            }
+            hit != negate && glob_match(&rest[close + 1..], &text[1..])
+        }
+        Some((c, rest)) => text.first() == Some(c) && glob_match(rest, &text[1..]),
+    }
+}
+
+/// One pathspec's magic: `(top, exclude, rest)`. `:/x` and `:(top)x` are relative to the repo root; `:!x`, `:^x`
+/// and `:(exclude)x` name nothing to change.
+fn magic(spec: &str) -> (bool, bool, &str) {
+    let Some(after) = spec.strip_prefix(':') else {
+        return (false, false, spec);
+    };
+    if let Some(long) = after.strip_prefix('(') {
+        let Some((words, rest)) = long.split_once(')') else {
+            return (false, false, spec);
+        };
+        let has = |w: &str| words.split(',').any(|x| x.trim() == w);
+        return (has("top"), has("exclude"), rest);
+    }
+    let shorts = after.find(|c| !matches!(c, '/' | '!' | '^')).unwrap_or(after.len());
+    let (flags, rest) = after.split_at(shorts);
+    (flags.contains('/'), flags.contains(['!', '^']), rest)
+}
+
+/// The claimed paths the given pathspecs (resolved against `dir`, or the repo root for `:/`) name in `repo`.
 fn named(specs: &[&str], dir: &Path, repo: &Path, claimed: &[&Claim]) -> Vec<String> {
-    specs
-        .iter()
-        .filter_map(|s| rel_in(repo, &resolve(s, dir)))
-        .flat_map(|rel| matching(&rel, claimed))
-        .map(str::to_owned)
-        .collect()
+    let mut out = Vec::new();
+    for spec in specs {
+        let (top, exclude, rest) = magic(spec);
+        if exclude {
+            continue;
+        }
+        let base = if top { repo } else { dir };
+        if rest.contains(['*', '?', '[']) {
+            let Some(prefix) = rel_in(repo, base) else { continue };
+            let full = if prefix.is_empty() {
+                rest.to_owned()
+            } else {
+                format!("{prefix}/{rest}")
+            };
+            let pat: Vec<char> = full.trim_start_matches("./").chars().collect();
+            out.extend(
+                claimed
+                    .iter()
+                    .filter(|c| glob_match(&pat, &c.path.chars().collect::<Vec<_>>()))
+                    .map(|c| c.path.clone()),
+            );
+        } else if let Some(rel) = rel_in(repo, &resolve(rest, base)) {
+            out.extend(matching(&rel, claimed).into_iter().map(str::to_owned));
+        }
+    }
+    out
+}
+
+fn staged_paths(claimed: &[&Claim]) -> Vec<String> {
+    claimed.iter().filter(|c| c.staged).map(|c| c.path.clone()).collect()
 }
 
 /// One `git <sub> <args>` run in `dir`, inside `repo`.
@@ -153,10 +239,12 @@ fn git_rule(sub: &str, args: &[String], dir: &Path, repo: &Path, claimed: &[&Cla
                     "trailer",
                 ],
             );
+            let specs: Vec<&str> = a.positionals.iter().chain(&a.after_dashes).copied().collect();
             if has(&a, 'a', "--all") {
                 (GitRule::CommitAll, all_paths(claimed))
+            } else if specs.is_empty() {
+                (GitRule::CommitStaged, staged_paths(claimed))
             } else {
-                let specs: Vec<&str> = a.positionals.iter().chain(&a.after_dashes).copied().collect();
                 (GitRule::CommitPath, named(&specs, dir, repo, claimed))
             }
         }
@@ -180,7 +268,23 @@ fn git_rule(sub: &str, args: &[String], dir: &Path, repo: &Path, claimed: &[&Cla
             } else {
                 &a.after_dashes
             };
-            (GitRule::CheckoutPath, named(specs, dir, repo, claimed))
+            if has(&a, 'f', "--force") {
+                (GitRule::CheckoutForce, all_paths(claimed))
+            } else {
+                (GitRule::CheckoutPath, named(specs, dir, repo, claimed))
+            }
+        }
+        "switch" => {
+            let a = split_args(args, "cC", &["create", "force-create", "orphan"]);
+            if !(has(&a, 'f', "--force") || a.flags.contains(&"--discard-changes")) {
+                return None;
+            }
+            (GitRule::SwitchForce, all_paths(claimed))
+        }
+        "rm" => {
+            let a = split_args(args, "", &["pathspec-from-file"]);
+            let specs: Vec<&str> = a.positionals.iter().chain(&a.after_dashes).copied().collect();
+            (GitRule::Remove, named(&specs, dir, repo, claimed))
         }
         "restore" => {
             let a = split_args(args, "s", &["source"]);
@@ -205,11 +309,20 @@ fn git_rule(sub: &str, args: &[String], dir: &Path, repo: &Path, claimed: &[&Cla
         }
         _ => return None,
     };
-    let mut paths = paths;
-    paths.sort();
-    paths.dedup();
+    let paths = sorted(paths);
     (!paths.is_empty()).then_some((rule, paths))
 }
+
+fn sorted(mut paths: Vec<String>) -> Vec<String> {
+    paths.sort();
+    paths.dedup();
+    paths
+}
+
+/// Shells whose `-c` string is read as a command of its own.
+const SHELLS: &[&str] = &["sh", "bash", "zsh", "dash"];
+/// How deep `sh -c 'bash -c …'` is followed.
+const MAX_DEPTH: usize = 3;
 
 /// The first segment of `command` (run in `cwd`) that is a git command inside `repo` touching one of `claimed` (the
 /// other tasks' dirty claims there), with the claimed paths it touches. `None` when nothing is claimed.
@@ -217,7 +330,17 @@ pub fn evaluate_git(command: &str, cwd: &Path, repo: &Path, claimed: &[&Claim]) 
     if claimed.is_empty() {
         return None;
     }
-    let mut cwd = clean(cwd);
+    evaluate_in(command, &clean(cwd), repo, claimed, 0)
+}
+
+fn evaluate_in(
+    command: &str,
+    cwd: &Path,
+    repo: &Path,
+    claimed: &[&Claim],
+    depth: usize,
+) -> Option<(GitRule, Vec<String>)> {
+    let mut cwd = cwd.to_owned();
     for seg in segments(command) {
         let words = strip_prefixes(&seg.words);
         let Some((first, rest)) = words.split_first() else {
@@ -229,7 +352,21 @@ pub fn evaluate_git(command: &str, cwd: &Path, repo: &Path, claimed: &[&Claim]) 
             }
             continue;
         }
-        if first.rsplit('/').next() != Some("git") {
+        let program = first.rsplit('/').next().unwrap_or(first);
+        if SHELLS.contains(&program) {
+            // `-c`, or a cluster holding it (`-lc`, `-ec`): the next word is the script
+            let script = rest
+                .iter()
+                .position(|a| a.starts_with('-') && !a.starts_with("--") && a.contains('c'))
+                .and_then(|i| rest.get(i + 1));
+            if let (Some(script), true) = (script, depth < MAX_DEPTH) {
+                if let Some(hit) = evaluate_in(script, &cwd, repo, claimed, depth + 1) {
+                    return Some(hit);
+                }
+            }
+            continue;
+        }
+        if program != "git" {
             continue;
         }
         let mut dir = cwd.clone();
@@ -259,177 +396,5 @@ pub fn evaluate_git(command: &str, cwd: &Path, repo: &Path, claimed: &[&Claim]) 
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn claim(path: &str) -> Claim {
-        Claim {
-            path: path.into(),
-            task_id: Some(crate::domain::TaskId::parse("t-b2").unwrap()),
-            title: "Checkout".into(),
-            stage: None,
-            state: None,
-            last_edit: "2026-10-25T10:00:00Z".parse().unwrap(),
-        }
-    }
-
-    fn eval(command: &str, cwd: &str, claimed: &[Claim]) -> Option<(GitRule, Vec<String>)> {
-        let refs: Vec<&Claim> = claimed.iter().collect();
-        evaluate_git(command, Path::new(cwd), Path::new("/r"), &refs)
-    }
-
-    fn claims() -> Vec<Claim> {
-        vec![claim("src/a.ts"), claim("src/deep/b.ts"), claim("README.md")]
-    }
-
-    fn paths(v: &[&str]) -> Vec<String> {
-        v.iter().map(|s| (*s).to_owned()).collect()
-    }
-
-    #[test]
-    fn commit_a_with_a_claimed_dirty_path_is_caught() {
-        let all = paths(&["README.md", "src/a.ts", "src/deep/b.ts"]);
-        for cmd in [
-            "git commit -a -m wip",
-            "git commit -am 'wip'",
-            "git commit --all",
-            "git -c x=y commit -qa",
-        ] {
-            assert_eq!(
-                eval(cmd, "/r", &claims()),
-                Some((GitRule::CommitAll, all.clone())),
-                "{cmd}"
-            );
-        }
-        assert_eq!(
-            eval("git commit -m 'a' src/a.ts mine.ts", "/r", &claims()),
-            Some((GitRule::CommitPath, paths(&["src/a.ts"])))
-        );
-        assert_eq!(
-            eval("git commit -m x -- deep", "/r/src", &claims()),
-            Some((GitRule::CommitPath, paths(&["src/deep/b.ts"])))
-        );
-        // -m's value is not a path, even when it spells one
-        assert_eq!(eval("git commit -m src/a.ts", "/r", &claims()), None);
-        // nothing claimed: never caught
-        assert_eq!(eval("git commit -a", "/r", &[]), None);
-    }
-
-    #[test]
-    fn commit_naming_only_own_paths_is_not_caught() {
-        assert_eq!(
-            eval("git commit -m 'mine' src/mine.ts lib/other.ts", "/r", &claims()),
-            None
-        );
-        assert_eq!(eval("git add src/mine.ts && git commit -m done", "/r", &claims()), None);
-        // the a.ts prefix is not a directory of src/a.tsx
-        assert_eq!(eval("git add src/a.tsx", "/r", &[claim("src/a.ts")]), None);
-    }
-
-    #[test]
-    fn add_dot_and_add_all_are_caught() {
-        let all = paths(&["README.md", "src/a.ts", "src/deep/b.ts"]);
-        for cmd in [
-            "git add -A",
-            "git add --all",
-            "git add .",
-            "git add -u",
-            "cd src && git add ..",
-        ] {
-            assert_eq!(
-                eval(cmd, "/r", &claims()),
-                Some((GitRule::AddAll, all.clone())),
-                "{cmd}"
-            );
-        }
-        assert_eq!(
-            eval("git add .", "/r/src", &claims()),
-            Some((GitRule::AddPath, paths(&["src/a.ts", "src/deep/b.ts"])))
-        );
-        assert_eq!(
-            eval("git -C /r add README.md", "/elsewhere", &claims()),
-            Some((GitRule::AddPath, paths(&["README.md"])))
-        );
-        // a git command in another repo is not this repo's business
-        assert_eq!(eval("git add -A", "/other", &claims()), None);
-    }
-
-    #[test]
-    fn checkout_and_restore_of_a_claimed_path_are_caught() {
-        assert_eq!(
-            eval("git checkout -- src/a.ts", "/r", &claims()),
-            Some((GitRule::CheckoutPath, paths(&["src/a.ts"])))
-        );
-        assert_eq!(
-            eval("git checkout src/a.ts", "/r", &claims()),
-            Some((GitRule::CheckoutPath, paths(&["src/a.ts"])))
-        );
-        assert_eq!(eval("git checkout .", "/r", &claims()).map(|h| h.1.len()), Some(3));
-        assert_eq!(
-            eval("git restore deep/b.ts", "/r/src", &claims()),
-            Some((GitRule::RestorePath, paths(&["src/deep/b.ts"])))
-        );
-        assert_eq!(
-            eval("git restore .", "/r", &claims()).map(|h| h.0),
-            Some(GitRule::RestorePath)
-        );
-        // a branch switch, a new branch, an unstage only, or an unclaimed path are left alone
-        assert_eq!(eval("git checkout main", "/r", &claims()), None);
-        assert_eq!(eval("git checkout -b src/a.ts", "/r", &claims()), None);
-        assert_eq!(eval("git restore --staged src/a.ts", "/r", &claims()), None);
-        assert_eq!(eval("git checkout -- src/mine.ts", "/r", &claims()), None);
-    }
-
-    #[test]
-    fn stash_reset_hard_and_clean_are_caught_when_any_claim_exists() {
-        for (cmd, rule) in [
-            ("git stash", GitRule::Stash),
-            ("git stash push -m x", GitRule::Stash),
-            ("git stash -u", GitRule::Stash),
-            ("git reset --hard", GitRule::ResetHard),
-            ("git reset --hard HEAD~1", GitRule::ResetHard),
-            ("git clean -fd", GitRule::Clean),
-        ] {
-            assert_eq!(eval(cmd, "/r", &claims()).map(|h| h.0), Some(rule), "{cmd}");
-            assert_eq!(eval(cmd, "/r", &[]), None, "{cmd} with no claim");
-        }
-        assert_eq!(eval("git stash list", "/r", &claims()), None);
-        assert_eq!(eval("git stash show -p", "/r", &claims()), None);
-        assert_eq!(eval("git reset src/a.ts", "/r", &claims()), None);
-        assert_eq!(eval("git clean -n", "/r", &claims()), None);
-    }
-
-    #[test]
-    fn git_log_and_status_are_never_caught() {
-        for cmd in [
-            "git log --oneline -- src/a.ts",
-            "git status",
-            "git diff src/a.ts",
-            "git show HEAD:src/a.ts",
-            "echo 'git add -A'",
-            "grep -r 'git stash' .",
-        ] {
-            assert_eq!(eval(cmd, "/r", &claims()), None, "{cmd}");
-        }
-    }
-
-    #[test]
-    fn rel_in_resolves_through_canonical_paths() {
-        let dir = tempfile::tempdir().unwrap();
-        let real = std::fs::canonicalize(dir.path()).unwrap();
-        std::fs::create_dir(real.join("sub")).unwrap();
-        assert_eq!(
-            rel_in(&real, &real.join("sub/x/../new.ts")).as_deref(),
-            Some("sub/new.ts")
-        );
-        assert_eq!(rel_in(&real, &real).as_deref(), Some(""));
-        assert_eq!(rel_in(&real.join("sub"), &real.join("other.ts")), None);
-        // a link to the repo names the same files
-        let link = real.join("link");
-        std::os::unix::fs::symlink(real.join("sub"), &link).unwrap();
-        assert_eq!(
-            rel_in(&real.join("sub"), &link.join("new.ts")).as_deref(),
-            Some("new.ts")
-        );
-    }
-}
+#[path = "git_rules_tests.rs"]
+mod tests;

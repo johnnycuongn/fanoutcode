@@ -130,6 +130,7 @@ mod tests {
             stage: None,
             state: None,
             last_edit: Utc::now(),
+            staged: false,
         }
     }
 

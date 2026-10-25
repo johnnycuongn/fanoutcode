@@ -63,6 +63,7 @@ fn dirty(paths: &[&str]) -> Vec<StatusEntry> {
             path: (*p).into(),
             status: FileStatus::Modified,
             orig_path: None,
+            staged: false,
         })
         .collect()
 }
@@ -125,6 +126,7 @@ fn claimed_when_sharing_a_tree_and_the_other_has_a_dirty_attributed_file() {
         stage: None,
         state: None,
         last_edit: now(),
+        staged: false,
     });
     let my_plan = [planned(&me, HOME, "src/gen.ts")];
     let rows = overlaps_for(

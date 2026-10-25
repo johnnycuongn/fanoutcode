@@ -231,6 +231,7 @@ mod tests {
             path: path.into(),
             status,
             orig_path: None,
+            staged: false,
         }
     }
 

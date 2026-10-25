@@ -138,6 +138,7 @@ mod tests {
                     stage: None,
                     state: None,
                     last_edit: at(),
+                    staged: false,
                 })
                 .collect(),
         }

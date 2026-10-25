@@ -383,6 +383,7 @@ mod tests {
             stage: None,
             state: None,
             last_edit: now(),
+            staged: false,
         };
         let file = ClaimsFile {
             repo_root: "/r".into(),

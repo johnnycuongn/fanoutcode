@@ -17,6 +17,7 @@ fn claim(path: &str, task: Option<&str>, title: &str) -> Claim {
         stage: None,
         state: None,
         last_edit: "2026-10-25T10:00:00Z".parse().unwrap(),
+        staged: false,
     }
 }
 

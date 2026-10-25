@@ -237,6 +237,7 @@ mod tests {
                 FileStatus::Modified
             },
             orig_path: orig.map(str::to_owned),
+            staged: false,
         }
     }
 
