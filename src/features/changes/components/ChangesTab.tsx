@@ -3,6 +3,7 @@
 import { useEffect, useMemo, type ReactElement } from "react";
 import { EmptyState, Segmented } from "@/components/ui";
 import { events, type Task } from "@/lib/bindings";
+import { overlapStore, refreshOverlaps } from "@/features/overlap";
 import { placeNotes } from "../decorations";
 import { fileRefsOf, repoNamesOf } from "../files";
 import { notesForFile } from "../reviewNotes";
@@ -26,6 +27,10 @@ export function ChangesTab({
 }): ReactElement {
   const st = store.store.useSelector((s) => s.byTask[task.id]);
   const mode = store.store.useSelector((s) => s.mode);
+  const overlaps = overlapStore.useSelector((s) => s.byTask[task.id]);
+  useEffect(() => {
+    if (!overlapStore.get().byTask[task.id]) void refreshOverlaps(task.id);
+  }, [task.id]);
   useEffect(() => {
     void store.open(task.id);
     const offs = [
@@ -69,6 +74,7 @@ export function ChangesTab({
           <FileList
             repos={repos}
             notes={st?.notes ?? []}
+            overlaps={overlaps ?? []}
             selected={sel}
             onSelect={(s) => void store.select(task.id, s)}
             onInclude={(s) => void store.include(task.id, s)}

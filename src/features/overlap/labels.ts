@@ -1,10 +1,7 @@
-// Display text for overlap rows (§7): the relation label and the other task's title.
+// The words the overlap UI uses (§7): a row's relation label, the other task's title, a row key and an overlap count.
 import type { OverlapRow, Task, TaskId } from "@/lib/bindings";
 
-/**
- * Keyed by string, not by `Relation`, so a variant the bindings do not know yet (TakenOverBy) still has its label
- * and an unknown one falls back to its raw name.
- */
+// Keyed by string so a relation added in Rust before this map learns it still shows, under its raw name.
 const RELATION_LABELS: Record<string, string> = {
   Claimed: "claimed",
   GrantedOnTop: "granted on top",
@@ -14,6 +11,7 @@ const RELATION_LABELS: Record<string, string> = {
   Committed: "committed",
 };
 
+/** The row's relation chip text: "holding" while the edit is held, else the relation's label. */
 export function relationLabel(row: Pick<OverlapRow, "relation" | "held">): string {
   if (row.held) return "holding";
   const relation: string = row.relation;
@@ -30,4 +28,15 @@ export function otherTitle(id: TaskId | null, byId: Record<TaskId, Task>): strin
 /** A stable key for a row: the same file may overlap with two tasks. */
 export function rowKey(row: Pick<OverlapRow, "repo_root" | "path" | "other_task">): string {
   return `${row.repo_root}\u0000${row.path}\u0000${row.other_task ?? ""}`;
+}
+
+/** "1 overlap", "N overlaps". */
+export function overlapsText(n: number): string {
+  return n === 1 ? "1 overlap" : `${n} overlaps`;
+}
+
+/** The distinct relation labels of the rows on `path` in `repoRoot`, for a file row's chips. */
+export function fileRelationLabels(rows: readonly OverlapRow[], repoRoot: string, path: string): string[] {
+  const labels = rows.filter((r) => r.repo_root === repoRoot && r.path === path).map(relationLabel);
+  return [...new Set(labels)];
 }

@@ -7,7 +7,23 @@ import { makeTask, makeView, WORKING, IDLE } from "@/test/fixtures";
 import { tasksStore, projectContainer } from "@/lib/stores/tasksStore";
 import { viewsStore, leaf, EMPTY_PANE, taskContent } from "@/features/views";
 import { shellStore, initWindow, setTabOrder } from "@/features/shell";
+import { overlapStore } from "@/features/overlap";
+import type { OverlapRow } from "@/lib/bindings";
 import { ChangesSection } from "./ChangesSection";
+
+const overlap: OverlapRow = {
+  task_id: "task-01",
+  other_task: "task-02",
+  repo_root: "/r/alpha",
+  path: "src/a.ts",
+  relation: "Claimed",
+  pending: null,
+  held: false,
+  noted_out: false,
+  noted_in: false,
+  decided_at: null,
+  updated_at: "2026-10-25T08:00:00Z",
+};
 
 const container = projectContainer("proj-a1");
 const changes = [{ repo_root: "/r/alpha", files: [{ path: "src/a.ts", added: 4, removed: 1 }] }];
@@ -33,6 +49,23 @@ describe("ChangesSection", () => {
     });
     setTabOrder(["view-c3"]);
     commands.gitChanges.mockResolvedValue({ status: "ok", data: changes });
+    commands.overlapList.mockResolvedValue({ status: "ok", data: [] });
+    overlapStore.set({ byTask: {}, counts: {} });
+  });
+  it("changes section marks a file another task touches", async () => {
+    commands.overlapList.mockResolvedValue({ status: "ok", data: [overlap] });
+    render(<ChangesSection />);
+    await screen.findByText("src/a.ts");
+    expect(commands.overlapList).toHaveBeenCalledWith("task-01");
+    expect(commands.overlapList).not.toHaveBeenCalledWith("task-02");
+    const fileButton = screen.getByText("src/a.ts").closest("button")!;
+    await vi.waitFor(() => expect(fileButton).toHaveTextContent("claimed"));
+  });
+  it("leaves a file no other task touches unmarked", async () => {
+    render(<ChangesSection />);
+    await screen.findByText("src/a.ts");
+    await vi.waitFor(() => expect(commands.overlapList).toHaveBeenCalled());
+    expect(screen.queryByText("claimed")).toBeNull();
   });
   it("lists files grouped by active task only", async () => {
     render(<ChangesSection />);

@@ -31,6 +31,10 @@ vi.mock("@/lib/bindings", async () => {
     memoryMissing: vi.fn(async () => []),
     gitChanges: vi.fn(async () => []),
     overlapList: vi.fn(async () => ({ status: "ok", data: [] })),
+    // the Overlap tab's decision pane loads both sides of the file
+    overlapPendingInput: vi.fn(async () => ({ status: "ok", data: null })),
+    gitDiff: vi.fn(async () => ({ status: "error", error: "no diff in this test" })),
+    gitFileRead: vi.fn(async () => ({ status: "ok", data: "" })),
     tasksAction: vi.fn(async () => {}),
     sessionsOpen: vi.fn(async () => "sess-1"),
     costSummary: vi.fn(async () => ({})),

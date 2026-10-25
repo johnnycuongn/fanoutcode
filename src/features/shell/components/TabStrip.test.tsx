@@ -7,6 +7,7 @@ import { makeTask, makeView, needsYou } from "@/test/fixtures";
 import { tasksStore, projectContainer } from "@/lib/stores/tasksStore";
 import { viewsStore, leaf, split, EMPTY_PANE, taskContent, reorderViews } from "@/features/views";
 import { shellStore, initWindow, setTabOrder } from "../store";
+import { overlapStore } from "@/features/overlap";
 import { TabStrip } from "./TabStrip";
 
 const container = projectContainer("proj-a1");
@@ -30,6 +31,16 @@ describe("TabStrip", () => {
       ],
     });
     setTabOrder(["view-c3", "view-c4"]);
+    overlapStore.set({ byTask: {}, counts: {} });
+  });
+  it("view tab tooltip carries the overlap count", () => {
+    overlapStore.set({ byTask: {}, counts: { "task-b2": { count: 2, pending: 0 } } });
+    const { unmount } = render(<TabStrip />);
+    expect(screen.getByRole("tab", { name: /Auth/ })).toHaveAttribute("title", "Spec · Needs you · 2 overlaps");
+    unmount();
+    overlapStore.set({ byTask: {}, counts: { "task-b2": { count: 1, pending: 1 } } });
+    render(<TabStrip />);
+    expect(screen.getByRole("tab", { name: /Auth/ })).toHaveAttribute("title", "Spec · Needs you · 1 overlap");
   });
   it("renders Board first, then views, with an amber count on the view that needs you", () => {
     render(<TabStrip />);

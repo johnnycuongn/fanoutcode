@@ -1,9 +1,11 @@
 // The Changes section: the files each active task has changed, by task and then by repo. Clicking opens the task
-// with its Changes dock tab; a task's list refetches on its `git-changes` event.
+// with its Changes dock tab; a task's list refetches on its `git-changes` event. A file another task also touches
+// carries its relation chip, from the task's overlap rows (loaded once here, kept current by `overlap-changed`).
 import { useEffect, useState, type ReactElement } from "react";
-import { Button, EmptyState } from "@/components/ui";
+import { Button, Chip, EmptyState } from "@/components/ui";
 import { commands, events, type ProjectId, type RepoChanges, type Task, type TaskId } from "@/lib/bindings";
 import { selectTaskList, tasksStore } from "@/lib/stores/tasksStore";
+import { fileRelationLabels, overlapStore, refreshOverlaps } from "@/features/overlap";
 import { openTaskInCurrentView } from "@/features/shell";
 
 const ACTIVE_STAGES = new Set(["Build", "Review", "Test", "Commit"]);
@@ -36,10 +38,21 @@ function useChanges(ids: TaskId[]): Record<TaskId, RepoChanges[]> {
   return byTask;
 }
 
+/** Loads the overlap rows of each shown task not loaded yet; the store refreshes loaded rows on `overlap-changed`. */
+function useOverlapRows(ids: TaskId[]) {
+  const key = ids.join(",");
+  useEffect(() => {
+    const loaded = overlapStore.get().byTask;
+    for (const id of key ? key.split(",") : []) if (!loaded[id]) void refreshOverlaps(id);
+  }, [key]);
+  return overlapStore.useSelector((s) => s.byTask);
+}
+
 export function ChangesSection({ projectId }: { projectId?: ProjectId }): ReactElement {
   const all = tasksStore.useSelector(selectTaskList);
   const tasks = all.filter((t) => isActiveTask(t) && (!projectId || t.project_id === projectId));
   const byTask = useChanges(tasks.map((t) => t.id));
+  const overlaps = useOverlapRows(tasks.map((t) => t.id));
   if (tasks.length === 0) return <EmptyState size="sm" title="No active tasks" description="Changes appear here." />;
   const open = (id: TaskId) => openTaskInCurrentView(id, { dockTab: "changes" });
   return (
@@ -62,7 +75,12 @@ export function ChangesSection({ projectId }: { projectId?: ProjectId }): ReactE
                   className="w-full justify-between gap-2 font-mono text-xs"
                   onClick={() => open(task.id)}
                 >
-                  <span className="min-w-0 truncate">{f.path}</span>
+                  <span className="min-w-0 flex-1 truncate text-left">{f.path}</span>
+                  {fileRelationLabels(overlaps[task.id] ?? [], repo.repo_root, f.path).map((label) => (
+                    <Chip key={label} size="sm" className="shrink-0 font-sans">
+                      {label}
+                    </Chip>
+                  ))}
                   <span className="shrink-0 text-mute">{`+${f.added} −${f.removed}`}</span>
                 </Button>
               ))}

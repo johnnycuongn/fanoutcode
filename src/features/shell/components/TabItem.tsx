@@ -26,6 +26,7 @@ import {
 import type { View } from "@/lib/bindings";
 import { useReducedMotion } from "@/lib/motion";
 import { swatchClass } from "@/lib/theme";
+import { overlapsText } from "@/features/overlap";
 import { deleteView, renameView, viewTaskIds } from "@/features/views";
 import { setActiveTab } from "../store";
 import { StageIcon, type StageIconKind } from "./StageIcon";
@@ -38,11 +39,14 @@ export type TabItemProps = {
   /** The view's aggregate task state and stage; null while it shows no task. */
   status: AgentStatus | null;
   stage: StageIconKind | null;
+  /** The overlaps of the view's tasks, summed; the tooltip mentions them when above zero. */
+  overlaps: number;
 };
 
-function tooltip(status: AgentStatus | null, stage: StageIconKind | null): string | undefined {
+function tooltip(status: AgentStatus | null, stage: StageIconKind | null, overlaps: number): string | undefined {
   if (!status || !stage) return undefined;
-  return `${stage === "many" ? "Several stages" : stage} · ${statusLabel(status)}`;
+  const base = `${stage === "many" ? "Several stages" : stage} · ${statusLabel(status)}`;
+  return overlaps > 0 ? `${base} · ${overlapsText(overlaps)}` : base;
 }
 
 function RenameInput({ view, onDone }: { view: View; onDone(): void }): ReactElement {
@@ -68,7 +72,7 @@ function RenameInput({ view, onDone }: { view: View; onDone(): void }): ReactEle
   );
 }
 
-export function TabItem({ view, active, count, colors, status, stage }: TabItemProps): ReactElement {
+export function TabItem({ view, active, count, colors, status, stage, overlaps }: TabItemProps): ReactElement {
   const [renaming, setRenaming] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const reduced = useReducedMotion();
@@ -91,7 +95,7 @@ export function TabItem({ view, active, count, colors, status, stage }: TabItemP
             aria-selected={active}
             onClick={() => setActiveTab(view.id)}
             onDoubleClick={() => setRenaming(true)}
-            title={tooltip(status, stage)}
+            title={tooltip(status, stage, overlaps)}
           >
             {status && <StatusDot status={status} pulse={status !== "idle"} size="sm" aria-hidden />}
             {stage && <StageIcon stage={stage} />}

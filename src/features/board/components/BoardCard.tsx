@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useState, type ReactElement } from "react";
 import type { Project, Task } from "@/lib/bindings";
+import { overlapCount, overlapStore } from "@/features/overlap";
 import { useActivity } from "../activity";
 import { trackTaskCost, untrackTaskCost, useTaskCost } from "../cost";
 import { cardMenuItems } from "../menu";
@@ -20,6 +21,7 @@ export const BoardCard = memo(function BoardCard({ task, lane, readOnly, showPro
   const focused = useBoard((s) => s.focusedTaskId === task.id);
   const renaming = useBoard((s) => s.renamingTaskId === task.id);
   const activity = useActivity(task.id);
+  const overlaps = overlapStore.useSelector((s) => overlapCount(s, task.id));
   // A card's own cost is shown on Detailed cards and in every card's tooltip (fetched on first hover, not for 200 cards).
   const [hovered, setHovered] = useState(false);
   const wantsCost = costOverview && (level === "Detailed" || hovered);
@@ -65,6 +67,7 @@ export const BoardCard = memo(function BoardCard({ task, lane, readOnly, showPro
             costOverview={costOverview}
             cost={costOverview ? cost : null}
             focused={focused}
+            overlaps={overlaps}
             disabled={readOnly}
             onHover={onHover}
             onOpen={onOpen}
