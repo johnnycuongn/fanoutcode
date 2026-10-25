@@ -14,6 +14,7 @@ import {
 import { EmptyState, toast } from "@/components/ui";
 import type { Container, PaneId, Project, Task, TaskId } from "@/lib/bindings";
 import { Dock, DockSplit, dockStore, nextOnGrowShortcut, type BodyMode, type DockTab } from "@/features/dock";
+import { useBringBaseIn } from "@/features/overlap";
 import { consumeDockTab } from "@/features/shell";
 import { SAVE_FAILED, specStore } from "@/features/spec-editor";
 import type { TerminalPaneHandle } from "@/features/views";
@@ -26,7 +27,6 @@ import { tasksSource } from "../taskSource";
 import { toggleWorktree } from "../worktree";
 import { TaskBody } from "./TaskBody";
 import { TaskHeader } from "./TaskHeader";
-import { useBringBaseIn } from "./useBringBaseIn";
 
 export interface TaskPageHandle {
   primaryAction(): void;
@@ -68,7 +68,7 @@ export function TaskPage({
   const [body, setBody] = useState<BodyMode>("terminal");
   const [renaming, setRenaming] = useState(false);
   const terminalRef = useRef<TerminalPaneHandle | null>(null);
-  const bringBaseIn = useBringBaseIn(task);
+  const bringBaseIn = useBringBaseIn(task, (id) => taskPageStore.integrate(id));
 
   useEffect(() => acquireTaskPageEvents(), []);
   useEffect(() => {

@@ -4,6 +4,7 @@ import { MoreHorizontal } from "lucide-react";
 import type { ReactElement } from "react";
 import { IconButton, Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from "@/components/ui";
 import type { StageAction, Task } from "@/lib/bindings";
+import { bringBaseInLabel, canBringBaseIn } from "@/features/overlap";
 import { forwardActionFor, freshSessionAllowed, PREVIOUS_STAGE } from "../primaryAction";
 
 export interface OverflowMenuProps {
@@ -30,7 +31,7 @@ export function OverflowMenu({
   const forward = task.archived ? null : forwardActionFor(task.stage, { mayCommit });
   const previous = PREVIOUS_STAGE[task.stage];
   const started = task.primary_session !== null;
-  const canIntegrate = !task.archived && task.stage === "Done" && task.worktree_path !== null && onIntegrate;
+  const canIntegrate = canBringBaseIn(task) && onIntegrate;
   return (
     <Menu>
       <MenuTrigger asChild>
@@ -41,7 +42,7 @@ export function OverflowMenu({
           Rename…
         </MenuItem>
         {forward && <MenuItem onSelect={() => onAction(forward.action)}>{forward.label}</MenuItem>}
-        {canIntegrate && <MenuItem onSelect={onIntegrate}>Bring {task.base_branch ?? "base"} in</MenuItem>}
+        {canIntegrate && <MenuItem onSelect={onIntegrate}>{bringBaseInLabel(task)}</MenuItem>}
         {freshSessionAllowed(task.stage) && (
           <MenuItem onSelect={() => onAction({ type: "StartFresh" })}>Start fresh session</MenuItem>
         )}

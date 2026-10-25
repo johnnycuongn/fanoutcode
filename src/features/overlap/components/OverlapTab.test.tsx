@@ -4,7 +4,8 @@ vi.mock("@/lib/bindings", () => mockBindings());
 import { commands, events, mockBindings } from "@/test/mockBindings";
 import { makeTask } from "@/test/fixtures";
 import { setupUser } from "@/test/ui";
-import type { FileDiff, OverlapRow, PendingDecision, Relation } from "@/lib/bindings";
+import { toast } from "@/components/ui";
+import type { FileDiff, OverlapRow, PendingDecision, Relation, Task } from "@/lib/bindings";
 import { tasksStore } from "@/lib/stores/tasksStore";
 import { shellStore } from "@/features/shell";
 import { overlapStore } from "../store";
@@ -204,5 +205,65 @@ describe("OverlapTab", () => {
     renderTab();
     await setupUser().click(screen.getByRole("button", { name: "Open in Changes" }));
     expect(shellStore.get().pendingDockTab).toEqual({ taskId: "task-b2", tab: "changes" });
+  });
+
+  it("a merge that needs you shows the hand-back pane with Resume, even with no rows", async () => {
+    commands.overlapIntegrationContext.mockResolvedValue({ status: "ok", data: [] });
+    seed([]);
+    const merging = makeTask({
+      id: "task-b2",
+      stage: "Done",
+      state: { type: "NeedsYou", reason: { type: "MergeNeedsYou", repo: "/r/alpha", paths: ["src/a.ts"] } },
+    });
+    render(<OverlapTab task={merging} projects={[]} />);
+    expect(screen.getByRole("region", { name: "Merge needs you" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Resume" })).toBeInTheDocument();
+    await waitFor(() => expect(commands.overlapIntegrationContext).toHaveBeenCalledWith("task-b2"));
+  });
+
+  it("offers Bring <base> in only on a Done worktree task", () => {
+    seed([row()]);
+    const done = (over: Partial<Task>) => makeTask({ id: "task-b2", stage: "Done", ...over });
+    const { rerender } = render(
+      <OverlapTab task={done({ worktree_path: "/wt/b2", base_branch: "main" })} projects={[]} />,
+    );
+    expect(screen.getByRole("button", { name: "Bring main in" })).toBeInTheDocument();
+    rerender(<OverlapTab task={done({ worktree_path: null, base_branch: "main" })} projects={[]} />);
+    expect(screen.queryByRole("button", { name: /^Bring .* in$/ })).toBeNull();
+    rerender(<OverlapTab task={done({ stage: "Build", worktree_path: "/wt/b2" })} projects={[]} />);
+    expect(screen.queryByRole("button", { name: /^Bring .* in$/ })).toBeNull();
+  });
+
+  it("Bring base in with no base asks for one first, then integrates", async () => {
+    commands.overlapBaseSuggestion.mockResolvedValue({ status: "ok", data: "main" });
+    const doneTask = makeTask({ id: "task-b2", stage: "Done", worktree_path: "/wt/b2", base_branch: null });
+    commands.overlapSetBase.mockResolvedValue({ status: "ok", data: { ...doneTask, base_branch: "main" } });
+    commands.overlapIntegrate.mockResolvedValue({ status: "ok", data: null });
+    seed([]);
+    render(<OverlapTab task={doneTask} projects={[]} />);
+    const user = setupUser();
+    await user.click(screen.getByRole("button", { name: "Bring base in" }));
+    const input = await screen.findByLabelText("Base branch");
+    await waitFor(() => expect(input).toHaveProperty("value", "main"));
+    expect(commands.overlapIntegrate).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Bring main in" }));
+    await waitFor(() => expect(commands.overlapIntegrate).toHaveBeenCalledWith("task-b2"));
+    expect(commands.overlapSetBase).toHaveBeenCalledWith("task-b2", "main");
+    expect(tasksStore.get().byId["task-b2"]?.base_branch).toBe("main");
+  });
+
+  it("a failed integrate shows the error", async () => {
+    commands.overlapIntegrate.mockResolvedValue({ status: "error", error: "Finish the task first." });
+    seed([]);
+    render(
+      <OverlapTab
+        task={makeTask({ id: "task-b2", stage: "Done", worktree_path: "/wt/b2", base_branch: "main" })}
+        projects={[]}
+      />,
+    );
+    const shown = vi.spyOn(toast, "error");
+    await setupUser().click(screen.getByRole("button", { name: "Bring main in" }));
+    await waitFor(() => expect(shown).toHaveBeenCalledWith("Finish the task first."));
+    shown.mockRestore();
   });
 });

@@ -16,3 +16,5 @@ export type { IntegratePaneProps } from "./components/IntegratePane";
 export { BaseBranchDialog } from "./components/BaseBranchDialog";
 export type { BaseBranchDialogProps } from "./components/BaseBranchDialog";
 export type { OverlapState, OverlapCounts } from "./types";
+export { bringBaseInLabel, canBringBaseIn, useBringBaseIn } from "./components/useBringBaseIn";
+export type { BringBaseIn } from "./components/useBringBaseIn";
