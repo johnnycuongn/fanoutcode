@@ -30,6 +30,7 @@ pub fn run() {
         .invoke_handler(specta.invoke_handler())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_opener::init())
         // Restores each window's position and size by label (= window id).
         .plugin(
             tauri_plugin_window_state::Builder::new()

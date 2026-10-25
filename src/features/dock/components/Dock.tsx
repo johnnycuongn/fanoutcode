@@ -10,6 +10,7 @@ import { GROWN_HEIGHT, resolveTab, visibleTabs } from "../tabRules";
 import type { DockTab } from "../types";
 import { DockTabStrip } from "./DockTabStrip";
 import { MemoryTab } from "./MemoryTab";
+import { TicketTab } from "./TicketTab";
 
 export interface DockProps {
   task: Task;
@@ -29,6 +30,8 @@ function body(tab: DockTab, p: DockProps): ReactNode {
       const home = p.projects?.find((x) => x.id === p.task.project_id);
       return <ChangesTab key={p.task.id} task={p.task} {...(home ? { homeName: repoName(home.root) } : {})} />;
     }
+    case "ticket":
+      return <TicketTab key={p.task.id} task={p.task} />;
     case "team":
       return p.teamSlot ?? <EmptyState size="sm" title="The team view arrives with the canvas" />;
     default:
