@@ -40,7 +40,7 @@ export function TabStrip(): ReactElement {
   const views = viewsStore.useSelector((s) => s.views);
   const tasksById = tasksStore.useSelector((s) => s.byId);
   const projectsById = projectsStore.useSelector((s) => s.byId);
-  const overlaps = overlapStore.use();
+  const overlapCounts = overlapStore.useSelector((s) => s.counts);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   useTabKeys();
 
@@ -72,7 +72,7 @@ export function TabStrip(): ReactElement {
                   count={tabNeedsYouCount(view, tasksById)}
                   status={viewStatus(view, tasksById)}
                   stage={viewStage(view, tasksById)}
-                  overlaps={viewOverlapCount(view, tasksById, overlaps)}
+                  overlaps={viewOverlapCount(view, tasksById, overlapCounts)}
                   colors={
                     workspace ? viewProjectIds(view, tasksById).map((id) => projectsById[id]?.color ?? "slate") : []
                   }

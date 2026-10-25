@@ -116,7 +116,7 @@ describe("overlapStore", () => {
       ),
     });
     const tasksById = { "task-b2": makeTask({ id: "task-b2" }), "task-c3": makeTask({ id: "task-c3" }) };
-    expect(viewOverlapCount(view, tasksById, overlapStore.get())).toBe(5);
-    expect(viewOverlapCount(view, { "task-b2": tasksById["task-b2"] }, overlapStore.get())).toBe(2);
+    expect(viewOverlapCount(view, tasksById, overlapStore.get().counts)).toBe(5);
+    expect(viewOverlapCount(view, { "task-b2": tasksById["task-b2"] }, overlapStore.get().counts)).toBe(2);
   });
 });

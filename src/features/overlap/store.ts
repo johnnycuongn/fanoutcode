@@ -43,13 +43,14 @@ export async function decide(taskId: TaskId, row: OverlapRow, decision: Decision
   await refreshOverlaps(taskId);
 }
 
-export function overlapCount(s: OverlapState, taskId: TaskId): number {
+/** The task's overlap count, from the state or from its `counts` alone. */
+export function overlapCount(s: Pick<OverlapState, "counts">, taskId: TaskId): number {
   return s.counts[taskId]?.count ?? 0;
 }
 
-/** The overlaps of the view's distinct loaded tasks, summed (the view tab's tooltip). */
-export function viewOverlapCount(view: View, tasksById: Record<TaskId, Task>, s: OverlapState): number {
+/** The overlaps of the view's distinct loaded tasks, summed (the view tab's tooltip); takes only the counts. */
+export function viewOverlapCount(view: View, tasksById: Record<TaskId, Task>, counts: OverlapState["counts"]): number {
   return viewTaskIds(view)
     .filter((id) => tasksById[id])
-    .reduce((n, id) => n + overlapCount(s, id), 0);
+    .reduce((n, id) => n + overlapCount({ counts }, id), 0);
 }

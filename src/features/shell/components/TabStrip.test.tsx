@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, act } from "@testing-library/react";
+import { Profiler } from "react";
 vi.mock("@/lib/bindings", () => mockBindings());
 import { mockBindings, commands } from "@/test/mockBindings";
 import { makeTask, makeView, needsYou } from "@/test/fixtures";
@@ -41,6 +42,19 @@ describe("TabStrip", () => {
     overlapStore.set({ byTask: {}, counts: { "task-b2": { count: 1, pending: 1 } } });
     render(<TabStrip />);
     expect(screen.getByRole("tab", { name: /Auth/ })).toHaveAttribute("title", "Spec · Needs you · 1 overlap");
+  });
+  it("does not re-render when only an overlap row changes", () => {
+    const commits = vi.fn();
+    render(
+      <Profiler id="strip" onRender={commits}>
+        <TabStrip />
+      </Profiler>,
+    );
+    const before = commits.mock.calls.length;
+    act(() => overlapStore.set((s) => ({ ...s, byTask: { "task-b2": [] } })));
+    expect(commits.mock.calls.length).toBe(before);
+    act(() => overlapStore.set((s) => ({ ...s, counts: { "task-b2": { count: 3, pending: 0 } } })));
+    expect(screen.getByRole("tab", { name: /Auth/ })).toHaveAttribute("title", "Spec · Needs you · 3 overlaps");
   });
   it("renders Board first, then views, with an amber count on the view that needs you", () => {
     render(<TabStrip />);
