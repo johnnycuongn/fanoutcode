@@ -50,6 +50,8 @@ The commands to run and what passing looks like. The project's configured test c
 ## Team
 Which subagents Build should use and what each owns, chosen from the roster available to you: `frontend`, `backend`, `best-practice-reviewer`, `codebase-consistency-reviewer`, `security-reviewer`. Pick fewer for a small task; a task of one or two steps needs no team. You may add an ad-hoc role when none fits and name it here. One line per role: `- frontend: steps 3, 4`.
 
+List every file you intend to change under a `## Files` heading, one path per line as `- path — why`, before the `## Team` section.
+
 Rules: do not change code in this stage except `plan.md`; do not commit; keep every step small enough to review on its own; prefer the project's existing patterns over new ones.
 
 When `plan.md` is written, end your final message with this single line and nothing after it:
@@ -202,5 +204,31 @@ mod tests {
         assert!(default_template(Stage::Review)
             .unwrap()
             .contains("`<repo>/<path>:<line> · <severity> · <note>`"));
+    }
+
+    #[test]
+    fn plan_template_asks_for_a_files_section() {
+        assert!(PLAN.contains(
+            "List every file you intend to change under a `## Files` heading, one path per line as \
+`- path — why`, before the `## Team` section."
+        ));
+        let allowed = [
+            "{{task.folder}}",
+            "{{project.root}}",
+            "{{project.context}}",
+            "{{linked.projects}}",
+            "{{worktree}}",
+            "{{test.command}}",
+            "{{test.exit_code}}",
+            "{{test.output}}",
+        ];
+        for t in [SPEC, PLAN, BUILD, REVIEW, TEST, COMMIT] {
+            let mut rest = t;
+            while let Some(i) = rest.find("{{") {
+                let end = rest[i..].find("}}").expect("closed placeholder") + i + 2;
+                assert!(allowed.contains(&&rest[i..end]), "unknown {}", &rest[i..end]);
+                rest = &rest[end..];
+            }
+        }
     }
 }

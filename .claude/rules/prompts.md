@@ -14,4 +14,6 @@ The app parses what agents write, so every stage prompt carries these convention
 - Placeholders are exactly these eight; any other `{{…}}` is a bug: `{{task.folder}}`, `{{project.root}}`,
   `{{project.context}}`, `{{linked.projects}}`, `{{worktree}}`, `{{test.command}}`, and in the fix-tests prompt
   `{{test.exit_code}}` and `{{test.output}}` (`prompts::render`).
-- Prompts never tell the agent to commit, merge, rebase, push or delete branches; the Commit stage drafts a message.
+- Prompts never tell the agent to commit, push or delete branches; the Commit stage drafts a message. The one prompt
+  that says merge or rebase is the integrate prompt of Plan 11 (`overlap::prompts::integrate`), sent only from a Done
+  card by the developer.
