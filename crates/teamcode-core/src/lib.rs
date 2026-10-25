@@ -11,6 +11,7 @@ pub mod git;
 pub mod helpers;
 pub mod hooks;
 pub mod ids;
+pub mod jira;
 pub mod memory;
 pub mod pipeline;
 pub mod prompts;
