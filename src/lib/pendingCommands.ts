@@ -3,7 +3,6 @@
 // tests, where the bindings mock supplies every name); until then it answers with an empty result. When the owning
 // plan merges, delete the wrapper and the STUB type, and import the generated ones instead.
 import { commands, type ProjectId, type Result, type Scope, type TaskId } from "@/lib/bindings";
-import type { WorkspaceId, Workspace } from "@/lib/bindings";
 
 // STUB(plan 05): Plan 05's `cost::CostLine`, `LiveCost` and `CostSummary` (A6, A19).
 export type CostLine = {
@@ -39,9 +38,6 @@ type Pending = {
   costSummary?(scope: Scope): Promise<Result<CostSummary, string>>;
   gitChanges?(taskId: TaskId): Promise<Result<RepoChanges[], string>>;
   jiraSearch?(projectId: ProjectId, query: string): Promise<Result<Issue[], string>>;
-  workspacesCreate?(name: string, projectIds: ProjectId[]): Promise<Result<Workspace, string>>;
-  workspacesAddProject?(id: WorkspaceId, path: string): Promise<Result<Workspace, string>>;
-  workspacesSaveAs?(id: WorkspaceId, path: string): Promise<Result<Workspace, string>>;
 };
 
 const pending = () => commands as unknown as Pending;
@@ -60,19 +56,4 @@ export function gitChanges(taskId: TaskId): Promise<Result<RepoChanges[], string
 /** STUB(plan 10): `jira_search(project_id, query) -> Vec<Issue>`. */
 export function jiraSearch(projectId: ProjectId, query: string): Promise<Result<Issue[], string>> {
   return pending().jiraSearch?.(projectId, query) ?? Promise.resolve({ status: "ok", data: [] });
-}
-
-/** STUB(plan 10): `workspaces_create(name, project_ids) -> Workspace`. */
-export function workspacesCreate(name: string, projectIds: ProjectId[]): Promise<Result<Workspace, string>> {
-  return pending().workspacesCreate?.(name, projectIds) ?? Promise.resolve(missing("workspaces_create"));
-}
-
-/** STUB(plan 10): `workspaces_add_project(id, path) -> Workspace`. */
-export function workspacesAddProject(id: WorkspaceId, path: string): Promise<Result<Workspace, string>> {
-  return pending().workspacesAddProject?.(id, path) ?? Promise.resolve(missing("workspaces_add_project"));
-}
-
-/** STUB(plan 10): `workspaces_save_as(id, path) -> Workspace`. */
-export function workspacesSaveAs(id: WorkspaceId, path: string): Promise<Result<Workspace, string>> {
-  return pending().workspacesSaveAs?.(id, path) ?? Promise.resolve(missing("workspaces_save_as"));
 }

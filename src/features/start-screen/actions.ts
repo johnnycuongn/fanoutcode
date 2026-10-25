@@ -4,7 +4,7 @@ import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialo
 import { toast } from "@/components/ui";
 import { commands, type RecentEntry, type Result, type Workspace, type WorkspaceId } from "@/lib/bindings";
 import type { ProjectId, WindowId, WindowInfo } from "@/lib/bindings";
-import { workspacesCreate, workspacesSaveAs } from "@/lib/pendingCommands";
+import { openWorkspaceFile, pickWorkspaceFile } from "@/features/workspace";
 
 function report<T>(r: Result<T, string> | undefined): T | null {
   if (r?.status === "ok") return r.data;
@@ -17,20 +17,15 @@ export async function openProjectDialog(): Promise<void> {
   if (typeof path === "string") report(await commands.windowsOpenProject(path));
 }
 
+/** A workspace file opens through Plan 10's review when it brings anything new. */
 export async function openWorkspaceDialog(): Promise<void> {
-  const path = await openDialog({
-    title: "Open a workspace",
-    filters: [{ name: "Team Code workspace", extensions: ["json"] }],
-  });
-  if (typeof path === "string") report(await commands.windowsOpenWorkspace(path));
+  const path = await pickWorkspaceFile();
+  if (path) await openWorkspaceFile(path);
 }
 
 export async function openRecent(entry: RecentEntry): Promise<void> {
-  const r =
-    entry.kind === "Project"
-      ? await commands.windowsOpenProject(entry.path)
-      : await commands.windowsOpenWorkspace(entry.path);
-  report(r);
+  if (entry.kind === "Project") report(await commands.windowsOpenProject(entry.path));
+  else await openWorkspaceFile(entry.path);
 }
 
 /** Missing entry: pick where it went and open it from there. */
@@ -42,7 +37,7 @@ export async function relocateRecent(entry: RecentEntry): Promise<void> {
 /** Missing workspace file: write the record out again (Plan 10's `workspaces_save_as`). */
 export async function reexportWorkspace(entry: RecentEntry): Promise<void> {
   const path = await saveDialog({ defaultPath: `${entry.name}.teamcode-workspace.json` });
-  if (typeof path === "string") report(await workspacesSaveAs(entry.id, path));
+  if (typeof path === "string") report(await commands.workspacesSaveAs(entry.id, path));
 }
 
 export type NewWorkspaceDeps = {
@@ -60,7 +55,7 @@ const unwrap = async <T>(p: Promise<Result<T, string>>): Promise<T> => {
 
 export const realDeps: NewWorkspaceDeps = {
   windowsList: () => commands.windowsList(),
-  workspacesCreate: (name, ids) => unwrap(workspacesCreate(name, ids)),
+  workspacesCreate: (name, ids) => unwrap(commands.workspacesCreate(name, ids)),
   windowsOpenWorkspace: (path) => unwrap(commands.windowsOpenWorkspace(path)),
   windowsClose: (id) => unwrap(commands.windowsClose(id)),
 };

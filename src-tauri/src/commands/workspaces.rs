@@ -210,6 +210,25 @@ pub fn workspaces_set_policy(
     changed(&app, state.workspaces.set_policy(&ws_id(&id)?, policy, &protected)?)
 }
 
+/// A workspace-scope setting, mirrored into the workspace file (write-through or dirty); `null` clears it.
+#[tauri::command]
+#[specta::specta]
+pub fn workspaces_set_setting(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: WorkspaceId,
+    key: String,
+    value: serde_json::Value,
+) -> Result<Workspace> {
+    let id = ws_id(&id)?;
+    teamcode_core::jira::settings::check_settable(&key)?;
+    teamcode_core::settings::validate(&key, teamcode_core::settings::ScopeKind::Workspace, &value)?;
+    state
+        .workspaces
+        .apply_workspace_settings(&id, &BTreeMap::from([(key, value)]))?;
+    changed(&app, state.workspaces.get(&id)?)
+}
+
 #[tauri::command]
 #[specta::specta]
 pub fn workspaces_status(state: State<'_, AppState>, id: WorkspaceId) -> Result<WorkspaceStatus> {

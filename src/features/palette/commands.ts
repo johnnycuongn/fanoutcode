@@ -4,7 +4,6 @@ import { toast } from "@/components/ui";
 import { commands, type Project, type StageAction, type Task, type View, type WindowId } from "@/lib/bindings";
 import type { WindowInfo } from "@/lib/bindings";
 import { KEYMAP } from "@/lib/keyboard";
-import { workspacesAddProject, workspacesCreate } from "@/lib/pendingCommands";
 import * as board from "@/features/board";
 import { appScope, openSettings, setSetting, THEMES } from "@/features/settings";
 import { openTaskInCurrentView, setActiveTab, toggleProjectFocus, toggleSidebar } from "@/features/shell";
@@ -54,11 +53,11 @@ async function addProject(ctx: PaletteCtx) {
   let workspaceId = current?.type === "Workspace" ? current.id : null;
   if (!workspaceId) {
     const home = ctx.projects[0];
-    const created = await workspacesCreate(`${home?.name ?? "New"} workspace`, home ? [home.id] : []);
+    const created = await commands.workspacesCreate(`${home?.name ?? "New"} workspace`, home ? [home.id] : []);
     if (created.status === "error") return void toast.error(created.error);
     workspaceId = created.data.id;
   }
-  const r = await workspacesAddProject(workspaceId, picked);
+  const r = await commands.workspacesAddProject(workspaceId, picked);
   if (r.status === "error") toast.error(r.error);
 }
 

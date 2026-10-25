@@ -9,6 +9,7 @@ import { CommandPalette } from "@/features/palette";
 import { SettingsDialog, settingsStore } from "@/features/settings";
 import { Sidebar } from "@/features/sidebar";
 import { createView, openTaskInView, TaskPicker, ViewCanvas, viewsStore } from "@/features/views";
+import { addDroppedPath, useDocRows, WorkspaceSettings } from "@/features/workspace";
 import { boardSettings } from "../boardSettings";
 import { openTaskInCurrentView } from "../openTask";
 import { boardProject, shellStore } from "../store";
@@ -52,6 +53,9 @@ export function ShellLayout({ info: given }: { info?: WindowInfo }): ReactElemen
   const projects = projectsStore.useSelector(selectProjectList);
   const byScope = settingsStore.useSelector((s) => s.byScope);
   const projectIds = useMemo(() => projects.map((p) => p.id), [projects]);
+  const docs = useDocRows(shell.container);
+  const container = shell.container;
+  const onAddPath = useCallback((path: string) => container && addDroppedPath(container, path), [container]);
   const onNewTask = useCallback(() => newTask(), []);
   useShellKeys({ newTask: onNewTask, projectIds });
   const settings = useMemo(
@@ -66,7 +70,7 @@ export function ShellLayout({ info: given }: { info?: WindowInfo }): ReactElemen
       <TabStrip />
       <div className="flex min-h-0 flex-1">
         {rail && <ProjectRail />}
-        <Sidebar />
+        <Sidebar docs={docs} onAddPath={onAddPath} />
         <main className="relative min-w-0 flex-1">
           <div id={BOARD_PANEL_ID} hidden={shell.activeTab !== "board"} className="h-full overflow-auto">
             <Board
@@ -90,7 +94,13 @@ export function ShellLayout({ info: given }: { info?: WindowInfo }): ReactElemen
       <TaskPicker />
       <CommandPalette />
       <NotificationBridge />
-      <SettingsDialog container={shell.container} projects={projects} />
+      <SettingsDialog
+        container={shell.container}
+        projects={projects}
+        workspaceTab={
+          shell.container.type === "Workspace" ? <WorkspaceSettings workspaceId={shell.container.id} /> : undefined
+        }
+      />
     </div>
   );
 }

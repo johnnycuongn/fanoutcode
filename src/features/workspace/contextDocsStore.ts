@@ -10,6 +10,13 @@ export function containerKey(c: Container): string {
   return c.type === "Project" ? `project:${c.id}` : `workspace:${c.id}`;
 }
 
+/** The inverse of `containerKey`. */
+export function containerFromKey(key: string): Container {
+  const [kind, ...rest] = key.split(":");
+  const id = rest.join(":");
+  return kind === "project" ? { type: "Project", id } : { type: "Workspace", id };
+}
+
 const base = createStore<ContextDocsState>({ docs: {}, fetching: {} });
 let listening = false;
 

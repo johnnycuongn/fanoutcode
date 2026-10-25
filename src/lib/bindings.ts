@@ -777,6 +777,17 @@ async workspacesSetPolicy(id: WorkspaceId, policy: LinkPolicy, overrides: Projec
     else return { status: "error", error: e  as any };
 }
 },
+/**
+ * A workspace-scope setting, mirrored into the workspace file (write-through or dirty); `null` clears it.
+ */
+async workspacesSetSetting(id: WorkspaceId, key: string, value: JsonValue) : Promise<Result<Workspace, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("workspaces_set_setting", { id, key, value }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async workspacesStatus(id: WorkspaceId) : Promise<Result<WorkspaceStatus, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("workspaces_status", { id }) };

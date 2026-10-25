@@ -9,6 +9,10 @@ import { commands, type WindowInfo } from "@/lib/bindings";
 const ShellLayout = lazy(() => import("@/features/shell").then((m) => ({ default: m.ShellLayout })));
 const StartScreen = lazy(() => import("@/features/start-screen").then((m) => ({ default: m.StartScreen })));
 const Onboarding = lazy(() => import("@/features/start-screen").then((m) => ({ default: m.Onboarding })));
+// The review of a workspace file from elsewhere, shown over any window (Plan 10).
+const WorkspaceImportDialog = lazy(() =>
+  import("@/features/workspace").then((m) => ({ default: m.WorkspaceImportDialog })),
+);
 
 // Dev builds only: `#/dev/primitives` shows the primitives gallery. The dead branch in production lets Rollup drop it.
 const PrimitivesGallery = import.meta.env.DEV ? lazy(() => import("./dev/primitives")) : null;
@@ -37,6 +41,7 @@ export default function App(): ReactElement {
     <UiProvider>
       <Suspense fallback={null}>
         <Root />
+        <WorkspaceImportDialog />
       </Suspense>
     </UiProvider>
   );

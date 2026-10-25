@@ -40,12 +40,19 @@ pub fn context_docs_add(
     label: Option<String>,
 ) -> Result<ContextDoc> {
     let container = parse_container(&container)?;
-    let target = match kind {
-        ContextDocKind::File | ContextDocKind::Folder => std::fs::canonicalize(target.trim())
-            .map_err(|_| Error::Precondition("That file or folder does not exist.".into()))?
-            .to_string_lossy()
-            .into_owned(),
-        _ => target,
+    // a dropped or picked path is a File or a Folder by what it is on disk
+    let (kind, target) = match kind {
+        ContextDocKind::File | ContextDocKind::Folder => {
+            let path = std::fs::canonicalize(target.trim())
+                .map_err(|_| Error::Precondition("That file or folder does not exist.".into()))?;
+            let kind = if path.is_dir() {
+                ContextDocKind::Folder
+            } else {
+                ContextDocKind::File
+            };
+            (kind, path.to_string_lossy().into_owned())
+        }
+        _ => (kind, target),
     };
     let doc = state.context_docs.add(&container, kind, &target, label.as_deref())?;
     announce(&app, container);

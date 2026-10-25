@@ -106,6 +106,7 @@ pub fn builder() -> Builder<tauri::Wry> {
             workspaces::workspaces_save,
             workspaces::workspaces_save_as,
             workspaces::workspaces_set_policy,
+            workspaces::workspaces_set_setting,
             workspaces::workspaces_status,
             workspaces::workspaces_reload,
             workspaces::workspaces_relocate_file,
