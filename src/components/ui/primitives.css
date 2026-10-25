@@ -16,6 +16,30 @@
     animation: none;
   }
 }
+/* AppMark: the fan turns once every 1.6 s and the agents drift outward and back. Reduced motion stops both (the
+   component also drops the classes). */
+@utility animate-app-mark-spin {
+  animation: tc-app-mark-spin 1.6s linear infinite;
+}
+@utility animate-app-mark-drift {
+  animation: tc-app-mark-drift 1.6s ease-in-out infinite;
+}
+@keyframes tc-app-mark-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes tc-app-mark-drift {
+  50% {
+    transform: translateX(24px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-app-mark-spin,
+  .animate-app-mark-drift {
+    animation: none;
+  }
+}
 [data-motion="reduced"][data-vaul-drawer],
 [data-motion="reduced"][data-vaul-overlay] {
   transition-duration: 150ms !important;

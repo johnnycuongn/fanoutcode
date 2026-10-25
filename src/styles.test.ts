@@ -46,6 +46,11 @@ it("defines every semantic token and swatch", () => {
     expect(css).toContain(`--color-swatch-${s}:`);
 });
 
+it("defines the brand mark tokens", () => {
+  for (const t of ["navy-from", "navy-to", "blade-from", "blade-to", "guard", "hub"])
+    expect(css).toMatch(new RegExp(`--brand-${t}: #[0-9a-f]{6};`));
+});
+
 it("switches by data-theme, not by media query, and offers the accent presets", () => {
   expect(css).toContain('[data-theme="dark"]');
   expect(css).not.toMatch(/prefers-color-scheme/);

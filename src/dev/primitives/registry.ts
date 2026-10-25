@@ -40,4 +40,5 @@ export const pages: ExamplePage[] = [
   page("Panel", "Surface with header, body and footer", () => import("./pages/PanelPage")),
   page("Resizable", "Draggable, keyboard-operable split", () => import("./pages/ResizablePage")),
   page("Slider", "One-thumb range with keyboard steps", () => import("./pages/SliderPage")),
+  page("AppMark", "The Fanout Code brand mark, spinning while agents work", () => import("./pages/AppMarkPage")),
 ];

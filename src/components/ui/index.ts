@@ -1,6 +1,7 @@
 // The primitives' public surface. Everything the app composes comes from here; nothing under src/features/ is
 // imported by a primitive. PRIMITIVES maps each primitive family to the names it exports, in the order of spec
-// §15.3 (a test pins the order, that every listed name exists, and that every family has a dev example page).
+// §15.3, then later additions (a test pins the order, that every listed name exists, and that every family has a dev
+// example page).
 export * from "./cx";
 export * from "./tokens";
 export * from "./Button";
@@ -32,6 +33,7 @@ export * from "./EmptyState";
 export * from "./Panel";
 export * from "./Resizable";
 export * from "./Slider";
+export * from "./AppMark";
 
 export const PRIMITIVES = {
   Button: ["Button", "buttonVariants"],
@@ -116,6 +118,7 @@ export const PRIMITIVES = {
   Panel: ["Panel", "PanelHeader", "PanelBody", "PanelFooter"],
   Resizable: ["Resizable"],
   Slider: ["Slider"],
+  AppMark: ["AppMark"],
 } as const satisfies Record<string, readonly string[]>;
 
 export type PrimitiveName = keyof typeof PRIMITIVES;

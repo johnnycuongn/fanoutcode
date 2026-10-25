@@ -116,6 +116,17 @@
   --tc-accent: #fb923c;
 }
 
+/* Brand mark colours (AppMark; the app icon's art in src-tauri/icons/source/), the same in both themes. The mark's
+   agents use the stage colours. */
+:root {
+  --brand-navy-from: #1b2140;
+  --brand-navy-to: #2f3a72;
+  --brand-blade-from: #7aa2ff;
+  --brand-blade-to: #3b6cff;
+  --brand-guard: #cfd6ff;
+  --brand-hub: #eef1ff;
+}
+
 @layer base {
   html,
   body,
