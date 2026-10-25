@@ -14,9 +14,15 @@ use livespec_core::project::{retrieve, scan, Snippet};
 use serde_json::json;
 
 fn key() -> Option<String> {
-    std::env::var("TYPESAFE_API_KEY").ok().filter(|k| !k.trim().is_empty()).or_else(|| {
-        env_file::read_value(Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../.env.local")), "TYPESAFE_API_KEY")
-    })
+    std::env::var("TYPESAFE_API_KEY")
+        .ok()
+        .filter(|k| !k.trim().is_empty())
+        .or_else(|| {
+            env_file::read_value(
+                Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../.env.local")),
+                "TYPESAFE_API_KEY",
+            )
+        })
 }
 
 #[tokio::test]
@@ -38,7 +44,11 @@ async fn noul_and_choice_round_trip() {
         let r = jev.ask(&drafts, &gate, Duration::from_secs(10)).await.unwrap();
         let noul = r.noul("changed").expect("a noul answer");
         assert!((0.0..=1.0).contains(&noul));
-        eprintln!("gate noul   round {round}: {:>5} ms  noul={noul:.2}  model={}", t.elapsed().as_millis(), r.model);
+        eprintln!(
+            "gate noul   round {round}: {:>5} ms  noul={noul:.2}  model={}",
+            t.elapsed().as_millis(),
+            r.model
+        );
     }
 
     let relation = BTreeMap::from([("relation".to_owned(), check::question())]);
@@ -47,13 +57,19 @@ async fn noul_and_choice_round_trip() {
         start_line: 1,
         text: "export function createInvoice(cartId: string) {\n  return { cartId, total: 0 };\n}".into(),
     };
-    let claim_state = check::state("`createInvoice` ignores the cart's items when computing the total.", &code);
+    let claim_state = check::state(
+        "`createInvoice` ignores the cart's items when computing the total.",
+        &code,
+    );
     for round in 1..=3 {
         let t = Instant::now();
         let r = jev.ask(&claim_state, &relation, Duration::from_secs(10)).await.unwrap();
         let (choice, confidence) = r.choice("relation").expect("a choice answer");
         assert!(["supports", "contradicts", "says_nothing"].contains(&choice));
-        eprintln!("check choice round {round}: {:>5} ms  {choice} ({confidence:.2})", t.elapsed().as_millis());
+        eprintln!(
+            "check choice round {round}: {:>5} ms  {choice} ({confidence:.2})",
+            t.elapsed().as_millis()
+        );
     }
 }
 
@@ -93,6 +109,9 @@ async fn pre_phase_on_this_repo() {
             }
         }
     }
-    let keyword: Vec<String> = retrieve(&index, changed, 5, 30_000).into_iter().map(|s| s.path).collect();
+    let keyword: Vec<String> = retrieve(&index, changed, 5, 30_000)
+        .into_iter()
+        .map(|s| s.path)
+        .collect();
     eprintln!("keyword order (no Jev): {keyword:?}");
 }

@@ -41,7 +41,7 @@ export function useShellEvents(info: WindowInfo | null): { ready: boolean; dirty
   const name = projectsStore.useSelector((s) =>
     container?.type === "Project" ? s.byId[container.id]?.name : undefined,
   );
-  const title = name ?? info?.title ?? "Team Code";
+  const title = name ?? info?.title ?? "Fanout Code";
 
   useEffect(() => {
     if (!info || !info.container) return;

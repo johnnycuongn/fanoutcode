@@ -36,7 +36,7 @@ export async function relocateRecent(entry: RecentEntry): Promise<void> {
 
 /** Missing workspace file: write the record out again (Plan 10's `workspaces_save_as`). */
 export async function reexportWorkspace(entry: RecentEntry): Promise<void> {
-  const path = await saveDialog({ defaultPath: `${entry.name}.teamcode-workspace.json` });
+  const path = await saveDialog({ defaultPath: `${entry.name}.fanoutcode-workspace.json` });
   if (typeof path === "string") report(await commands.workspacesSaveAs(entry.id, path));
 }
 

@@ -1,4 +1,6 @@
-# Team Code Implementation Plans — Overview and Contracts
+# Fanout Code Implementation Plans — Overview and Contracts
+
+Renamed from Team Code to Fanout Code on 2026-10-25; identifiers follow the new name.
 
 **Spec:** `docs/superpowers/specs/2026-10-24-team-code-design.md` (approved 2026-10-24). Every plan argues from it; section numbers below refer to it.
 

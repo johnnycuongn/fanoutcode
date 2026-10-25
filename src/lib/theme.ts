@@ -10,8 +10,8 @@ export type { ThemePreference } from "@/lib/bindings";
 export type ResolvedTheme = "light" | "dark";
 export type AccentPreset = "blue" | "violet" | "teal" | "orange";
 
-const THEME_KEY = "teamcode.theme";
-const ACCENT_KEY = "teamcode.accent";
+const THEME_KEY = "fanoutcode.theme";
+const ACCENT_KEY = "fanoutcode.accent";
 const THEMES: readonly ThemePreference[] = ["System", "Light", "Dark"];
 const ACCENTS: readonly AccentPreset[] = ["blue", "violet", "teal", "orange"];
 const DARK_QUERY = "(prefers-color-scheme: dark)";

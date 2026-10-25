@@ -1,8 +1,8 @@
-// ESLint 9 flat config. The `teamcode` rules (eslint/rules/) enforce the repository rules in CLAUDE.md.
+// ESLint 9 flat config. The `fanoutcode` rules (eslint/rules/) enforce the repository rules in CLAUDE.md.
 import prettier from "eslint-config-prettier";
 import reactHooks from "eslint-plugin-react-hooks";
 import tseslint from "typescript-eslint";
-import teamcode from "./eslint/rules/index.js";
+import fanoutcode from "./eslint/rules/index.js";
 
 export default tseslint.config(
   {
@@ -21,12 +21,12 @@ export default tseslint.config(
   { files: ["**/*.{ts,tsx}"], ...reactHooks.configs.flat.recommended },
   {
     files: ["src/**/*.{ts,tsx}"],
-    plugins: { teamcode },
+    plugins: { fanoutcode },
     rules: {
-      "teamcode/no-raw-controls": "error",
-      "teamcode/no-colour-literals": "error",
-      "teamcode/no-manual-ipc": "error",
-      "teamcode/feature-boundaries": "error",
+      "fanoutcode/no-raw-controls": "error",
+      "fanoutcode/no-colour-literals": "error",
+      "fanoutcode/no-manual-ipc": "error",
+      "fanoutcode/feature-boundaries": "error",
     },
   },
   prettier,

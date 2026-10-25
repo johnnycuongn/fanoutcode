@@ -31,7 +31,11 @@ pub fn asset_name() -> Option<String> {
 }
 
 pub fn find_server_binary(dir: &Path) -> Option<PathBuf> {
-    let name = if cfg!(windows) { "llama-server.exe" } else { "llama-server" };
+    let name = if cfg!(windows) {
+        "llama-server.exe"
+    } else {
+        "llama-server"
+    };
     let mut stack = vec![dir.to_path_buf()];
     while let Some(d) = stack.pop() {
         for entry in std::fs::read_dir(&d).ok()?.flatten() {
@@ -56,7 +60,13 @@ pub async fn install(
     let asset = asset_name()
         .ok_or_else(|| Error::Precondition("Local models aren't supported on this platform yet.".into()))?;
     let archive = paths.downloads_dir().join(&asset);
-    download::download(http, &format!("{RELEASES}/{LLAMA_CPP_BUILD}/{asset}"), &archive, on_progress).await?;
+    download::download(
+        http,
+        &format!("{RELEASES}/{LLAMA_CPP_BUILD}/{asset}"),
+        &archive,
+        on_progress,
+    )
+    .await?;
 
     let target = paths.runtime_dir();
     let staging = paths.root.join("runtime.staging");
@@ -114,7 +124,9 @@ impl LocalServer {
             .server_binary()
             .ok_or_else(|| Error::Precondition("Install the local runtime first (Settings).".into()))?;
         if !model_path.is_file() {
-            return Err(Error::Precondition(format!("Download the {model_id} model first (Settings).")));
+            return Err(Error::Precondition(format!(
+                "Download the {model_id} model first (Settings)."
+            )));
         }
         let lib_dir = binary.parent().unwrap_or(Path::new(".")).to_path_buf();
         let port = free_port()?;
@@ -135,7 +147,12 @@ impl LocalServer {
         cmd.creation_flags(0x0800_0000);
 
         let child = cmd.spawn()?;
-        let mut server = Self { child, port, model_id: model_id.to_owned(), context_tokens };
+        let mut server = Self {
+            child,
+            port,
+            model_id: model_id.to_owned(),
+            context_tokens,
+        };
         server.wait_healthy(http, paths).await?;
         Ok(server)
     }

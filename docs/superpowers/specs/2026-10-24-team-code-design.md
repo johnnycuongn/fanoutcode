@@ -1,4 +1,6 @@
-# Team Code — design
+# Fanout Code — design
+
+Renamed from Team Code to Fanout Code on 2026-10-25; identifiers follow the new name.
 
 Status: **approved by Johnny on 2026-10-24.** Rewritten the same day around windows and workspaces before approval. Written from the brainstorm in `docs/superpowers/brainstorm/` (original brief in `2026-10-24-team-code-intent.md`, choices in `2026-10-24-decisions.md`). Lines marked **(call)** are Claude's decisions, made so a builder can plan; Johnny can overturn any of them. Everything else is what Johnny chose or said.
 

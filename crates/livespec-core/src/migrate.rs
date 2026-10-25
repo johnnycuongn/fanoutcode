@@ -73,10 +73,16 @@ pub fn move_app_dirs(new_dirs: &[PathBuf], old_identifier: &str, mut log: impl F
             continue;
         }
         seen.push(new);
-        let Some(old) = old_path(new, old_identifier) else { continue };
+        let Some(old) = old_path(new, old_identifier) else {
+            continue;
+        };
         match move_dir(&old, new) {
             Ok(Moved::Renamed) => log(format!("moved {} to {}", old.display(), new.display())),
-            Ok(Moved::Copied) => log(format!("copied {} to {} (the old folder is still there)", old.display(), new.display())),
+            Ok(Moved::Copied) => log(format!(
+                "copied {} to {} (the old folder is still there)",
+                old.display(),
+                new.display()
+            )),
             Ok(Moved::Nothing) => {}
             Err(e) => log(format!("couldn't move {} to {}: {e}", old.display(), new.display())),
         }
@@ -125,7 +131,12 @@ mod tests {
     #[test]
     fn the_old_path_swaps_the_final_component() {
         let new = Path::new("/Users/x/Library/Application Support/app.livespec.desktop");
-        assert_eq!(old_path(new, OLD_IDENTIFIER), Some(PathBuf::from("/Users/x/Library/Application Support/app.livebrainstorm.desktop")));
+        assert_eq!(
+            old_path(new, OLD_IDENTIFIER),
+            Some(PathBuf::from(
+                "/Users/x/Library/Application Support/app.livebrainstorm.desktop"
+            ))
+        );
         assert_eq!(old_path(Path::new("/"), OLD_IDENTIFIER), None);
     }
 
@@ -157,9 +168,15 @@ mod tests {
         seed(&new);
         fs::write(new.join("settings.json"), r#"{"mine":true}"#).unwrap();
         assert_eq!(move_dir(&old, &new).unwrap(), Moved::Nothing);
-        assert_eq!(fs::read_to_string(new.join("settings.json")).unwrap(), r#"{"mine":true}"#);
+        assert_eq!(
+            fs::read_to_string(new.join("settings.json")).unwrap(),
+            r#"{"mine":true}"#
+        );
         assert!(old.exists(), "never deleted");
-        assert_eq!(move_dir(&tmp.path().join("absent"), &tmp.path().join("new2")).unwrap(), Moved::Nothing);
+        assert_eq!(
+            move_dir(&tmp.path().join("absent"), &tmp.path().join("new2")).unwrap(),
+            Moved::Nothing
+        );
         assert!(!tmp.path().join("new2").exists());
     }
 

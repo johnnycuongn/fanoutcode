@@ -1,5 +1,5 @@
 // The Commit tab's state per task: the drafted commits, Copy (which records CopyCommit) and Commit (only offered
-// with "Team Code may commit" on, §6.6), and Draft again after a failed draft.
+// with "Fanout Code may commit" on, §6.6), and Draft again after a failed draft.
 import type { TaskId } from "@/lib/bindings";
 import { errorMessage, live } from "@/lib/ipcResult";
 import { createStore } from "@/lib/stores/createStore";

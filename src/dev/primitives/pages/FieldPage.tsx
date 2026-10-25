@@ -12,7 +12,7 @@ export default function FieldPage(): ReactElement {
         <Textarea rows={3} />
       </Field>
       <Field label="Branch" error="That branch already exists.">
-        <Input mono defaultValue="tc/rate-limit" />
+        <Input mono defaultValue="fo/rate-limit" />
       </Field>
       <section className="flex flex-col gap-3 rounded-well bg-well p-3">
         <Field label="Test command" layout="row" hint="Run from the project root.">

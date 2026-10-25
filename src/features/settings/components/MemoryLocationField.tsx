@@ -22,7 +22,7 @@ export function MemoryLocationField({ projectId }: { projectId: ProjectId }): Re
     <Field
       label="Memory location"
       layout="row"
-      hint="Memory files stay readable without Team Code. Inside the repo, add the folder to .gitignore or keep it tracked; the app does not decide."
+      hint="Memory files stay readable without Fanout Code. Inside the repo, add the folder to .gitignore or keep it tracked; the app does not decide."
     >
       <p className="truncate font-mono text-xs text-ink">
         {location?.type === "Folder" ? location.path : "App storage"}

@@ -17,7 +17,7 @@ export interface DockState {
   watcherLog: Record<string, WatcherEntry[]>;
 }
 
-/** Default: localStorage key "teamcode.dock". */
+/** Default: localStorage key "fanoutcode.dock". */
 export interface DockPersist {
   read(): Partial<DockState> | null;
   write(s: DockState): void;

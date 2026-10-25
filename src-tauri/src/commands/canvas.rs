@@ -1,9 +1,9 @@
 //! Team-canvas commands (Plan 09): the task's saved node positions.
 
+use fanoutcode_core::canvas::{positions_load, positions_save, CanvasPosition};
+use fanoutcode_core::domain::TaskId;
+use fanoutcode_core::{db, Result};
 use tauri::State;
-use teamcode_core::canvas::{positions_load, positions_save, CanvasPosition};
-use teamcode_core::domain::TaskId;
-use teamcode_core::{db, Result};
 
 use crate::state::AppState;
 

@@ -1,4 +1,4 @@
-// teamcode/no-manual-ipc: commands and events go through the generated src/lib/bindings.ts (ADR 0001). Importing
+// fanoutcode/no-manual-ipc: commands and events go through the generated src/lib/bindings.ts (ADR 0001). Importing
 // `invoke`, `listen` or anything else from @tauri-apps/api/core or /event is reported, except `Channel` from core:
 // a caller creates one to receive a generated command's stream.
 

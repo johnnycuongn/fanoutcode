@@ -1,21 +1,21 @@
 //! Sessions in the shell (Plan 04): launching a task's primary session or a plain terminal on a PTY, feeding the
 //! registry from the PTY threads, and reporting exits. Stage effects and hook events are in `effects`, stopping in
-//! `stop`, the quit warning in `quit`; the logic itself lives in `teamcode_core::sessions`.
+//! `stop`, the quit warning in `quit`; the logic itself lives in `fanoutcode_core::sessions`.
 
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use chrono::Utc;
-use tauri::{AppHandle, Manager};
-use teamcode_core::domain::{AgentKind, Project, ProjectId, Session, SessionId, Task, TaskId, WorktreeChoice};
-use teamcode_core::hooks::{event_log_path, hook_specs, status_line_command, user_status_line};
-use teamcode_core::roster::{self, RosterLevel, RosterScope};
-use teamcode_core::sessions::{
+use fanoutcode_core::domain::{AgentKind, Project, ProjectId, Session, SessionId, Task, TaskId, WorktreeChoice};
+use fanoutcode_core::hooks::{event_log_path, hook_specs, status_line_command, user_status_line};
+use fanoutcode_core::roster::{self, RosterLevel, RosterScope};
+use fanoutcode_core::sessions::{
     claude_launch, codex_launch, settings_path, shell_launch, state_after_exit, ClaudeLaunch, GeneratedSettings,
     LaunchSpec,
 };
-use teamcode_core::workspace::launch as workspace_launch;
-use teamcode_core::{db, memory, worktree, Error, Result};
+use fanoutcode_core::workspace::launch as workspace_launch;
+use fanoutcode_core::{db, memory, worktree, Error, Result};
+use tauri::{AppHandle, Manager};
 
 use crate::events::{self, SessionExited, SessionQueueChanged};
 use crate::observe::log_err;

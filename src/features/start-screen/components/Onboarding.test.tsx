@@ -14,12 +14,12 @@ describe("Onboarding", () => {
     render(<Onboarding onDone={onDone} />);
     expect(screen.getByText(/A clean worktree is removed when its session exits/)).toBeInTheDocument();
     expect(screen.getByText(/offered, never automatic/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /Team Code-managed/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Fanout Code-managed/ }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     fireEvent.click(screen.getByRole("radio", { name: "Dark" }));
     expect(applyTheme).toHaveBeenCalledWith("Dark");
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    await vi.waitFor(() => expect(commands.settingsFirstRunComplete).toHaveBeenCalledWith("TeamCodeManaged", "Dark"));
+    await vi.waitFor(() => expect(commands.settingsFirstRunComplete).toHaveBeenCalledWith("FanoutCodeManaged", "Dark"));
     expect(onDone).toHaveBeenCalled();
   });
 });

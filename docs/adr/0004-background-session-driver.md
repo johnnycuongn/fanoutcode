@@ -6,7 +6,7 @@
 
 ## Context
 
-Sessions sit behind the `SessionDriver` trait (`teamcode_core::sessions::driver`). **Owned** spawns the agent in a
+Sessions sit behind the `SessionDriver` trait (`fanoutcode_core::sessions::driver`). **Owned** spawns the agent in a
 PTY the app owns, so quitting the app ends its sessions. **Background** would start Claude Code detached with
 `claude --bg`, run `claude attach <id>` in the pane, and reconcile at launch with `claude agents --json --cwd <root>`.
 
@@ -20,7 +20,7 @@ The spec (§7.1) sets the pass bar for the spike:
 > stays under 150 MB above Owned. Any failure rejects Background for this release.
 
 The spike lives on the branch `spike/background-driver` (not merged). It adds
-`crates/teamcode-core/src/sessions/background.rs`: `BackgroundDriver` implements `SessionDriver`. `start` runs
+`crates/fanoutcode-core/src/sessions/background.rs`: `BackgroundDriver` implements `SessionDriver`. `start` runs
 `claude --bg <claude_launch args>` in the launch's cwd, parses the printed id, and spawns the pane PTY as
 `claude attach <id>`. `graceful_exit` types no keys, because Stop agent becomes `claude stop <id>`. `remove` runs
 `claude rm <id>`. `ends_on_quit` is false. `reconcile(root)` parses `claude agents --json --cwd <root>`. The branch

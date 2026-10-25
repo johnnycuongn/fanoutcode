@@ -3,9 +3,9 @@
 
 use std::path::{Path, PathBuf};
 
-use teamcode_core::changes::{self, attributor::Attributor, AttributedFile};
-use teamcode_core::domain::{Task, TaskId};
-use teamcode_core::{db, Error, Result};
+use fanoutcode_core::changes::{self, attributor::Attributor, AttributedFile};
+use fanoutcode_core::domain::{Task, TaskId};
+use fanoutcode_core::{db, Error, Result};
 
 use crate::state::AppState;
 
@@ -83,7 +83,7 @@ pub fn log_err<T>(what: &str, r: Result<T>) -> Option<T> {
     match r {
         Ok(v) => Some(v),
         Err(e) => {
-            eprintln!("Team Code: {what}: {e}");
+            eprintln!("Fanout Code: {what}: {e}");
             None
         }
     }

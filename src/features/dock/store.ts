@@ -5,7 +5,7 @@ import { createStore } from "@/lib/stores/createStore";
 import { DEFAULT_HEIGHT, GROWN_HEIGHT, defaultTabFor, entryState, resolveTab, visibleTabs } from "./tabRules";
 import type { DockPersist, DockState, DockTab, WatcherEntry } from "./types";
 
-const KEY = "teamcode.dock";
+const KEY = "fanoutcode.dock";
 const WATCHER_CAP = 50;
 
 export const localPersist: DockPersist = {

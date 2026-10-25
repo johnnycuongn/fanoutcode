@@ -2,11 +2,11 @@
 
 use std::path::PathBuf;
 
+use fanoutcode_core::domain::{Container, MemoryLocation, ProjectId, TaskId};
+use fanoutcode_core::memory::{MemoryFile, TaskFolder};
+use fanoutcode_core::{db, Error, Result};
 use tauri::{AppHandle, State};
 use tauri_plugin_dialog::DialogExt;
-use teamcode_core::domain::{Container, MemoryLocation, ProjectId, TaskId};
-use teamcode_core::memory::{MemoryFile, TaskFolder};
-use teamcode_core::{db, Error, Result};
 
 use super::projects::{self, ProjectPatch};
 use crate::events;

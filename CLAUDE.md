@@ -5,18 +5,18 @@ Guidance for Claude Code and every other agent working in this repository. Keep 
 
 ## What this is
 
-Team Code is a macOS desktop app (Tauri 2) for one developer running several AI coding agents across several projects.
+Fanout Code is a macOS desktop app (Tauri 2) for one developer running several AI coding agents across several projects.
 A window holds a project or a workspace of linked projects; each project has a Kanban board of tasks, and each task owns
 a real terminal session (Claude Code, Codex or a shell) and a markdown memory folder, moving Spec → Plan → Build → Review
 → Test → Commit → Done.
 
 ## Layers
 
-- `crates/teamcode-core` — domain, pipeline, SQLite, memory, git. Plain Rust with tests. **Never depends on Tauri.**
+- `crates/fanoutcode-core` — domain, pipeline, SQLite, memory, git. Plain Rust with tests. **Never depends on Tauri.**
 - `src-tauri` — the thin shell: `AppState`, Rust-created windows (`w-<n>`), commands and events exported by tauri-specta.
 - `src/` — React 19 webview. **No state library**: module stores built with `createStore` and read with
   `useSyncExternalStore`.
-- `crates/livespec-core` is copied from LiveSpec unchanged; adapt it from `teamcode-core` or the shell, never edit it.
+- `crates/livespec-core` is copied from LiveSpec unchanged; adapt it from `fanoutcode-core` or the shell, never edit it.
 
 ## Commands
 
@@ -35,7 +35,7 @@ that refuses every commit; run `npm ci` again.
 npm run tauri dev                                  # the app
 npm run dev                                        # Vite alone; every invoke fails outside Tauri
 npm run typecheck                                  # tsc --noEmit
-npm run lint                                       # ESLint (with the Team Code rules) and Prettier --check
+npm run lint                                       # ESLint (with the Fanout Code rules) and Prettier --check
 npx vitest run                                     # webview and lint-rule tests
 cargo test --workspace                             # Rust tests
 cargo clippy --workspace --all-targets -- -D warnings
@@ -49,11 +49,11 @@ npm run e2e                                        # Playwright smoke suite (nee
 ## Rules that lint enforces
 
 - Raw `<input>`, `<select>`, `<textarea>`, `<button>`, `<dialog>` only under `src/components/ui/`; everything else
-  composes the primitives (`teamcode/no-raw-controls`).
-- Hex colours and inline colour styles only in `src/styles.css`; use semantic classes (`teamcode/no-colour-literals`).
+  composes the primitives (`fanoutcode/no-raw-controls`).
+- Hex colours and inline colour styles only in `src/styles.css`; use semantic classes (`fanoutcode/no-colour-literals`).
 - IPC only through `src/lib/bindings.ts`; never import `invoke` or `listen` from `@tauri-apps/api` directly
-  (`teamcode/no-manual-ipc`).
-- A feature imports another feature only through its `index.ts` (`teamcode/feature-boundaries`).
+  (`fanoutcode/no-manual-ipc`).
+- A feature imports another feature only through its `index.ts` (`fanoutcode/feature-boundaries`).
 
 ## Generated bindings
 
@@ -80,7 +80,7 @@ data-carrying enums are `#[serde(tag = "type")]` with unit or struct variants on
   `src/dev/primitives/pages/<Name>Page.tsx` registered in `registry.ts`.
 - **A ⌘ chord**: an entry in `KEYMAP` (`src/lib/keyboard.ts`) and a `registerHandler` call. The native menu
   (`src-tauri/src/menu.rs`) must not claim the chord; its test reads the keymap.
-- **A migration**: `crates/teamcode-core/migrations/00NN_<name>.sql` (NN = owning plan) and one line in
+- **A migration**: `crates/fanoutcode-core/migrations/00NN_<name>.sql` (NN = owning plan) and one line in
   `db::MIGRATIONS`. Never edit an applied migration.
 
 ## Budgets

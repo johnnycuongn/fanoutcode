@@ -1,12 +1,12 @@
 //! Link binding glue (Plan 10): fixes a task's linked projects at its first session start and starts the brief
-//! helper for linked projects without a brief. The rules live in `teamcode_core::workspace::{link, launch}`.
+//! helper for linked projects without a brief. The rules live in `fanoutcode_core::workspace::{link, launch}`.
 
+use fanoutcode_core::domain::{Container, Task, TaskId, WindowId};
+use fanoutcode_core::helpers::HelperKind;
+use fanoutcode_core::workspace::fragments::LinkContext;
+use fanoutcode_core::workspace::launch;
+use fanoutcode_core::Result;
 use tauri::AppHandle;
-use teamcode_core::domain::{Container, Task, TaskId, WindowId};
-use teamcode_core::helpers::HelperKind;
-use teamcode_core::workspace::fragments::LinkContext;
-use teamcode_core::workspace::launch;
-use teamcode_core::Result;
 
 use crate::observe::log_err;
 use crate::state::AppState;

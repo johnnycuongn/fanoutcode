@@ -8,7 +8,7 @@ import { all, track } from "./listen";
 import type { CardActivity, TeamMember } from "./types";
 
 /** The line a role prints when it finishes a stage (overview: `SENTINEL_PREFIX`). */
-const SENTINEL_PREFIX = "TEAMCODE: ";
+const SENTINEL_PREFIX = "FANOUTCODE: ";
 const FILE_TOOLS: Record<string, string> = {
   Edit: "file_path",
   Write: "file_path",

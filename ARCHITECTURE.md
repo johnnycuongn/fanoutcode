@@ -1,6 +1,6 @@
 # Architecture
 
-Team Code is a macOS desktop app for one developer who runs several AI coding agents at once across several projects.
+Fanout Code is a macOS desktop app for one developer who runs several AI coding agents at once across several projects.
 A window shows one project or one workspace (several linked projects). Each project has a Kanban board; each card is a
 task that owns a real terminal session and a markdown memory folder and moves through Spec → Plan → Build → Review →
 Test → Commit → Done, handing back to the developer at the end of every stage.
@@ -33,7 +33,7 @@ Webview (src/)          React 19, Vite, Tailwind v4, module stores, generated bi
 Shell (src-tauri/)      AppState, Rust-created windows w-<n>, commands, events, keychain
    │  plain Rust calls
    ▼
-Core (crates/teamcode-core/)   domain types, ids, SQLite and migrations, window registry, recent list, …
+Core (crates/fanoutcode-core/)   domain types, ids, SQLite and migrations, window registry, recent list, …
    └── crates/livespec-core/   copied from LiveSpec unchanged: providers, briefs, LiveSpec sections
 ```
 
@@ -69,19 +69,19 @@ src-tauri/
       tasks,tests,views,windows,workspaces}.rs   (17 domains plus mod.rs)
   capabilities/default.json  tauri.conf.json
 crates/
-  teamcode-core/src/{lib,error,ids,domain,recent,windows,activity,canvas,testrun,worktree}.rs
-  teamcode-core/src/{db,pipeline,memory,settings,prompts,roster,sessions,hooks,changes,git,workspace,cost,helpers,
+  fanoutcode-core/src/{lib,error,ids,domain,recent,windows,activity,canvas,testrun,worktree}.rs
+  fanoutcode-core/src/{db,pipeline,memory,settings,prompts,roster,sessions,hooks,changes,git,workspace,cost,helpers,
       jira,views}/
   livespec-core/               copied from github.com/johnnycuongn/live-spec, unchanged
 ```
 
 ## The three layers
 
-**Core** (`crates/teamcode-core`, lib `teamcode_core`) has no Tauri dependency. Plan 01 gives it `error` (one `Error`
+**Core** (`crates/fanoutcode-core`, lib `fanoutcode_core`) has no Tauri dependency. Plan 01 gives it `error` (one `Error`
 enum serialised as its message), `ids` (validated id newtypes with fixed prefixes), `domain` (every shared type, serde
 and specta derived), `db` (SQLite, migrations, app-scope settings rows), `recent` (the start screen's recent list) and
-`windows` (the registry of which window shows which container). **Shell** (`src-tauri`, package `teamcode`, lib
-`teamcode_lib`) owns `AppState` (the database connection and the window registry behind `std` mutexes), builds
+`windows` (the registry of which window shows which container). **Shell** (`src-tauri`, package `fanoutcode`, lib
+`fanoutcode_lib`) owns `AppState` (the database connection and the window registry behind `std` mutexes), builds
 windows from Rust, exports commands and events through tauri-specta, and wraps the OS keychain. **Webview** (`src/`)
 renders; it reads state from module stores (`createStore`) with `useSyncExternalStore` and talks to the shell only
 through the generated `src/lib/bindings.ts`.
@@ -116,8 +116,8 @@ providers from `model_provider` plus LiveSpec's own `<app_config>/livespec.json`
 
 ## Persistence
 
-SQLite at `<app_data>/teamcode.db` (WAL, foreign keys on), migrated at startup by `db::open` from
-`crates/teamcode-core/migrations/00NN_<name>.sql`, where NN is the owning plan; applied versions are recorded in
+SQLite at `<app_data>/fanoutcode.db` (WAL, foreign keys on), migrated at startup by `db::open` from
+`crates/fanoutcode-core/migrations/00NN_<name>.sql`, where NN is the owning plan; applied versions are recorded in
 `schema_migrations`, one transaction per file. Settings are rows of the `settings` table keyed by scope (ADR 0002);
 Plan 01 writes the app-scope keys `theme`, `worktree_convention`, `first_run_complete`, `open_windows` and `recent`;
 the registered keys, their levels and defaults are `settings::keys` (Plan 03). `tasks` rows keep the full `Task` in
@@ -126,7 +126,7 @@ The webview mirrors the theme and accent in `localStorage` only so the first pai
 
 ## Security model
 
-No secret crosses IPC: secrets live in the OS keychain under service `app.teamcode.desktop` (`src-tauri/src/secrets.rs`)
+No secret crosses IPC: secrets live in the OS keychain under service `app.fanoutcode.desktop` (`src-tauri/src/secrets.rs`)
 and `Secret` cannot be serialised. Every id that becomes a path matches `^[a-z]+-[0-9a-f-]{1,40}$`. CSP is
 `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:`;
 fonts are bundled, never fetched. Windows are created in Rust only; the webview capability cannot create windows.
@@ -134,7 +134,7 @@ Model and agent output renders only through `MiniMarkdown` or xterm.
 
 ## Errors
 
-`teamcode_core::Error` has six variants: `Precondition` (an instruction shown verbatim), `Provider` (model, CLI or
+`fanoutcode_core::Error` has six variants: `Precondition` (an instruction shown verbatim), `Provider` (model, CLI or
 network), `Io`, `Git`, `Db` and `Invalid` (bad id or malformed input). It serialises as its message, so a command's
 error reaches TypeScript as `{ status: "error", error: string }`.
 
@@ -184,7 +184,7 @@ knows nothing about windows or views. Other features import only `src/features/b
 
 Every task's agent and every plain terminal is a PTY the app owns (Plan 04, spec §7.1–7.3).
 
-- **Core** (`teamcode_core::sessions`). The core holds everything testable without a terminal:
+- **Core** (`fanoutcode_core::sessions`). The core holds everything testable without a terminal:
   - the scrollback ring (`ScrollbackBuffer`, 10,000 lines by default);
   - the 60 Hz `Batcher` and the `FlowControl` high/low water marks (1 MiB / 256 KiB unacknowledged);
   - the `Pty` / `PtySpawner` seam with `fake` doubles;
@@ -232,7 +232,7 @@ A task opens in a pane as `TaskPage` (`src/features/task-page`), which Plan 06's
   with a 500 ms autosave; `SpecSession` debounces `livespec_analyze`, saving first; Approve flushes the save and
   refuses to advance when it failed.
 - **Dock** (`src/features/dock`): Memory, Team (Plan 09's `renderTeam` slot), Changes, Ticket, Test, Commit, bottom
-  or right, tab and height remembered per stage (`localStorage` `teamcode.dock`). `DockSplit` animates grows with
+  or right, tab and height remembered per stage (`localStorage` `fanoutcode.dock`). `DockSplit` animates grows with
   `transitionFor`.
 - **Changes** (`src/features/changes`): `git_changes`/`git_diff` into a CodeMirror 6 merge view (unified or side by
   side), the working side saved with `git_file_write`; review.md notes are line decorations whose cards are React
@@ -240,7 +240,7 @@ A task opens in a pane as `TaskPage` (`src/features/task-page`), which Plan 06's
 - **Test** attaches to the run through `tests_run` (start-or-attach with replay). Entering Test (a board drag,
   Approve changes) and Run tests start the run in the shell (`Effect::RunTest`, the same start-or-attach), and
   `test-started` makes an open tab attach to a run it did not start. **Commit** reads `git_drafts`, offers Commit
-  only with "Team Code may commit" on, and Draft again (`tasks_draft_commits`) after a failed draft. **Ticket** reads
+  only with "Fanout Code may commit" on, and Draft again (`tasks_draft_commits`) after a failed draft. **Ticket** reads
   the generated `jira_*` commands.
 - Every IPC-touching store takes its command set as a parameter; `src/lib/ipcResult.ts`'s `live(...)` builds one over
   the generated `commands` that resolves to the value and rejects with the error string.
@@ -272,54 +272,54 @@ dock and Swap body render it through `renderTeam`; Plan 06's `PaneContentHost` r
 
 ## Workspaces and integrations
 
-- **Record and file.** `teamcode_core::workspace::store::WorkspaceStore` owns the record in SQLite; the
-  `<name>.teamcode-workspace.json` file is a mirror, written through while it lives in app data and marked dirty
+- **Record and file.** `fanoutcode_core::workspace::store::WorkspaceStore` owns the record in SQLite; the
+  `<name>.fanoutcode-workspace.json` file is a mirror, written through while it lives in app data and marked dirty
   (saved on ⌘S with the sidebar focused, or when its window closes) elsewhere; reopening a dirty record keeps the
   record. A watcher reports edits made on disk (`workspace-file-changed`).
 - **Opening a file from elsewhere** goes through `workspace::import`: `preview_open` reads it once (nothing is
   written), lists roots, policy, agents, instructions, settings and references with problems; `confirm_open(token,
 approved_doc_ids)` imports exactly that buffer. Only the record's own unchanged file reopens without review
-  (`open_file`). Roots that are `/`, the home folder or its ancestors, or Team Code's data are refused; file and folder
+  (`open_file`). Roots that are `/`, the home folder or its ancestors, or Fanout Code's data are refused; file and folder
   references are approved one by one; Jira links are never imported.
 - **Linking.** At a task's first session start `workspace::launch::bind_if_first_start` fixes its linked roots (the
   stage action that starts it binds first, `pipeline::prepare_action`, so its prompt already lists them) and
   records `(project id, canonical root)` pairs (`task_links`). Protection is decided by project id
   (`policy::protected_roots`, fail closed) and becomes `Edit(//<root>/**)` deny rules plus the Bash guard
-  (`teamcode guard <roots-file>`, `workspace::guard`), both written into the generated Claude settings at every launch.
+  (`fanoutcode guard <roots-file>`, `workspace::guard`), both written into the generated Claude settings at every launch.
 - **Prompts** take the workspace's policy, protection, briefs, references (only trusted, readable ones) and stage
   instructions through `workspace::launch::fill_prompt_ctx`.
 - **Context docs** are fetched on demand into `<app_data>/context/<project|workspace>-<id>/`; every network hop goes
   through `workspace::url_guard` (no local or link-local addresses, private ranges only for trusted docs, each hop
   pinned).
-- **Jira and Confluence** (`teamcode_core::jira`): the site is the `jira` setting (written only by `jira_link*`); the
+- **Jira and Confluence** (`fanoutcode_core::jira`): the site is the `jira` setting (written only by `jira_link*`); the
   token is in the keychain under an account derived from the linking scope and is sent only to the origin it was
   verified against.
 
 ## Where to change things
 
-| To change              | Edit                                                                            |
-| ---------------------- | ------------------------------------------------------------------------------- |
-| A shared type          | `crates/teamcode-core/src/domain.rs`, then `npm run bindings`                   |
-| The schema             | a new `crates/teamcode-core/migrations/00NN_<name>.sql` plus `db::MIGRATIONS`   |
-| A command              | `src-tauri/src/commands/<domain>.rs` and `src-tauri/src/specta.rs`              |
-| A keyboard chord       | `src/lib/keyboard.ts` (`KEYMAP`); keep `src-tauri/src/menu.rs` off it           |
-| A setting              | one row in `settings_table!` in `crates/teamcode-core/src/settings/keys.rs`     |
-| A stage's behaviour    | `crates/teamcode-core/src/pipeline/enter.rs` and `pipeline/mod.rs`              |
-| A shipped prompt       | `crates/teamcode-core/src/prompts/templates.rs`                                 |
-| An event               | `src-tauri/src/events.rs` and `src-tauri/src/specta.rs`                         |
-| Colours, fonts, radii  | `src/styles.css`                                                                |
-| Theme switching        | `src/lib/theme.ts`                                                              |
-| A lint rule            | `eslint/rules/` and `eslint.config.js`                                          |
-| What a hook event does | `src-tauri/src/hook_feed.rs`; parsing in `crates/teamcode-core/src/hooks/`      |
-| A headless helper      | `crates/teamcode-core/src/helpers/` and `src-tauri/src/helpers.rs`              |
-| Cost accounting        | `crates/teamcode-core/src/cost/`                                                |
-| A primitive            | `src/components/ui/<Name>.tsx`, `index.ts`, and its example page                |
-| A board card or menu   | `src/features/board/components/TaskCard.tsx`, `menu.ts`                         |
-| How an agent launches  | `crates/teamcode-core/src/sessions/launch.rs`, `src-tauri/src/session_service/` |
-| When prompts are sent  | `crates/teamcode-core/src/sessions/inject.rs`, `session_service/effects.rs`     |
-| The terminal pane      | `src/features/views/useXterm.ts`, `components/TerminalPane.tsx`                 |
-| What the canvas shows  | `src/features/canvas/` model modules (`attribution.ts`, `files.ts`, `steps.ts`) |
-| Smoke-suite IPC mocks  | `e2e/fixtures/mockTauri.ts` and `e2e/fixtures/seed.ts`                          |
-| Workspace import rules | `crates/teamcode-core/src/workspace/import.rs`, `import_checks.rs`              |
-| What the guard blocks  | `crates/teamcode-core/src/workspace/guard/rules.rs`                             |
-| Where docs may be read | `crates/teamcode-core/src/workspace/url_guard.rs`, `context_fetch.rs`           |
+| To change              | Edit                                                                              |
+| ---------------------- | --------------------------------------------------------------------------------- |
+| A shared type          | `crates/fanoutcode-core/src/domain.rs`, then `npm run bindings`                   |
+| The schema             | a new `crates/fanoutcode-core/migrations/00NN_<name>.sql` plus `db::MIGRATIONS`   |
+| A command              | `src-tauri/src/commands/<domain>.rs` and `src-tauri/src/specta.rs`                |
+| A keyboard chord       | `src/lib/keyboard.ts` (`KEYMAP`); keep `src-tauri/src/menu.rs` off it             |
+| A setting              | one row in `settings_table!` in `crates/fanoutcode-core/src/settings/keys.rs`     |
+| A stage's behaviour    | `crates/fanoutcode-core/src/pipeline/enter.rs` and `pipeline/mod.rs`              |
+| A shipped prompt       | `crates/fanoutcode-core/src/prompts/templates.rs`                                 |
+| An event               | `src-tauri/src/events.rs` and `src-tauri/src/specta.rs`                           |
+| Colours, fonts, radii  | `src/styles.css`                                                                  |
+| Theme switching        | `src/lib/theme.ts`                                                                |
+| A lint rule            | `eslint/rules/` and `eslint.config.js`                                            |
+| What a hook event does | `src-tauri/src/hook_feed.rs`; parsing in `crates/fanoutcode-core/src/hooks/`      |
+| A headless helper      | `crates/fanoutcode-core/src/helpers/` and `src-tauri/src/helpers.rs`              |
+| Cost accounting        | `crates/fanoutcode-core/src/cost/`                                                |
+| A primitive            | `src/components/ui/<Name>.tsx`, `index.ts`, and its example page                  |
+| A board card or menu   | `src/features/board/components/TaskCard.tsx`, `menu.ts`                           |
+| How an agent launches  | `crates/fanoutcode-core/src/sessions/launch.rs`, `src-tauri/src/session_service/` |
+| When prompts are sent  | `crates/fanoutcode-core/src/sessions/inject.rs`, `session_service/effects.rs`     |
+| The terminal pane      | `src/features/views/useXterm.ts`, `components/TerminalPane.tsx`                   |
+| What the canvas shows  | `src/features/canvas/` model modules (`attribution.ts`, `files.ts`, `steps.ts`)   |
+| Smoke-suite IPC mocks  | `e2e/fixtures/mockTauri.ts` and `e2e/fixtures/seed.ts`                            |
+| Workspace import rules | `crates/fanoutcode-core/src/workspace/import.rs`, `import_checks.rs`              |
+| What the guard blocks  | `crates/fanoutcode-core/src/workspace/guard/rules.rs`                             |
+| Where docs may be read | `crates/fanoutcode-core/src/workspace/url_guard.rs`, `context_fetch.rs`           |

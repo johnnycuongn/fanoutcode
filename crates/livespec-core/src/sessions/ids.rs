@@ -4,8 +4,13 @@
 
 /// `^[tw]-[0-9a-f-]{1,40}$`.
 pub fn valid_id(id: &str) -> bool {
-    let Some(rest) = id.strip_prefix("t-").or_else(|| id.strip_prefix("w-")) else { return false };
-    (1..=40).contains(&rest.len()) && rest.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b) || b == b'-')
+    let Some(rest) = id.strip_prefix("t-").or_else(|| id.strip_prefix("w-")) else {
+        return false;
+    };
+    (1..=40).contains(&rest.len())
+        && rest
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b) || b == b'-')
 }
 
 /// `t-<unix millis, hex>-<per-process counter, hex>`.
@@ -30,7 +35,20 @@ mod tests {
         }
         let too_long = format!("t-{}", "a".repeat(41));
         let bad = [
-            "", "t-", "w-", "x-1", "T-1", "t-A1", "t-1/2", "t-../x", "t-1.json", "t- 1", "tt-1", "t_1", "t-1\n", "w-1;rm",
+            "",
+            "t-",
+            "w-",
+            "x-1",
+            "T-1",
+            "t-A1",
+            "t-1/2",
+            "t-../x",
+            "t-1.json",
+            "t- 1",
+            "tt-1",
+            "t_1",
+            "t-1\n",
+            "w-1;rm",
             too_long.as_str(),
         ];
         for id in bad {

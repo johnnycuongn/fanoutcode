@@ -1,11 +1,11 @@
 //! The `sessions_*` commands (Plan 04). Each re-parses its ids and delegates to `session_service` or the registry.
 //! Launches run off the main thread, since the first one may wait for the login shell's PATH.
 
+use fanoutcode_core::domain::{PaneId, ProjectId, Session, SessionId, TaskId, WindowId};
+use fanoutcode_core::sessions::Scrollback;
+use fanoutcode_core::{db, Error, Result};
 use tauri::ipc::Channel;
 use tauri::{AppHandle, State};
-use teamcode_core::domain::{PaneId, ProjectId, Session, SessionId, TaskId, WindowId};
-use teamcode_core::sessions::Scrollback;
-use teamcode_core::{db, Error, Result};
 
 use crate::events::{self, SessionAttached};
 use crate::pty::{ChannelSink, TerminalBytes};

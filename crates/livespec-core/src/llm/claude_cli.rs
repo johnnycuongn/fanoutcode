@@ -42,10 +42,20 @@ pub struct ClaudeCli {
 /// tools to the project and refuses bypassPermissions, and
 /// `--strict-mcp-config` without `--mcp-config` starts no MCP servers.
 fn args(model: &str, effort: Option<Effort>, req: &ChatRequest) -> Vec<String> {
-    let turns = req.max_turns.unwrap_or(if req.allow_repo_tools { 40 } else { 1 }).to_string();
+    let turns = req
+        .max_turns
+        .unwrap_or(if req.allow_repo_tools { 40 } else { 1 })
+        .to_string();
     let mut a: Vec<String> = [
-        "-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
-        "--model", model, "--restricted", "--strict-mcp-config",
+        "-p",
+        "--output-format",
+        "stream-json",
+        "--verbose",
+        "--include-partial-messages",
+        "--model",
+        model,
+        "--restricted",
+        "--strict-mcp-config",
     ]
     .map(String::from)
     .to_vec();
@@ -55,12 +65,30 @@ fn args(model: &str, effort: Option<Effort>, req: &ChatRequest) -> Vec<String> {
     }
     if req.allow_repo_tools {
         // Keep Claude Code's own system prompt: it knows how to explore repos.
-        a.extend(["--append-system-prompt", req.system.as_str(), "--max-turns", turns.as_str()].map(String::from));
+        a.extend(
+            [
+                "--append-system-prompt",
+                req.system.as_str(),
+                "--max-turns",
+                turns.as_str(),
+            ]
+            .map(String::from),
+        );
         a.extend(["--tools", READ_ONLY_TOOLS, "--allowedTools", READ_ONLY_TOOLS].map(String::from));
     } else {
         // Live analysis: replace the system prompt, single turn, no tools at all.
         // Smaller prompt = faster first token while the user types.
-        a.extend(["--system-prompt", req.system.as_str(), "--max-turns", turns.as_str(), "--tools", ""].map(String::from));
+        a.extend(
+            [
+                "--system-prompt",
+                req.system.as_str(),
+                "--max-turns",
+                turns.as_str(),
+                "--tools",
+                "",
+            ]
+            .map(String::from),
+        );
     }
     a
 }
@@ -68,7 +96,13 @@ fn args(model: &str, effort: Option<Effort>, req: &ChatRequest) -> Vec<String> {
 impl ClaudeCli {
     /// Claude Code's own login and default effort; set `effort` / `api_key` after.
     pub fn new(binary: PathBuf, model: impl Into<String>, path_env: Option<String>) -> Self {
-        Self { binary, model: model.into(), effort: None, api_key: None, path_env }
+        Self {
+            binary,
+            model: model.into(),
+            effort: None,
+            api_key: None,
+            path_env,
+        }
     }
 
     fn command(&self) -> Command {
@@ -86,7 +120,12 @@ impl ClaudeCli {
     }
 
     pub async fn version(&self) -> Result<String> {
-        let out = self.command().arg("--version").output().await.map_err(|e| self.spawn_error(e))?;
+        let out = self
+            .command()
+            .arg("--version")
+            .output()
+            .await
+            .map_err(|e| self.spawn_error(e))?;
         if !out.status.success() {
             return Err(Error::Provider(String::from_utf8_lossy(&out.stderr).trim().to_owned()));
         }
@@ -100,7 +139,10 @@ impl ClaudeCli {
             cmd.current_dir(cwd);
         }
         // kill_on_drop: aborting the owning task (user kept typing) kills the CLI.
-        cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
+        cmd.stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .kill_on_drop(true);
 
         let mut child = cmd.spawn().map_err(|e| self.spawn_error(e))?;
 
@@ -184,18 +226,28 @@ fn cli_error(result_text: Option<&str>, stderr: &str) -> String {
 enum CliEvent {
     Text(String),
     ToolUse(String),
-    Result { text: Option<String>, is_error: bool, usage: Vec<Usage> },
+    Result {
+        text: Option<String>,
+        is_error: bool,
+        usage: Vec<Usage>,
+    },
 }
 
 /// One NDJSON line from `--output-format stream-json`. Unknown shapes are
 /// ignored so CLI upgrades that add event types don't break us. `model` is
 /// the model we asked for; usage without a per-model breakdown is filed under it.
 fn parse_line(line: &str, model: &str) -> Vec<CliEvent> {
-    let Ok(v) = serde_json::from_str::<Value>(line) else { return vec![] };
+    let Ok(v) = serde_json::from_str::<Value>(line) else {
+        return vec![];
+    };
     match v["type"].as_str() {
         Some("stream_event") => {
             let e = &v["event"];
-            match (e["type"].as_str(), e["delta"]["type"].as_str(), e["delta"]["text"].as_str()) {
+            match (
+                e["type"].as_str(),
+                e["delta"]["type"].as_str(),
+                e["delta"]["text"].as_str(),
+            ) {
                 (Some("content_block_delta"), Some("text_delta"), Some(t)) => {
                     vec![CliEvent::Text(t.to_owned())]
                 }
@@ -285,7 +337,14 @@ mod tests {
     const TWO_MODELS: &str = r#"{"type":"result","subtype":"success","is_error":false,"result":"ok","total_cost_usd":0.01283,"usage":{"input_tokens":12,"cache_creation_input_tokens":4100,"cache_read_input_tokens":900,"output_tokens":610},"modelUsage":{"claude-sonnet-5-5":{"inputTokens":10,"outputTokens":580,"cacheReadInputTokens":900,"cacheCreationInputTokens":4100,"costUSD":0.0124,"costBasis":"list"},"claude-haiku-5-5":{"inputTokens":2,"outputTokens":30,"cacheReadInputTokens":0,"cacheCreationInputTokens":0,"costUSD":0.00043,"costBasis":"list"}}}"#;
 
     fn haiku(input: u64, cache_write: u64, cache_read: u64, output: u64, cost: f64) -> Usage {
-        Usage { model: "claude-haiku-5-5".into(), input, cache_write, cache_read, output, cost_usd: Some(cost) }
+        Usage {
+            model: "claude-haiku-5-5".into(),
+            input,
+            cache_write,
+            cache_read,
+            output,
+            cost_usd: Some(cost),
+        }
     }
 
     #[test]
@@ -297,11 +356,18 @@ mod tests {
     #[test]
     fn parses_tool_use_and_result() {
         let a = r#"{"type":"assistant","message":{"content":[{"type":"text","text":"x"},{"type":"tool_use","name":"Read","input":{"file_path":"src/main.rs"}}]}}"#;
-        assert_eq!(parse_line(a, "haiku"), vec![CliEvent::ToolUse("Read src/main.rs".into())]);
+        assert_eq!(
+            parse_line(a, "haiku"),
+            vec![CliEvent::ToolUse("Read src/main.rs".into())]
+        );
         let r = r#"{"type":"result","subtype":"success","is_error":false,"result":"done"}"#;
         assert_eq!(
             parse_line(r, "haiku"),
-            vec![CliEvent::Result { text: Some("done".into()), is_error: false, usage: vec![] }],
+            vec![CliEvent::Result {
+                text: Some("done".into()),
+                is_error: false,
+                usage: vec![]
+            }],
             "a result without usage reports none"
         );
     }
@@ -323,18 +389,37 @@ mod tests {
                 usage: vec![haiku(2, 2198, 535, 45, 0.00046765)],
             }]
         );
-        let CliEvent::Result { usage, .. } = &events[0] else { unreachable!() };
+        let CliEvent::Result { usage, .. } = &events[0] else {
+            unreachable!()
+        };
         let total: f64 = usage.iter().filter_map(|u| u.cost_usd).sum();
         let cli: Value = serde_json::from_str(FIXTURE).unwrap();
-        assert_eq!(Some(total), cli["total_cost_usd"].as_f64(), "the ledger's cost equals total_cost_usd");
+        assert_eq!(
+            Some(total),
+            cli["total_cost_usd"].as_f64(),
+            "the ledger's cost equals total_cost_usd"
+        );
     }
 
     #[test]
     fn a_run_on_two_models_reports_one_usage_per_model() {
         let events = parse_line(TWO_MODELS, "sonnet");
-        let [CliEvent::Result { usage, .. }] = &events[..] else { panic!("one result") };
-        let sonnet = Usage { model: "claude-sonnet-5-5".into(), input: 10, cache_write: 4100, cache_read: 900, output: 580, cost_usd: Some(0.0124) };
-        assert_eq!(usage, &vec![haiku(2, 0, 0, 30, 0.00043), sonnet], "sorted by model, whatever the JSON order");
+        let [CliEvent::Result { usage, .. }] = &events[..] else {
+            panic!("one result")
+        };
+        let sonnet = Usage {
+            model: "claude-sonnet-5-5".into(),
+            input: 10,
+            cache_write: 4100,
+            cache_read: 900,
+            output: 580,
+            cost_usd: Some(0.0124),
+        };
+        assert_eq!(
+            usage,
+            &vec![haiku(2, 0, 0, 30, 0.00043), sonnet],
+            "sorted by model, whatever the JSON order"
+        );
         let total: f64 = usage.iter().filter_map(|u| u.cost_usd).sum();
         assert!((total - 0.01283).abs() < 1e-12);
     }
@@ -342,16 +427,41 @@ mod tests {
     #[test]
     fn without_model_usage_the_totals_are_filed_under_the_requested_model() {
         let r = r#"{"type":"result","is_error":false,"result":"x","total_cost_usd":0.002,"usage":{"input_tokens":5,"cache_creation_input_tokens":10,"cache_read_input_tokens":20,"output_tokens":30}}"#;
-        let want = Usage { model: "haiku".into(), input: 5, cache_write: 10, cache_read: 20, output: 30, cost_usd: Some(0.002) };
-        assert_eq!(parse_line(r, "haiku"), vec![CliEvent::Result { text: Some("x".into()), is_error: false, usage: vec![want.clone()] }]);
+        let want = Usage {
+            model: "haiku".into(),
+            input: 5,
+            cache_write: 10,
+            cache_read: 20,
+            output: 30,
+            cost_usd: Some(0.002),
+        };
+        assert_eq!(
+            parse_line(r, "haiku"),
+            vec![CliEvent::Result {
+                text: Some("x".into()),
+                is_error: false,
+                usage: vec![want.clone()]
+            }]
+        );
         let no_cost = r.replace(r#""total_cost_usd":0.002,"#, "");
         let events = parse_line(&no_cost, "haiku");
-        let [CliEvent::Result { usage, .. }] = &events[..] else { panic!("one result") };
+        let [CliEvent::Result { usage, .. }] = &events[..] else {
+            panic!("one result")
+        };
         let cost = usage[0].cost_usd.expect("no cost reported: priced from usage::PRICES");
-        assert!((cost - (35.0 * 0.10 + 30.0 * 0.50) / 1e6).abs() < 1e-15, "35 input-rate tokens and 30 output at haiku's list price");
+        assert!(
+            (cost - (35.0 * 0.10 + 30.0 * 0.50) / 1e6).abs() < 1e-15,
+            "35 input-rate tokens and 30 output at haiku's list price"
+        );
         let events = parse_line(&no_cost, "claude-sonnet-9");
-        let [CliEvent::Result { usage, .. }] = &events[..] else { panic!("one result") };
-        let unknown = Usage { model: "claude-sonnet-9".into(), cost_usd: None, ..want };
+        let [CliEvent::Result { usage, .. }] = &events[..] else {
+            panic!("one result")
+        };
+        let unknown = Usage {
+            model: "claude-sonnet-9".into(),
+            cost_usd: None,
+            ..want
+        };
         assert_eq!(usage, &vec![unknown], "a model the table doesn't know stays unpriced");
     }
 
@@ -360,7 +470,10 @@ mod tests {
     fn fake_cli(dir: &std::path::Path, lines: &[&str], code: i32) -> ClaudeCli {
         use std::os::unix::fs::PermissionsExt;
         let path = dir.join("claude");
-        let script = format!("#!/bin/sh\ncat > /dev/null\ncat <<'JSON'\n{}\nJSON\nexit {code}\n", lines.join("\n"));
+        let script = format!(
+            "#!/bin/sh\ncat > /dev/null\ncat <<'JSON'\n{}\nJSON\nexit {code}\n",
+            lines.join("\n")
+        );
         std::fs::write(&path, script).unwrap();
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
         ClaudeCli::new(path, "haiku", None)
@@ -380,7 +493,13 @@ mod tests {
         let delta = r#"{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hi!"}}}"#;
         let (result, chunks) = run(&fake_cli(dir.path(), &[delta, FIXTURE], 0)).await;
         assert_eq!(result.unwrap(), "Hi!");
-        assert_eq!(chunks, vec![Chunk::Text("Hi!".into()), Chunk::Usage(haiku(2, 2198, 535, 45, 0.00046765))]);
+        assert_eq!(
+            chunks,
+            vec![
+                Chunk::Text("Hi!".into()),
+                Chunk::Usage(haiku(2, 2198, 535, 45, 0.00046765))
+            ]
+        );
     }
 
     #[cfg(unix)]
@@ -390,8 +509,19 @@ mod tests {
         let failed = r#"{"type":"result","subtype":"error_during_execution","is_error":true,"result":"overloaded","total_cost_usd":0.0002,"usage":{"input_tokens":2000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0}}"#;
         let (result, chunks) = run(&fake_cli(dir.path(), &[failed], 1)).await;
         assert_eq!(result.unwrap_err().to_string(), "Claude Code failed: overloaded");
-        let billed = Usage { model: "haiku".into(), input: 2000, cache_write: 0, cache_read: 0, output: 0, cost_usd: Some(0.0002) };
-        assert_eq!(chunks, vec![Chunk::Usage(billed)], "the input was billed even though the run failed");
+        let billed = Usage {
+            model: "haiku".into(),
+            input: 2000,
+            cache_write: 0,
+            cache_read: 0,
+            output: 0,
+            cost_usd: Some(0.0002),
+        };
+        assert_eq!(
+            chunks,
+            vec![Chunk::Usage(billed)],
+            "the input was billed even though the run failed"
+        );
     }
 
     #[cfg(unix)]
@@ -407,7 +537,9 @@ mod tests {
     #[test]
     fn a_model_with_zero_tokens_in_model_usage_is_dropped() {
         let r = r#"{"type":"result","is_error":false,"result":"x","modelUsage":{"claude-sonnet-5-5":{"inputTokens":0,"outputTokens":0,"cacheReadInputTokens":0,"cacheCreationInputTokens":0,"costUSD":0},"claude-haiku-5-5":{"inputTokens":2,"outputTokens":3,"cacheReadInputTokens":0,"cacheCreationInputTokens":0,"costUSD":0.001}}}"#;
-        let [CliEvent::Result { usage, .. }] = &parse_line(r, "haiku")[..] else { panic!("one result") };
+        let [CliEvent::Result { usage, .. }] = &parse_line(r, "haiku")[..] else {
+            panic!("one result")
+        };
         assert_eq!(usage, &vec![haiku(2, 0, 0, 3, 0.001)]);
     }
 
@@ -417,12 +549,21 @@ mod tests {
         let r = format!(
             r#"{{"type":"result","is_error":false,"result":"x","usage":{{"input_tokens":{big},"output_tokens":{big},"cache_read_input_tokens":{big},"cache_creation_input_tokens":{big}}}}}"#
         );
-        let [CliEvent::Result { usage, .. }] = &parse_line(&r, "haiku")[..] else { panic!("one result") };
+        let [CliEvent::Result { usage, .. }] = &parse_line(&r, "haiku")[..] else {
+            panic!("one result")
+        };
         assert_eq!(usage.len(), 1, "a wrapped sum must not drop real usage");
     }
 
     fn request(allow_repo_tools: bool) -> ChatRequest {
-        ChatRequest { system: "sys".into(), user: "u".into(), max_tokens: 900, cwd: None, allow_repo_tools, max_turns: None }
+        ChatRequest {
+            system: "sys".into(),
+            user: "u".into(),
+            max_tokens: 900,
+            cwd: None,
+            allow_repo_tools,
+            max_turns: None,
+        }
     }
 
     fn after<'a>(args: &'a [String], flag: &str) -> Option<&'a str> {
@@ -465,11 +606,21 @@ mod tests {
     #[test]
     fn effort_is_passed_only_when_set() {
         let a = args("haiku", None, &request(false));
-        assert!(!a.contains(&"--effort".into()), "Default leaves Claude Code's own effort");
-        assert_eq!(after(&args("haiku", Some(Effort::Low), &request(false)), "--effort"), Some("low"));
+        assert!(
+            !a.contains(&"--effort".into()),
+            "Default leaves Claude Code's own effort"
+        );
+        assert_eq!(
+            after(&args("haiku", Some(Effort::Low), &request(false)), "--effort"),
+            Some("low")
+        );
         let a = args("sonnet", Some(Effort::Xhigh), &request(true));
         assert_eq!(after(&a, "--effort"), Some("xhigh"));
-        assert_eq!(after(&a, "--tools"), Some("Read,Glob,Grep"), "the variadic tool list still ends where it should");
+        assert_eq!(
+            after(&a, "--tools"),
+            Some("Read,Glob,Grep"),
+            "the variadic tool list still ends where it should"
+        );
     }
 
     #[test]
@@ -484,15 +635,27 @@ mod tests {
         let envs: Vec<_> = cmd.as_std().get_envs().collect();
         assert!(envs.contains(&(OsStr::new("ANTHROPIC_API_KEY"), Some(OsStr::new("sk-ant-secret")))));
         let a = args(&cli.model, cli.effort, &request(false));
-        assert!(!a.iter().any(|x| x.contains("sk-ant")), "every process can read another's argv");
-        assert!(!format!("{cli:?}").contains("sk-ant-secret"), "Debug output never carries the key");
+        assert!(
+            !a.iter().any(|x| x.contains("sk-ant")),
+            "every process can read another's argv"
+        );
+        assert!(
+            !format!("{cli:?}").contains("sk-ant-secret"),
+            "Debug output never carries the key"
+        );
         let login = ClaudeCli::new("claude".into(), "haiku", None).command();
-        assert!(!login.as_std().get_envs().any(|(k, _)| k == "ANTHROPIC_API_KEY"), "login mode leaves the environment alone");
+        assert!(
+            !login.as_std().get_envs().any(|(k, _)| k == "ANTHROPIC_API_KEY"),
+            "login mode leaves the environment alone"
+        );
     }
 
     #[test]
     fn a_turn_limit_overrides_the_default() {
-        let req = ChatRequest { max_turns: Some(20), ..request(true) };
+        let req = ChatRequest {
+            max_turns: Some(20),
+            ..request(true)
+        };
         assert_eq!(after(&args("sonnet", None, &req), "--max-turns"), Some("20"));
         assert_eq!(after(&args("sonnet", None, &request(true)), "--max-turns"), Some("40"));
     }

@@ -1,10 +1,10 @@
 //! Runtime windows, created in Rust only. Each is labelled with its id (`w-<n>`), so `tauri-plugin-window-state`
 //! (which keys on labels) restores its position and size, and the capability glob `"windows": ["w-*"]` gives it IPC.
 
+use fanoutcode_core::domain::{Container, WorkspaceId};
+use fanoutcode_core::windows::WindowInfo;
+use fanoutcode_core::{Error, Result};
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder, Window, WindowEvent};
-use teamcode_core::domain::{Container, WorkspaceId};
-use teamcode_core::windows::WindowInfo;
-use teamcode_core::{Error, Result};
 
 use crate::events::{self, WorkspaceChanged};
 use crate::state::AppState;
@@ -26,11 +26,11 @@ fn save_on_close(app: &AppHandle, state: &AppState, id: &WorkspaceId) {
         Ok(true) => {
             let saved = state.workspaces.get(id).map(|workspace| WorkspaceChanged { workspace });
             if let Err(e) = saved.and_then(|e| events::emit(app, e)) {
-                eprintln!("Team Code: couldn't announce the saved workspace: {e}");
+                eprintln!("Fanout Code: couldn't announce the saved workspace: {e}");
             }
         }
         Ok(false) => {}
-        Err(e) => eprintln!("Team Code: couldn't save the workspace file: {e}"),
+        Err(e) => eprintln!("Fanout Code: couldn't save the workspace file: {e}"),
     }
 }
 
@@ -39,7 +39,7 @@ fn save_on_close(app: &AppHandle, state: &AppState, id: &WorkspaceId) {
 pub fn on_window_event(window: &Window, event: &WindowEvent) {
     if let WindowEvent::CloseRequested { .. } = event {
         let state = window.app_handle().state::<AppState>();
-        if let Ok(id) = teamcode_core::ids::WindowId::parse(window.label()) {
+        if let Ok(id) = fanoutcode_core::ids::WindowId::parse(window.label()) {
             let mut windows = state.windows.lock().expect("windows lock");
             let container = windows.get(&id).and_then(|w| w.container);
             windows.close(&id);
@@ -49,7 +49,7 @@ pub fn on_window_event(window: &Window, event: &WindowEvent) {
             }
         }
         if let Err(e) = state.save_windows() {
-            eprintln!("Team Code: couldn't save the open windows: {e}");
+            eprintln!("Fanout Code: couldn't save the open windows: {e}");
         }
     }
 }

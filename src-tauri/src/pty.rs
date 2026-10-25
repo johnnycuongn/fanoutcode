@@ -9,10 +9,10 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
+use fanoutcode_core::sessions::{Batcher, ExitFn, OutputFn, OutputSink, Pty, PtySpawner, SpawnSpec};
+use fanoutcode_core::Error;
 use livespec_core::shell_env::login_shell_path;
 use portable_pty::{native_pty_system, ChildKiller, CommandBuilder, MasterPty, PtySize};
-use teamcode_core::sessions::{Batcher, ExitFn, OutputFn, OutputSink, Pty, PtySpawner, SpawnSpec};
-use teamcode_core::Error;
 
 /// How long the exit report waits for the output after the child exits (a background job may hold the PTY open).
 const DRAIN_WAIT: Duration = Duration::from_millis(500);

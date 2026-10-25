@@ -1,13 +1,13 @@
 // Dev builds only (`#/dev/canvas`): the Team canvas fed from the sample Build one event per 600 ms through the store's
 // team-event path, with toggles for arrangement, detail and layout mode. No IPC; the store is seeded directly.
-/* eslint-disable teamcode/feature-boundaries -- a dev-only harness drives the canvas store and fixtures directly */
+/* eslint-disable fanoutcode/feature-boundaries -- a dev-only harness drives the canvas store and fixtures directly */
 import { useEffect, useState, type ReactElement } from "react";
 import { Button, Segmented, UiProvider } from "@/components/ui";
 import type { Task } from "@/lib/bindings";
 import { TeamCanvas } from "@/features/canvas/components/TeamCanvas";
 import { MEMORY_DIR, ROOTS, TASK_ID, sampleBuild, samplePlan } from "@/features/canvas/fixtures";
 import { getCanvas, pushEvent, seedCanvas, updateSettings, type CanvasSettings } from "@/features/canvas/store";
-/* eslint-enable teamcode/feature-boundaries */
+/* eslint-enable fanoutcode/feature-boundaries */
 
 const NOW = "2026-10-24T05:00:00Z";
 const TASK: Task = {

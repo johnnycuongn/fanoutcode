@@ -1,18 +1,18 @@
 //! Workspace commands (Plan 10): the record and its file, opening a file from elsewhere through a preview,
 //! membership and policy, fragments and agents, conversions from project windows, and link status. The logic lives
-//! in `teamcode_core::workspace`; the stores lock the database themselves, so no command here holds `state.db`
+//! in `fanoutcode_core::workspace`; the stores lock the database themselves, so no command here holds `state.db`
 //! while calling one.
 
 use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
 
+use fanoutcode_core::domain::{Container, LinkPolicy, ProjectId, TaskId, WindowId, Workspace, WorkspaceId};
+use fanoutcode_core::workspace::convert::{close_panes_for_project, merge_containers};
+use fanoutcode_core::workspace::import::{self, OpenEnv, WorkspaceImportPreview};
+use fanoutcode_core::workspace::link::LinkStatus;
+use fanoutcode_core::workspace::open::{self, WorkspaceStatus};
+use fanoutcode_core::{db, Error, Result};
 use tauri::{AppHandle, Manager, State, Window};
-use teamcode_core::domain::{Container, LinkPolicy, ProjectId, TaskId, WindowId, Workspace, WorkspaceId};
-use teamcode_core::workspace::convert::{close_panes_for_project, merge_containers};
-use teamcode_core::workspace::import::{self, OpenEnv, WorkspaceImportPreview};
-use teamcode_core::workspace::link::LinkStatus;
-use teamcode_core::workspace::open::{self, WorkspaceStatus};
-use teamcode_core::{db, Error, Result};
 
 use crate::events::{self, ViewsChanged, WindowContainerChanged, WorkspaceChanged};
 use crate::observe::log_err;
@@ -221,8 +221,8 @@ pub fn workspaces_set_setting(
     value: serde_json::Value,
 ) -> Result<Workspace> {
     let id = ws_id(&id)?;
-    teamcode_core::jira::settings::check_settable(&key)?;
-    teamcode_core::settings::validate(&key, teamcode_core::settings::ScopeKind::Workspace, &value)?;
+    fanoutcode_core::jira::settings::check_settable(&key)?;
+    fanoutcode_core::settings::validate(&key, fanoutcode_core::settings::ScopeKind::Workspace, &value)?;
     state
         .workspaces
         .apply_workspace_settings(&id, &BTreeMap::from([(key, value)]))?;
@@ -439,5 +439,5 @@ pub async fn workspaces_create_from_windows(
 pub fn workspaces_link_status(state: State<'_, AppState>, task_id: TaskId) -> Result<LinkStatus> {
     let conn = state.db.lock().expect("db lock");
     let task = db::tasks::require(&conn, &TaskId::parse(task_id.as_str())?)?;
-    teamcode_core::workspace::launch::status_of(&conn, &task)
+    fanoutcode_core::workspace::launch::status_of(&conn, &task)
 }

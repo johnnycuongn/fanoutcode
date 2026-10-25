@@ -35,7 +35,7 @@ describe("stored preference", () => {
   it("defaults to system when storage is empty, unknown or throwing", () => {
     localStorage.clear();
     expect(readStoredTheme()).toBe("System");
-    localStorage.setItem("teamcode.theme", "sepia");
+    localStorage.setItem("fanoutcode.theme", "sepia");
     expect(readStoredTheme()).toBe("System");
     vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
       throw new Error("private mode");

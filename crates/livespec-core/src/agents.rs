@@ -75,6 +75,10 @@ mod tests {
         let cut_short = tokio::time::timeout(Duration::from_millis(50), run_limited(3, jobs)).await;
         assert!(cut_short.is_err());
         tokio::time::sleep(Duration::from_millis(300)).await;
-        assert_eq!(finished.load(Ordering::SeqCst), 0, "no job may keep running after the group is dropped");
+        assert_eq!(
+            finished.load(Ordering::SeqCst),
+            0,
+            "no job may keep running after the group is dropped"
+        );
     }
 }

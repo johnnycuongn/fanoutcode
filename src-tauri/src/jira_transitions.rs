@@ -4,13 +4,13 @@
 use std::collections::HashMap;
 use std::sync::Mutex;
 
+use fanoutcode_core::domain::{Stage, TaskId};
+use fanoutcode_core::jira::settings::{transition_for, JiraTransitionsKey};
+use fanoutcode_core::pipeline::ctx::task_scope;
+use fanoutcode_core::settings::resolve;
+use fanoutcode_core::{db, Result};
 use tauri::{AppHandle, Manager};
 use tauri_specta::Event;
-use teamcode_core::domain::{Stage, TaskId};
-use teamcode_core::jira::settings::{transition_for, JiraTransitionsKey};
-use teamcode_core::pipeline::ctx::task_scope;
-use teamcode_core::settings::resolve;
-use teamcode_core::{db, Result};
 
 use crate::events::TaskChanged;
 use crate::state::AppState;
@@ -34,7 +34,7 @@ pub fn install(app: &AppHandle) {
         let app = handle.clone();
         tauri::async_runtime::spawn(async move {
             if let Err(e) = apply(&app, &task.project_id, &task, &key).await {
-                eprintln!("Team Code: couldn't move {key} in Jira: {e}");
+                eprintln!("Fanout Code: couldn't move {key} in Jira: {e}");
             }
         });
     });
@@ -42,8 +42,8 @@ pub fn install(app: &AppHandle) {
 
 async fn apply(
     app: &AppHandle,
-    project: &teamcode_core::domain::ProjectId,
-    task: &teamcode_core::domain::Task,
+    project: &fanoutcode_core::domain::ProjectId,
+    task: &fanoutcode_core::domain::Task,
     key: &str,
 ) -> Result<()> {
     let state = app.state::<AppState>();
@@ -64,7 +64,7 @@ async fn apply(
     match found {
         Some(t) => client.transition(key, &t.id).await,
         None => {
-            eprintln!("Team Code: {key} has no transition named {name:?}");
+            eprintln!("Fanout Code: {key} has no transition named {name:?}");
             Ok(())
         }
     }

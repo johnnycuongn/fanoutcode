@@ -1,4 +1,4 @@
-// The project's automation: tests, advancing on green, whether Team Code may commit (default off, §6.6), the agent.
+// The project's automation: tests, advancing on green, whether Fanout Code may commit (default off, §6.6), the agent.
 import type { ReactElement } from "react";
 import type { ProjectId } from "@/lib/bindings";
 import { projectScope, useSetting } from "../store";
@@ -22,7 +22,7 @@ export function AutomationFields({ projectId }: { projectId: ProjectId }): React
       <SwitchSetting
         scope={scope}
         settingKey="may_commit"
-        label="Team Code may commit"
+        label="Fanout Code may commit"
         hint="Off: the app drafts messages and you commit however you like."
       />
       <SegmentedSetting

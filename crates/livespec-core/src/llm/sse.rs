@@ -6,10 +6,7 @@ use crate::{Error, Result};
 
 /// Calls `on_data` with the `data:` payload of each event.
 /// Return `Ok(false)` from the callback to stop early.
-pub async fn for_each_data(
-    resp: reqwest::Response,
-    mut on_data: impl FnMut(&str) -> Result<bool>,
-) -> Result<()> {
+pub async fn for_each_data(resp: reqwest::Response, mut on_data: impl FnMut(&str) -> Result<bool>) -> Result<()> {
     let mut stream = resp.bytes_stream();
     // Byte buffer, not String: a chunk can split a multi-byte UTF-8 char.
     let mut buf: Vec<u8> = Vec::new();
@@ -54,7 +51,10 @@ pub async fn ensure_success(resp: reqwest::Response, who: &str) -> Result<reqwes
         return Ok(resp);
     }
     let body = resp.text().await.unwrap_or_default();
-    Err(Error::Provider(format!("{who} returned {status}: {}", truncate(&body, 400))))
+    Err(Error::Provider(format!(
+        "{who} returned {status}: {}",
+        truncate(&body, 400)
+    )))
 }
 
 fn truncate(s: &str, max: usize) -> &str {

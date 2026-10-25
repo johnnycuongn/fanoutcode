@@ -12,7 +12,10 @@ export async function pickFile(title: string): Promise<string | null> {
 }
 
 export async function pickWorkspaceFile(): Promise<string | null> {
-  const p = await open({ title: "Open a workspace", filters: [{ name: "Team Code workspace", extensions: ["json"] }] });
+  const p = await open({
+    title: "Open a workspace",
+    filters: [{ name: "Fanout Code workspace", extensions: ["json"] }],
+  });
   return typeof p === "string" ? p : null;
 }
 

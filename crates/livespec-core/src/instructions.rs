@@ -44,7 +44,10 @@ pub struct InstructionsFile {
 
 impl Default for InstructionsFile {
     fn default() -> Self {
-        Self { templates: starters(), projects: BTreeMap::new() }
+        Self {
+            templates: starters(),
+            projects: BTreeMap::new(),
+        }
     }
 }
 
@@ -135,7 +138,10 @@ fn start_from(loaded: Loaded<InstructionsFile>) -> Result<InstructionsFile> {
 
 impl InstructionStore {
     pub fn new(path: PathBuf) -> Self {
-        Self { path, lock: Mutex::new(()) }
+        Self {
+            path,
+            lock: Mutex::new(()),
+        }
     }
 
     /// Never fails: a missing file gives the starters, and an unreadable one is
@@ -149,7 +155,10 @@ impl InstructionStore {
 
     pub fn view(&self, root: &str) -> InstructionsView {
         let file = self.load();
-        InstructionsView { project: file.projects.get(root).cloned().unwrap_or_default(), templates: file.templates }
+        InstructionsView {
+            project: file.projects.get(root).cloned().unwrap_or_default(),
+            templates: file.templates,
+        }
     }
 
     /// Stores one project's instructions; an entry with nothing set is removed.
@@ -218,7 +227,16 @@ mod tests {
         let (_dir, store) = store();
         let view = store.view("/p");
         let ids: Vec<_> = view.templates.iter().map(|t| t.id.as_str()).collect();
-        assert_eq!(ids, ["feature-spec", "bugfix-spec", "refactor-spec", "handoff", "devils-advocate"]);
+        assert_eq!(
+            ids,
+            [
+                "feature-spec",
+                "bugfix-spec",
+                "refactor-spec",
+                "handoff",
+                "devils-advocate"
+            ]
+        );
         assert_eq!(view.project, ProjectInstructions::default());
     }
 
@@ -229,8 +247,20 @@ mod tests {
         assert_eq!(store.load(), InstructionsFile::default());
         let bad = dir.path().join("instructions.json.bad");
         assert_eq!(std::fs::read_to_string(&bad).unwrap(), "{ my precious templates");
-        store.save_project("/p", ProjectInstructions { current: "x".into(), ..Default::default() }).unwrap();
-        assert_eq!(std::fs::read_to_string(&bad).unwrap(), "{ my precious templates", "later saves never touch the .bad copy");
+        store
+            .save_project(
+                "/p",
+                ProjectInstructions {
+                    current: "x".into(),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&bad).unwrap(),
+            "{ my precious templates",
+            "later saves never touch the .bad copy"
+        );
         assert_eq!(store.view("/p").project.current, "x");
     }
 
@@ -242,8 +272,14 @@ mod tests {
         store.load();
         std::fs::write(&file, "second").unwrap();
         store.load();
-        assert_eq!(std::fs::read_to_string(dir.path().join("instructions.json.bad")).unwrap(), "first");
-        assert_eq!(std::fs::read_to_string(dir.path().join("instructions.json.bad.1")).unwrap(), "second");
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("instructions.json.bad")).unwrap(),
+            "first"
+        );
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("instructions.json.bad.1")).unwrap(),
+            "second"
+        );
     }
 
     #[test]
@@ -251,19 +287,43 @@ mod tests {
         let (dir, store) = store();
         // A directory where the file should be: reading fails, but not with NotFound.
         std::fs::create_dir(dir.path().join("instructions.json")).unwrap();
-        assert_eq!(store.load(), InstructionsFile::default(), "the UI still gets the starters");
-        assert!(store.save_project("/p", ProjectInstructions { current: "x".into(), ..Default::default() }).is_err());
-        assert!(dir.path().join("instructions.json").is_dir(), "nothing was renamed or replaced");
-        assert!(!dir.path().join("instructions.json.bad").exists(), "a read failure is not corruption");
+        assert_eq!(
+            store.load(),
+            InstructionsFile::default(),
+            "the UI still gets the starters"
+        );
+        assert!(store
+            .save_project(
+                "/p",
+                ProjectInstructions {
+                    current: "x".into(),
+                    ..Default::default()
+                }
+            )
+            .is_err());
+        assert!(
+            dir.path().join("instructions.json").is_dir(),
+            "nothing was renamed or replaced"
+        );
+        assert!(
+            !dir.path().join("instructions.json.bad").exists(),
+            "a read failure is not corruption"
+        );
     }
 
     #[test]
     fn a_corrupt_file_that_could_not_be_kept_is_an_error_not_defaults() {
         let err = start_from(Loaded::Corrupt { kept: None }).unwrap_err();
-        assert!(matches!(&err, Error::Precondition(m) if m.contains("couldn't keep a copy")), "{err}");
+        assert!(
+            matches!(&err, Error::Precondition(m) if m.contains("couldn't keep a copy")),
+            "{err}"
+        );
         assert_eq!(start_from(Loaded::Missing).unwrap(), InstructionsFile::default());
         assert_eq!(
-            start_from(Loaded::Corrupt { kept: Some(PathBuf::from("instructions.json.bad")) }).unwrap(),
+            start_from(Loaded::Corrupt {
+                kept: Some(PathBuf::from("instructions.json.bad"))
+            })
+            .unwrap(),
             InstructionsFile::default()
         );
     }
@@ -272,7 +332,10 @@ mod tests {
     fn deleting_every_template_sticks_until_restore() {
         let (_dir, store) = store();
         store.save_templates(vec![]).unwrap();
-        assert!(store.load().templates.is_empty(), "an empty list is the user's choice, not a missing file");
+        assert!(
+            store.load().templates.is_empty(),
+            "an empty list is the user's choice, not a missing file"
+        );
         let mut edited = starters()[1].clone();
         edited.text = "my own bug hunt".into();
         store.save_templates(vec![edited.clone()]).unwrap();
@@ -286,15 +349,31 @@ mod tests {
     #[test]
     fn projects_round_trip_and_empty_ones_are_dropped() {
         let (dir, store) = store();
-        let p = ProjectInstructions { default: "d".into(), current: "c".into(), template_id: Some("bug-hunt".into()) };
+        let p = ProjectInstructions {
+            default: "d".into(),
+            current: "c".into(),
+            template_id: Some("bug-hunt".into()),
+        };
         store.save_project("/a", p.clone()).unwrap();
-        store.save_project("", ProjectInstructions { current: "no project".into(), ..Default::default() }).unwrap();
+        store
+            .save_project(
+                "",
+                ProjectInstructions {
+                    current: "no project".into(),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
         assert_eq!(store.view("/a").project, p);
         assert_eq!(store.view("").project.current, "no project");
         store.save_project("/a", ProjectInstructions::default()).unwrap();
-        let json: serde_json::Value = serde_json::from_slice(&std::fs::read(dir.path().join("instructions.json")).unwrap()).unwrap();
+        let json: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(dir.path().join("instructions.json")).unwrap()).unwrap();
         assert!(json["projects"].get("/a").is_none(), "nothing set means no entry");
-        assert_eq!(json["projects"][""], serde_json::json!({"default": "", "current": "no project", "templateId": null}));
+        assert_eq!(
+            json["projects"][""],
+            serde_json::json!({"default": "", "current": "no project", "templateId": null})
+        );
     }
 
     #[test]
@@ -304,7 +383,10 @@ mod tests {
             for i in 0..8 {
                 let store = &store;
                 s.spawn(move || {
-                    let p = ProjectInstructions { current: format!("{i}"), ..Default::default() };
+                    let p = ProjectInstructions {
+                        current: format!("{i}"),
+                        ..Default::default()
+                    };
                     store.save_project(&format!("/p{i}"), p).unwrap();
                 });
             }
@@ -315,13 +397,24 @@ mod tests {
     #[test]
     fn starters_pick_catalogue_sections_per_the_spec() {
         let by_id = |id: &str| starters().into_iter().find(|t| t.id == id).map(|t| t.sections).unwrap();
-        assert_eq!(by_id("feature-spec"), ["intent", "conflicts", "gaps", "ambiguities", "questions"]);
+        assert_eq!(
+            by_id("feature-spec"),
+            ["intent", "conflicts", "gaps", "ambiguities", "questions"]
+        );
         assert_eq!(by_id("bugfix-spec"), ["intent", "conflicts", "gaps", "questions"]);
-        assert_eq!(by_id("refactor-spec"), ["conflicts", "gaps", "ambiguities", "questions"]);
+        assert_eq!(
+            by_id("refactor-spec"),
+            ["conflicts", "gaps", "ambiguities", "questions"]
+        );
         assert_eq!(by_id("handoff"), ["gaps", "ambiguities"], "stored in catalogue order");
         assert_eq!(by_id("devils-advocate"), ["conflicts", "questions"]);
         for t in starters() {
-            assert_eq!(crate::sections::normalize(&t.sections), t.sections, "{}: catalogue ids in catalogue order", t.id);
+            assert_eq!(
+                crate::sections::normalize(&t.sections),
+                t.sections,
+                "{}: catalogue ids in catalogue order",
+                t.id
+            );
         }
     }
 
@@ -334,8 +427,16 @@ mod tests {
     #[test]
     fn starters_stay_within_the_notes_format() {
         for t in starters() {
-            assert!(!t.text.contains('#'), "{}: headings belong to the prompt, not a template", t.id);
-            assert!(t.text.chars().count() < 600, "{}: short enough for small local models", t.id);
+            assert!(
+                !t.text.contains('#'),
+                "{}: headings belong to the prompt, not a template",
+                t.id
+            );
+            assert!(
+                t.text.chars().count() < 600,
+                "{}: short enough for small local models",
+                t.id
+            );
         }
     }
 }

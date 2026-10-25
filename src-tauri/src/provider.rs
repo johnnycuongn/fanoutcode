@@ -1,8 +1,10 @@
-//! Provider resolution for the headless helpers and LiveSpec notes (§7.4): Team Code's `model_provider` setting
+//! Provider resolution for the headless helpers and LiveSpec notes (§7.4): Fanout Code's `model_provider` setting
 //! picks the kind; models, efforts, agent counts and Jev switches stay in LiveSpec's own settings file,
 //! `<app_config>/livespec.json` (A19). Written against livespec-core's API (LiveSpec's shell file was not available
 //! to copy). Keys come from the keychain and never cross IPC.
 
+use fanoutcode_core::settings::{keys, resolve as resolve_setting, ModelProvider, Scope};
+use fanoutcode_core::{db, Error, Result};
 use livespec_core::jev::key::pick_key;
 use livespec_core::jev::Jev;
 use livespec_core::llm::{AnthropicApi, ClaudeCli, OpenAiCompat, Provider, Secret};
@@ -10,17 +12,15 @@ use livespec_core::local::{catalog, LocalPaths, LocalServer};
 use livespec_core::settings::{ClaudeAuth, ProviderSettings, Settings, Tier};
 use livespec_core::shell_env::{find_executable, login_shell_path};
 use tauri::{AppHandle, Manager};
-use teamcode_core::settings::{keys, resolve as resolve_setting, ModelProvider, Scope};
-use teamcode_core::{db, Error, Result};
 
 use crate::secrets;
 use crate::state::AppState;
 
-/// Keychain accounts (service `app.teamcode.desktop`).
+/// Keychain accounts (service `app.fanoutcode.desktop`).
 pub const ANTHROPIC_KEY: &str = "anthropic-api-key";
 pub const TYPESAFE_KEY: &str = "typesafe-api-key";
 
-/// LiveSpec's settings file, its provider kind replaced by Team Code's `model_provider` when they differ.
+/// LiveSpec's settings file, its provider kind replaced by Fanout Code's `model_provider` when they differ.
 pub fn settings(app: &AppHandle) -> Settings {
     let state = app.state::<AppState>();
     let mut s = Settings::load(&state.config_dir.join("livespec.json"));

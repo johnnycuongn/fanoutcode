@@ -3,15 +3,15 @@
 
 use std::sync::Arc;
 
+use fanoutcode_core::domain::TaskId;
+use fanoutcode_core::helpers::livespec_level::{lane_plan, LanePlan};
+use fanoutcode_core::helpers::livespec_run::{analyze, AnalyzeInput, LiveSpecEvent};
+use fanoutcode_core::helpers::{briefs, tag_for};
+use fanoutcode_core::memory::{MemoryFile, TaskFolder};
+use fanoutcode_core::settings::{keys, resolve};
+use fanoutcode_core::{db, pipeline, Error, Result};
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, State};
-use teamcode_core::domain::TaskId;
-use teamcode_core::helpers::livespec_level::{lane_plan, LanePlan};
-use teamcode_core::helpers::livespec_run::{analyze, AnalyzeInput, LiveSpecEvent};
-use teamcode_core::helpers::{briefs, tag_for};
-use teamcode_core::memory::{MemoryFile, TaskFolder};
-use teamcode_core::settings::{keys, resolve};
-use teamcode_core::{db, pipeline, Error, Result};
 
 use crate::observe;
 use crate::provider;

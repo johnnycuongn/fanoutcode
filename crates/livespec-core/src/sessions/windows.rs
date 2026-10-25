@@ -47,7 +47,11 @@ impl SessionStore {
             };
             let active_id = view.active.map(|tab| tab.id);
             let active = view.tabs.iter().find(|t| Some(&t.id) == active_id.as_ref()).cloned();
-            out.push(WindowSummary { tabs: view.tabs.len(), active, id });
+            out.push(WindowSummary {
+                tabs: view.tabs.len(),
+                active,
+                id,
+            });
         }
         Ok(out)
     }
@@ -117,7 +121,10 @@ mod tests {
         let w2 = s.add_window().unwrap();
         let a = s.create_tab(&w2, None, vec![]).unwrap();
         let b = s.create_tab(&w2, Some("/p".into()), vec![]).unwrap();
-        let mut closed = s.close_window_unless_last(&w2).unwrap().expect("another window is open");
+        let mut closed = s
+            .close_window_unless_last(&w2)
+            .unwrap()
+            .expect("another window is open");
         closed.sort();
         let mut both = vec![a.id.clone(), b.id.clone()];
         both.sort();
@@ -154,7 +161,11 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let sessions = dir.path().join("sessions");
         std::fs::create_dir_all(&sessions).unwrap();
-        std::fs::write(sessions.join("workspace.json"), r#"{"version":1,"nextWindow":3,"windows":[]}"#).unwrap();
+        std::fs::write(
+            sessions.join("workspace.json"),
+            r#"{"version":1,"nextWindow":3,"windows":[]}"#,
+        )
+        .unwrap();
         let s = SessionStore::new(sessions);
         let opened = s.windows_to_open().unwrap();
         assert_eq!(opened.len(), 1);
@@ -170,10 +181,16 @@ mod tests {
         let b = s.create_tab(&w1, Some("/p".into()), vec![]).unwrap(); // made active
         s.rename_tab(&b.id, Some("Checkout retry".into())).unwrap();
         let list = s.windows().unwrap();
-        assert_eq!(list.iter().map(|w| w.id.as_str()).collect::<Vec<_>>(), [w1.as_str(), w2.as_str()]);
+        assert_eq!(
+            list.iter().map(|w| w.id.as_str()).collect::<Vec<_>>(),
+            [w1.as_str(), w2.as_str()]
+        );
         assert_eq!(list[0].tabs, 2);
         let active = list[0].active.as_ref().expect("w1 has an active tab");
-        assert_eq!((active.id.as_str(), active.title.as_deref()), (b.id.as_str(), Some("Checkout retry")));
+        assert_eq!(
+            (active.id.as_str(), active.title.as_deref()),
+            (b.id.as_str(), Some("Checkout retry"))
+        );
         assert_eq!((list[1].tabs, list[1].active.is_none()), (0, true));
     }
 
@@ -192,7 +209,11 @@ mod tests {
         assert_eq!(there.active.map(|t| t.id), Some(b.id.clone()));
         let here = s.window_view(&w1).unwrap();
         assert_eq!(ids(&here.tabs), [a.id.as_str()]);
-        assert_ne!(here.active.map(|t| t.id), Some(b.id.clone()), "the old window no longer shows it");
+        assert_ne!(
+            here.active.map(|t| t.id),
+            Some(b.id.clone()),
+            "the old window no longer shows it"
+        );
         // Into an existing window, the tab goes last.
         assert_eq!(s.move_tab(&a.id, Some(to.as_str())).unwrap(), (w1.clone(), to.clone()));
         assert_eq!(ids(&s.window_view(&to).unwrap().tabs), [b.id.as_str(), a.id.as_str()]);

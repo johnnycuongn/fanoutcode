@@ -49,7 +49,14 @@ pub fn shortlist(index: &ProjectIndex, query: &str, n: usize, per_snippet_chars:
     scored
         .into_iter()
         .take(n)
-        .map(|(_, i)| snippet(&index.files[i].rel, &index.files[i].content, &weights, per_snippet_chars))
+        .map(|(_, i)| {
+            snippet(
+                &index.files[i].rel,
+                &index.files[i].content,
+                &weights,
+                per_snippet_chars,
+            )
+        })
         .collect()
 }
 
@@ -72,7 +79,9 @@ pub(crate) fn file_score(index: &ProjectIndex, i: usize, weights: &HashMap<Strin
 
 pub(crate) fn query_weights(query: &str) -> HashMap<String, f64> {
     let split = query.len().saturating_sub(RECENT_CHARS);
-    let split = (split..=query.len()).find(|i| query.is_char_boundary(*i)).unwrap_or(query.len());
+    let split = (split..=query.len())
+        .find(|i| query.is_char_boundary(*i))
+        .unwrap_or(query.len());
     let (older, recent) = query.split_at(split);
     let mut w: HashMap<String, f64> = HashMap::new();
     for t in terms::tokens(older) {
@@ -97,7 +106,11 @@ pub(crate) fn best_line(lines: &[&str], weights: &HashMap<String, f64>) -> usize
         .enumerate()
         .map(|(i, l)| {
             let lower = l.to_lowercase();
-            let hits: f64 = weights.iter().filter(|(t, _)| lower.contains(t.as_str())).map(|(_, w)| w).sum();
+            let hits: f64 = weights
+                .iter()
+                .filter(|(t, _)| lower.contains(t.as_str()))
+                .map(|(_, w)| w)
+                .sum();
             (hits, i)
         })
         .fold((0.0, 0), |acc, x| if x.0 > acc.0 { x } else { acc })
@@ -113,7 +126,11 @@ pub(crate) fn window(path: &str, lines: &[&str], center: usize, max_chars: usize
         let cut = (0..=max_chars).rev().find(|i| text.is_char_boundary(*i)).unwrap_or(0);
         text.truncate(cut);
     }
-    Snippet { path: path.to_owned(), start_line: start + 1, text }
+    Snippet {
+        path: path.to_owned(),
+        start_line: start + 1,
+        text,
+    }
 }
 
 #[cfg(test)]
@@ -145,6 +162,9 @@ mod tests {
         assert_eq!(hits.len(), 3);
         assert_eq!(hits[0].path, "src/billing/invoice.ts");
         assert!(hits.iter().all(|s| s.text.len() <= 40));
-        assert_eq!(retrieve(&idx, "I want invoices to include discounts per cart", 2, 80), shortlist(&idx, "I want invoices to include discounts per cart", 2, 40));
+        assert_eq!(
+            retrieve(&idx, "I want invoices to include discounts per cart", 2, 80),
+            shortlist(&idx, "I want invoices to include discounts per cart", 2, 40)
+        );
     }
 }

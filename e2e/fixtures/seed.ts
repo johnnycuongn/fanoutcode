@@ -80,7 +80,7 @@ export const SETTINGS = {
   workspace_project_layer: "MultiRoot",
   workspace_board: "Swimlanes",
   worktree: "Off",
-  worktree_convention: "TeamCodeManaged",
+  worktree_convention: "FanoutCodeManaged",
   worktrees_dir: null,
   may_commit: false,
   test_command: null,

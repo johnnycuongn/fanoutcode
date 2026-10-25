@@ -1,4 +1,4 @@
-// The project's worktree defaults: whether new tasks get one, which lifecycle, and where Team Code puts its own.
+// The project's worktree defaults: whether new tasks get one, which lifecycle, and where Fanout Code puts its own.
 import type { ReactElement } from "react";
 import { Switch } from "@/components/ui";
 import type { ProjectId } from "@/lib/bindings";
@@ -23,10 +23,10 @@ export function WorktreeFields({ projectId, root }: { projectId: ProjectId; root
         inherit
         options={[
           { value: "ClaudeCode", label: "Claude Code's own" },
-          { value: "TeamCodeManaged", label: "Team Code-managed" },
+          { value: "FanoutCodeManaged", label: "Fanout Code-managed" },
         ]}
       />
-      {convention === "TeamCodeManaged" && (
+      {convention === "FanoutCodeManaged" && (
         <InputSetting
           scope={scope}
           settingKey="worktrees_dir"

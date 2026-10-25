@@ -36,7 +36,7 @@ export function StartScreen(): ReactElement {
   return (
     <main className="grid h-full place-items-center bg-page p-6 text-ink">
       <Panel variant="card" padding="md" className="flex w-full max-w-2xl flex-col gap-5">
-        <h1 className="text-lg font-semibold">Team Code</h1>
+        <h1 className="text-lg font-semibold">Fanout Code</h1>
         <div className="flex flex-wrap gap-2">
           <Button onClick={() => void openProjectDialog()}>Open project…</Button>
           <Button variant="secondary" onClick={() => void openWorkspaceDialog()}>

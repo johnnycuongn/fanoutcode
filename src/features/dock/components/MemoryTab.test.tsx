@@ -28,7 +28,7 @@ test("index.md has no edit toggle", async () => {
   render(<MemoryTab task={makeTask({ stage: "Done" })} ipc={ipc()} />);
   await screen.findByText("contents of index.md");
   expect(screen.queryByRole("switch", { name: "Edit" })).toBeNull();
-  expect(screen.getByText("Written by Team Code")).toBeTruthy();
+  expect(screen.getByText("Written by Fanout Code")).toBeTruthy();
 });
 test("a memory_read failure shows the message verbatim and no editor", async () => {
   const i = {

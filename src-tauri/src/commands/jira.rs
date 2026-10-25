@@ -1,16 +1,16 @@
 //! Jira commands (Plan 10): linking a site (token to the keychain, never back across IPC), issues, search,
-//! comments, creating a task from an issue, and transitions. The client and the rules live in `teamcode_core::jira`.
+//! comments, creating a task from an issue, and transitions. The client and the rules live in `fanoutcode_core::jira`.
 
+use fanoutcode_core::domain::{ProjectId, Task, WorkspaceId};
+use fanoutcode_core::jira::cache::CachedIssue;
+use fanoutcode_core::jira::client::{normalise_site, search_jql, Issue, JiraClient, JiraSite, Transition};
+use fanoutcode_core::jira::intent::intent_from_issue;
+use fanoutcode_core::jira::settings::{account_for, credential_text, resolve_with_account, token_for_site};
+use fanoutcode_core::settings::{Scope, ScopeKind};
+use fanoutcode_core::workspace::url_guard::check_lexical;
+use fanoutcode_core::{db, Error, Result};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, State};
-use teamcode_core::domain::{ProjectId, Task, WorkspaceId};
-use teamcode_core::jira::cache::CachedIssue;
-use teamcode_core::jira::client::{normalise_site, search_jql, Issue, JiraClient, JiraSite, Transition};
-use teamcode_core::jira::intent::intent_from_issue;
-use teamcode_core::jira::settings::{account_for, credential_text, resolve_with_account, token_for_site};
-use teamcode_core::settings::{Scope, ScopeKind};
-use teamcode_core::workspace::url_guard::check_lexical;
-use teamcode_core::{db, Error, Result};
 
 use super::parse_scope;
 use crate::secrets;

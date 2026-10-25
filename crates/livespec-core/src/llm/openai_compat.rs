@@ -103,8 +103,20 @@ mod tests {
             Some(Canned::new(200, reply))
         })
         .await;
-        let local = OpenAiCompat { base_url, model: "qwen3-4b-instruct".into(), context_tokens: 4096, http: reqwest::Client::new() };
-        let req = ChatRequest { system: "s".into(), user: "u".into(), max_tokens: 50, cwd: None, allow_repo_tools: false, max_turns: None };
+        let local = OpenAiCompat {
+            base_url,
+            model: "qwen3-4b-instruct".into(),
+            context_tokens: 4096,
+            http: reqwest::Client::new(),
+        };
+        let req = ChatRequest {
+            system: "s".into(),
+            user: "u".into(),
+            max_tokens: 50,
+            cwd: None,
+            allow_repo_tools: false,
+            max_turns: None,
+        };
         let mut chunks = Vec::new();
         let text = local.stream(&req, &mut |c: Chunk| chunks.push(c)).await.unwrap();
         let sent = serde_json::from_str(&seen.lock().unwrap()).unwrap();
@@ -112,14 +124,24 @@ mod tests {
     }
 
     fn local_usage() -> Chunk {
-        Chunk::Usage(Usage { model: "qwen3-4b-instruct".into(), input: 31, cache_write: 0, cache_read: 0, output: 2, cost_usd: Some(0.0) })
+        Chunk::Usage(Usage {
+            model: "qwen3-4b-instruct".into(),
+            input: 31,
+            cache_write: 0,
+            cache_read: 0,
+            output: 2,
+            cost_usd: Some(0.0),
+        })
     }
 
     #[tokio::test]
     async fn asks_for_usage_and_reports_it_once_at_the_end() {
         let (text, chunks, sent) = run(LLAMA).await;
         assert_eq!(text, "Hello");
-        assert_eq!(chunks, vec![Chunk::Text("Hel".into()), Chunk::Text("lo".into()), local_usage()]);
+        assert_eq!(
+            chunks,
+            vec![Chunk::Text("Hel".into()), Chunk::Text("lo".into()), local_usage()]
+        );
         assert_eq!(sent["stream_options"], serde_json::json!({ "include_usage": true }));
     }
 

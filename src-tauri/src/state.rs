@@ -4,31 +4,31 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
+use fanoutcode_core::activity::ActivityTracker;
+use fanoutcode_core::changes::attributor::Attributor;
+use fanoutcode_core::changes::ChangeSet;
+use fanoutcode_core::cost::LiveCost;
+use fanoutcode_core::db::Db;
+use fanoutcode_core::domain::TaskId;
+use fanoutcode_core::domain::WorkspaceId;
+use fanoutcode_core::helpers::livespec_run::RunSlots;
+use fanoutcode_core::helpers::HelperKind;
+use fanoutcode_core::hooks::attribution::Correlator;
+use fanoutcode_core::jira::cache::IssueCache;
+use fanoutcode_core::pipeline::TestRun;
+use fanoutcode_core::sessions::{OwnedDriver, PtySpawner, SessionDriver, SessionRegistry};
+use fanoutcode_core::settings::{keys, resolve, Scope};
+use fanoutcode_core::testrun::{LiveOutput, TestResult};
+use fanoutcode_core::windows::WindowRegistry;
+use fanoutcode_core::workspace::context_docs::ContextDocs;
+use fanoutcode_core::workspace::store::WorkspaceStore;
+use fanoutcode_core::workspace::watcher::WorkspaceFileWatcher;
+use fanoutcode_core::{db, Result};
 use livespec_core::local::LocalServer;
 use livespec_core::project::BriefStore;
 use livespec_core::project::ProjectIndex;
 use livespec_core::usage::UsageLedger;
 use rusqlite::Connection;
-use teamcode_core::activity::ActivityTracker;
-use teamcode_core::changes::attributor::Attributor;
-use teamcode_core::changes::ChangeSet;
-use teamcode_core::cost::LiveCost;
-use teamcode_core::db::Db;
-use teamcode_core::domain::TaskId;
-use teamcode_core::domain::WorkspaceId;
-use teamcode_core::helpers::livespec_run::RunSlots;
-use teamcode_core::helpers::HelperKind;
-use teamcode_core::hooks::attribution::Correlator;
-use teamcode_core::jira::cache::IssueCache;
-use teamcode_core::pipeline::TestRun;
-use teamcode_core::sessions::{OwnedDriver, PtySpawner, SessionDriver, SessionRegistry};
-use teamcode_core::settings::{keys, resolve, Scope};
-use teamcode_core::testrun::{LiveOutput, TestResult};
-use teamcode_core::windows::WindowRegistry;
-use teamcode_core::workspace::context_docs::ContextDocs;
-use teamcode_core::workspace::store::WorkspaceStore;
-use teamcode_core::workspace::watcher::WorkspaceFileWatcher;
-use teamcode_core::{db, Result};
 
 use crate::git_watcher::GitWatcher;
 use crate::hooks_tailer::HooksTailer;
@@ -38,7 +38,7 @@ use crate::pty::PortablePtySpawner;
 pub type TestRunSlot = (tauri::async_runtime::JoinHandle<()>, Arc<LiveOutput>);
 
 pub struct AppState {
-    /// `<app_data>/teamcode.db`, migrated at open; shared with the workspace stores, which lock it per call (never
+    /// `<app_data>/fanoutcode.db`, migrated at open; shared with the workspace stores, which lock it per call (never
     /// call one while holding this lock).
     pub db: Db,
     /// Workspace records and their file mirrors (Plan 10).
@@ -94,13 +94,13 @@ pub struct AppState {
     /// Serialises session launches, so two callers opening one task's session get the same one.
     pub session_open: Mutex<()>,
     /// Each Codex session's idle state at the last tick, so a change updates the task once.
-    pub codex_idle: Mutex<HashMap<teamcode_core::domain::SessionId, bool>>,
+    pub codex_idle: Mutex<HashMap<fanoutcode_core::domain::SessionId, bool>>,
 }
 
 impl AppState {
-    /// Opens (and on first launch creates) `<app_data>/teamcode.db`.
+    /// Opens (and on first launch creates) `<app_data>/fanoutcode.db`.
     pub fn new(data_dir: &Path, config_dir: &Path) -> Result<Self> {
-        let conn = db::open(&data_dir.join("teamcode.db"))?;
+        let conn = db::open(&data_dir.join("fanoutcode.db"))?;
         let lines = scrollback_lines(&conn)?;
         let db = db::shared(conn);
         let (tx, rx) = std::sync::mpsc::channel();

@@ -12,8 +12,8 @@ use serde::Serialize;
 
 use super::{first_line, tab_id, valid_id, LegacyDraft, Snapshot, Tab, TabSummary, WindowView, Workspace, HISTORY_LEN};
 use crate::jev::check::CheckEvent;
-use crate::store::{load_json, write_atomic, Loaded};
 use crate::sections;
+use crate::store::{load_json, write_atomic, Loaded};
 use crate::{Error, Result};
 
 pub struct SessionStore {
@@ -40,12 +40,20 @@ struct Inner {
 impl SessionStore {
     /// `dir` is `<app_data>/sessions`. Nothing is read until first use.
     pub fn new(dir: PathBuf) -> Self {
-        Self::with_clock(dir, || SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64))
+        Self::with_clock(dir, || {
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map_or(0, |d| d.as_millis() as u64)
+        })
     }
 
     /// `clock` returns unix milliseconds.
     pub(crate) fn with_clock(dir: PathBuf, clock: impl Fn() -> u64 + Send + Sync + 'static) -> Self {
-        Self { dir, inner: Mutex::new(Inner::default()), clock: Box::new(clock) }
+        Self {
+            dir,
+            inner: Mutex::new(Inner::default()),
+            clock: Box::new(clock),
+        }
     }
 
     // ---------- windows ----------
@@ -275,12 +283,18 @@ impl SessionStore {
         if keep_last && !ws.windows.iter().any(|w| w.id != window) {
             return Ok(None);
         }
-        let pos = ws.windows.iter().position(|w| w.id == window).ok_or_else(window_closed)?;
+        let pos = ws
+            .windows
+            .iter()
+            .position(|w| w.id == window)
+            .ok_or_else(window_closed)?;
         let entry = ws.windows.remove(pos);
         self.put_ws(inner, ws)?;
         let now = self.now_secs();
         for id in &entry.tabs {
-            let Some(mut tab) = self.read_tab_logged(inner, id) else { continue };
+            let Some(mut tab) = self.read_tab_logged(inner, id) else {
+                continue;
+            };
             tab.closed_at = Some(now);
             if let Err(e) = self.put_tab(inner, tab) {
                 // Still closed (no window lists it); it sorts by its last edit.
@@ -417,7 +431,9 @@ impl SessionStore {
     pub fn open_roots(&self) -> HashSet<String> {
         let mut guard = self.lock();
         let inner = &mut *guard;
-        let Ok(ws) = self.read_ws(inner) else { return HashSet::new() };
+        let Ok(ws) = self.read_ws(inner) else {
+            return HashSet::new();
+        };
         let mut roots = HashSet::new();
         for id in ws.windows.iter().flat_map(|w| &w.tabs) {
             if let Some(Tab { root: Some(root), .. }) = self.read_tab_logged(inner, id) {
@@ -437,7 +453,13 @@ impl SessionStore {
         let inner = &mut *guard;
         let mut tab = self.existing_tab(inner, id)?;
         // Never reuse an id still in the history, even if the file lost its counter.
-        let next = tab.history.iter().map(|h| h.id.saturating_add(1)).max().unwrap_or(1).max(tab.next_snapshot);
+        let next = tab
+            .history
+            .iter()
+            .map(|h| h.id.saturating_add(1))
+            .max()
+            .unwrap_or(1)
+            .max(tab.next_snapshot);
         snap.id = next;
         tab.next_snapshot = next.saturating_add(1);
         tab.history.insert(0, snap);
@@ -452,7 +474,9 @@ impl SessionStore {
         let mut guard = self.lock();
         let inner = &mut *guard;
         let mut tab = self.existing_tab(inner, id)?;
-        let Some(saved) = tab.history.iter_mut().find(|h| h.id == snapshot) else { return Ok(()) };
+        let Some(saved) = tab.history.iter_mut().find(|h| h.id == snapshot) else {
+            return Ok(());
+        };
         f(saved);
         self.put_tab(inner, tab)
     }
@@ -560,13 +584,25 @@ impl SessionStore {
                 break id;
             }
         };
-        Tab { id, root, created_at: now / 1000, updated_at: now / 1000, draft, next_snapshot: 1, ..Tab::default() }
+        Tab {
+            id,
+            root,
+            created_at: now / 1000,
+            updated_at: now / 1000,
+            draft,
+            next_snapshot: 1,
+            ..Tab::default()
+        }
     }
 
     /// Every tab file no window lists, newest first: by `closed_at`, or, for a
     /// tab whose close never finished writing, by `updated_at`.
     fn closed_in(&self, inner: &mut Inner, ws: &Workspace) -> Vec<TabSummary> {
-        let listed: HashSet<&str> = ws.windows.iter().flat_map(|w| w.tabs.iter().map(String::as_str)).collect();
+        let listed: HashSet<&str> = ws
+            .windows
+            .iter()
+            .flat_map(|w| w.tabs.iter().map(String::as_str))
+            .collect();
         let mut closed = Vec::new();
         for id in self.tab_ids_on_disk() {
             if listed.contains(id.as_str()) {
@@ -582,7 +618,9 @@ impl SessionStore {
 
     /// Tab ids from `tabs/*.json`. `.tmp`, `.bad` and other names are skipped.
     fn tab_ids_on_disk(&self) -> Vec<String> {
-        let Ok(entries) = std::fs::read_dir(self.dir.join("tabs")) else { return Vec::new() };
+        let Ok(entries) = std::fs::read_dir(self.dir.join("tabs")) else {
+            return Vec::new();
+        };
         entries
             .flatten()
             .filter_map(|e| {
@@ -607,8 +645,17 @@ pub struct Recorder<'a> {
 
 impl<'a> Recorder<'a> {
     pub fn new(store: &'a SessionStore, tab: &str, draft: &str, context: &str) -> Self {
-        let pending = Snapshot { draft: draft.to_owned(), context: context.to_owned(), ..Snapshot::default() };
-        Self { store, tab: tab.to_owned(), pending, saved: None }
+        let pending = Snapshot {
+            draft: draft.to_owned(),
+            context: context.to_owned(),
+            ..Snapshot::default()
+        };
+        Self {
+            store,
+            tab: tab.to_owned(),
+            pending,
+            saved: None,
+        }
     }
 
     /// A notice about these notes: the pre-phase's, or the missing sections'.
@@ -623,7 +670,12 @@ impl<'a> Recorder<'a> {
     /// Saves the notes and returns the snapshot's id. Call it before sending
     /// `done`, so a `get_tab` right after `done` includes them.
     pub fn done(&mut self, markdown: &str, partial: bool) -> Result<u64> {
-        let snap = Snapshot { at: self.store.now_secs(), markdown: markdown.to_owned(), partial, ..self.pending.clone() };
+        let snap = Snapshot {
+            at: self.store.now_secs(),
+            markdown: markdown.to_owned(),
+            partial,
+            ..self.pending.clone()
+        };
         let id = self.store.record_snapshot(&self.tab, snap)?;
         self.saved = Some(id);
         Ok(id)
@@ -695,7 +747,9 @@ mod tests {
     /// A new store on the same folder: what the next launch reads.
     fn at(dir: &tempfile::TempDir) -> SessionStore {
         let ms = AtomicU64::new(1_760_400_000_000);
-        SessionStore::with_clock(dir.path().join("sessions"), move || ms.fetch_add(1_000, Ordering::Relaxed))
+        SessionStore::with_clock(dir.path().join("sessions"), move || {
+            ms.fetch_add(1_000, Ordering::Relaxed)
+        })
     }
 
     fn sessions(dir: &tempfile::TempDir) -> PathBuf {
@@ -703,7 +757,12 @@ mod tests {
     }
 
     fn snap(draft: &str) -> Snapshot {
-        Snapshot { draft: draft.into(), context: "/p|1|".into(), markdown: "## Intent\n- x".into(), ..Snapshot::default() }
+        Snapshot {
+            draft: draft.into(),
+            context: "/p|1|".into(),
+            markdown: "## Intent\n- x".into(),
+            ..Snapshot::default()
+        }
     }
 
     fn ids(list: &[TabSummary]) -> Vec<&str> {
@@ -717,7 +776,10 @@ mod tests {
         let view = s.window_view("w-1").unwrap();
         assert!(view.fresh);
         assert!(view.tabs.is_empty() && view.active.is_none() && view.closed.is_empty() && view.unreadable.is_empty());
-        assert!(!sessions(&dir).join("workspace.json").exists(), "nothing is written until something changes");
+        assert!(
+            !sessions(&dir).join("workspace.json").exists(),
+            "nothing is written until something changes"
+        );
     }
 
     #[test]
@@ -725,43 +787,87 @@ mod tests {
         let (dir, s) = store();
         let tab = s.create_tab("w-1", Some("/p".into()), vec![]).unwrap();
         assert!(tab.id.starts_with("t-") && valid_id(&tab.id), "{}", tab.id);
-        assert_eq!((tab.root.as_deref(), tab.draft.as_str(), tab.next_snapshot), (Some("/p"), "", 1));
-        assert!(s.save_draft(&tab.id, "Retry failed payments".into()).unwrap(), "a new first line changes the lists");
-        assert!(!s.save_draft(&tab.id, "Retry failed payments\nwith backoff".into()).unwrap(), "a later line doesn't");
+        assert_eq!(
+            (tab.root.as_deref(), tab.draft.as_str(), tab.next_snapshot),
+            (Some("/p"), "", 1)
+        );
+        assert!(
+            s.save_draft(&tab.id, "Retry failed payments".into()).unwrap(),
+            "a new first line changes the lists"
+        );
+        assert!(
+            !s.save_draft(&tab.id, "Retry failed payments\nwith backoff".into())
+                .unwrap(),
+            "a later line doesn't"
+        );
         s.rename_tab(&tab.id, Some("  Checkout retry ".into())).unwrap();
         let view = s.window_view("w-1").unwrap();
         assert_eq!(ids(&view.tabs), [tab.id.as_str()]);
         assert_eq!(view.tabs[0].title.as_deref(), Some("Checkout retry"));
         assert_eq!(view.tabs[0].first_line, "Retry failed payments");
-        assert!(view.tabs[0].updated_at > tab.updated_at, "saving a draft moves updatedAt");
-        assert_eq!(view.active.map(|t| t.draft), Some("Retry failed payments\nwith backoff".to_owned()));
+        assert!(
+            view.tabs[0].updated_at > tab.updated_at,
+            "saving a draft moves updatedAt"
+        );
+        assert_eq!(
+            view.active.map(|t| t.draft),
+            Some("Retry failed payments\nwith backoff".to_owned())
+        );
         s.rename_tab(&tab.id, Some("   ".into())).unwrap();
-        assert_eq!(s.tab(&tab.id).unwrap().title, None, "a blank name returns to the automatic title");
+        assert_eq!(
+            s.tab(&tab.id).unwrap().title,
+            None,
+            "a blank name returns to the automatic title"
+        );
         s.rename_tab(&tab.id, Some("Checkout retry".into())).unwrap();
         s.rename_tab(&tab.id, None).unwrap();
         // The next launch reads the same files back.
         let again = at(&dir);
         let read = again.tab(&tab.id).unwrap();
-        assert_eq!((read.title, read.draft.as_str()), (None, "Retry failed payments\nwith backoff"));
+        assert_eq!(
+            (read.title, read.draft.as_str()),
+            (None, "Retry failed payments\nwith backoff")
+        );
         assert_eq!(again.open_tab_root(&tab.id).unwrap().as_deref(), Some("/p"));
-        assert!(!again.window_view("w-1").unwrap().fresh, "the workspace file exists now");
+        assert!(
+            !again.window_view("w-1").unwrap().fresh,
+            "the workspace file exists now"
+        );
     }
 
     #[test]
     fn sections_are_stored_normalized_and_a_list_naming_nothing_is_refused() {
         let (_dir, store) = store();
         let w = store.window_ids()[0].clone();
-        let tab = store.create_tab(&w, None, vec!["questions".into(), "intent".into(), "bogus".into()]).unwrap();
-        assert_eq!(tab.sections, ["intent", "questions"], "catalogue order, unknown ids dropped");
+        let tab = store
+            .create_tab(&w, None, vec!["questions".into(), "intent".into(), "bogus".into()])
+            .unwrap();
+        assert_eq!(
+            tab.sections,
+            ["intent", "questions"],
+            "catalogue order, unknown ids dropped"
+        );
         store.set_sections(&tab.id, vec!["gaps".into(), "gaps".into()]).unwrap();
         assert_eq!(store.tab(&tab.id).unwrap().sections, ["gaps"]);
         store.set_sections(&tab.id, vec![]).unwrap();
-        assert!(store.tab(&tab.id).unwrap().sections.is_empty(), "empty is the default set");
+        assert!(
+            store.tab(&tab.id).unwrap().sections.is_empty(),
+            "empty is the default set"
+        );
         let err = store.set_sections(&tab.id, vec!["bogus".into()]).unwrap_err();
-        assert!(matches!(&err, Error::Precondition(m) if m == "Keep at least one section."), "{err}");
-        assert!(store.tab(&tab.id).unwrap().sections.is_empty(), "the refused list changed nothing");
+        assert!(
+            matches!(&err, Error::Precondition(m) if m == "Keep at least one section."),
+            "{err}"
+        );
+        assert!(
+            store.tab(&tab.id).unwrap().sections.is_empty(),
+            "the refused list changed nothing"
+        );
         assert!(store.set_sections("t-missing", vec!["gaps".into()]).is_err());
-        assert!(store.set_sections("../x", vec!["gaps".into()]).is_err(), "ids are validated first");
+        assert!(
+            store.set_sections("../x", vec!["gaps".into()]).is_err(),
+            "ids are validated first"
+        );
     }
 
     #[test]
@@ -778,9 +884,18 @@ mod tests {
         assert_eq!(s.window_of(&a.id).as_deref(), Some("w-1"));
         assert_eq!(s.open_tab_root(&a.id).unwrap(), None, "a tab with no project");
         let w2 = s.add_window().unwrap();
-        assert_eq!(s.activate(&w2, &a.id).unwrap_err().to_string(), "That tab is already open in another window.");
-        assert_eq!(s.open_tab_root("t-dead").unwrap_err().to_string(), "This tab was closed.");
-        assert_eq!(s.activate("w-1", "t-dead").unwrap_err().to_string(), "This tab was closed.");
+        assert_eq!(
+            s.activate(&w2, &a.id).unwrap_err().to_string(),
+            "That tab is already open in another window."
+        );
+        assert_eq!(
+            s.open_tab_root("t-dead").unwrap_err().to_string(),
+            "This tab was closed."
+        );
+        assert_eq!(
+            s.activate("w-1", "t-dead").unwrap_err().to_string(),
+            "This tab was closed."
+        );
     }
 
     #[test]
@@ -789,7 +904,10 @@ mod tests {
         assert_eq!(s.add_window().unwrap(), "w-2");
         assert_eq!(s.window_ids(), ["w-1", "w-2"]);
         assert_eq!(s.window_view("w-9").unwrap_err().to_string(), "This window was closed.");
-        assert_eq!(s.create_tab("w-9", None, vec![]).unwrap_err().to_string(), "This window was closed.");
+        assert_eq!(
+            s.create_tab("w-9", None, vec![]).unwrap_err().to_string(),
+            "This window was closed."
+        );
         assert!(s.closed().is_empty(), "no tab file was written for it");
     }
 
@@ -798,14 +916,38 @@ mod tests {
         let (dir, s) = store();
         std::fs::write(dir.path().join("secret.json"), r#"{"draft":"private"}"#).unwrap();
         let too_long = format!("t-{}", "a".repeat(41));
-        for bad in ["t-../secret", "t-../../secret", "t-1/2", "T-1", "t-", "x-1", "w-1;rm", too_long.as_str()] {
+        for bad in [
+            "t-../secret",
+            "t-../../secret",
+            "t-1/2",
+            "T-1",
+            "t-",
+            "x-1",
+            "w-1;rm",
+            too_long.as_str(),
+        ] {
             assert_eq!(s.tab(bad).unwrap_err().to_string(), "Unknown tab.", "{bad}");
-            assert_eq!(s.save_draft(bad, "x".into()).unwrap_err().to_string(), "Unknown tab.", "{bad}");
-            assert_eq!(s.record_snapshot(bad, snap("x")).unwrap_err().to_string(), "Unknown tab.", "{bad}");
+            assert_eq!(
+                s.save_draft(bad, "x".into()).unwrap_err().to_string(),
+                "Unknown tab.",
+                "{bad}"
+            );
+            assert_eq!(
+                s.record_snapshot(bad, snap("x")).unwrap_err().to_string(),
+                "Unknown tab.",
+                "{bad}"
+            );
             assert_eq!(s.window_view(bad).unwrap_err().to_string(), "Unknown tab.", "{bad}");
-            assert_eq!(s.create_tab(bad, None, vec![]).unwrap_err().to_string(), "Unknown tab.", "{bad}");
+            assert_eq!(
+                s.create_tab(bad, None, vec![]).unwrap_err().to_string(),
+                "Unknown tab.",
+                "{bad}"
+            );
         }
-        assert_eq!(std::fs::read_to_string(dir.path().join("secret.json")).unwrap(), r#"{"draft":"private"}"#);
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("secret.json")).unwrap(),
+            r#"{"draft":"private"}"#
+        );
         assert!(!sessions(&dir).exists(), "nothing was written");
     }
 
@@ -813,7 +955,9 @@ mod tests {
     fn history_keeps_the_newest_five() {
         let (_dir, s) = store();
         let tab = s.create_tab("w-1", None, vec![]).unwrap();
-        let saved: Vec<u64> = (0..7).map(|i| s.record_snapshot(&tab.id, snap(&format!("draft {i}"))).unwrap()).collect();
+        let saved: Vec<u64> = (0..7)
+            .map(|i| s.record_snapshot(&tab.id, snap(&format!("draft {i}"))).unwrap())
+            .collect();
         assert_eq!(saved, [1, 2, 3, 4, 5, 6, 7]);
         let t = s.tab(&tab.id).unwrap();
         assert_eq!(t.history.iter().map(|h| h.id).collect::<Vec<_>>(), [7, 6, 5, 4, 3]);
@@ -833,7 +977,10 @@ mod tests {
         std::fs::write(&path, serde_json::to_vec(&doc).unwrap()).unwrap();
         let s = at(&dir);
         assert_eq!(s.record_snapshot(&tab.id, snap("x")).unwrap(), u64::MAX);
-        assert!(!s.tab(&tab.id).unwrap().history.is_empty(), "saved, and the mutex is not poisoned");
+        assert!(
+            !s.tab(&tab.id).unwrap().history.is_empty(),
+            "saved, and the mutex is not poisoned"
+        );
         assert!(s.save_draft(&tab.id, "still works".into()).is_ok());
     }
 
@@ -845,11 +992,15 @@ mod tests {
         s.record_snapshot(&tab.id, snap("two")).unwrap();
         s.update_snapshot(&tab.id, first, |h| h.checks_stopped = true).unwrap();
         let t = s.tab(&tab.id).unwrap();
-        assert_eq!((t.history[0].checks_stopped, t.history[1].checks_stopped), (false, true));
+        assert_eq!(
+            (t.history[0].checks_stopped, t.history[1].checks_stopped),
+            (false, true)
+        );
         for i in 0..HISTORY_LEN {
             s.record_snapshot(&tab.id, snap(&format!("more {i}"))).unwrap();
         }
-        s.update_snapshot(&tab.id, first, |h| h.markdown = "changed".into()).unwrap(); // trimmed: nothing to update
+        s.update_snapshot(&tab.id, first, |h| h.markdown = "changed".into())
+            .unwrap(); // trimmed: nothing to update
         assert!(s.tab(&tab.id).unwrap().history.iter().all(|h| h.markdown != "changed"));
     }
 
@@ -865,10 +1016,23 @@ mod tests {
         assert!(view.tabs.is_empty() && !view.fresh, "a damaged file is not a first run");
         assert_eq!(ids(&view.closed), [a.id.as_str()]);
         assert_eq!(view.unreadable.len(), 1);
-        assert!(view.unreadable[0].ends_with("workspace.json.bad.1"), "{:?}", view.unreadable);
-        assert_eq!(std::fs::read_to_string(sessions(&dir).join("workspace.json.bad")).unwrap(), "an older copy");
-        assert_eq!(std::fs::read_to_string(sessions(&dir).join("workspace.json.bad.1")).unwrap(), "{ not json");
-        assert!(!at(&dir).window_view("w-1").unwrap().fresh, "an empty workspace was saved in its place right away");
+        assert!(
+            view.unreadable[0].ends_with("workspace.json.bad.1"),
+            "{:?}",
+            view.unreadable
+        );
+        assert_eq!(
+            std::fs::read_to_string(sessions(&dir).join("workspace.json.bad")).unwrap(),
+            "an older copy"
+        );
+        assert_eq!(
+            std::fs::read_to_string(sessions(&dir).join("workspace.json.bad.1")).unwrap(),
+            "{ not json"
+        );
+        assert!(
+            !at(&dir).window_view("w-1").unwrap().fresh,
+            "an empty workspace was saved in its place right away"
+        );
     }
 
     #[test]
@@ -900,8 +1064,15 @@ mod tests {
         assert_eq!(ids(&view.tabs), [good.id.as_str()]);
         assert!(view.active.is_none(), "the active tab was the damaged one");
         assert_eq!(view.unreadable.len(), 1);
-        assert!(view.unreadable[0].ends_with(&format!("{}.json.bad", bad.id)), "{:?}", view.unreadable);
-        assert_eq!(std::fs::read_to_string(tabs.join(format!("{}.json.bad", bad.id))).unwrap(), "garbage");
+        assert!(
+            view.unreadable[0].ends_with(&format!("{}.json.bad", bad.id)),
+            "{:?}",
+            view.unreadable
+        );
+        assert_eq!(
+            std::fs::read_to_string(tabs.join(format!("{}.json.bad", bad.id))).unwrap(),
+            "garbage"
+        );
         assert_eq!(s.tab(&bad.id).unwrap_err().to_string(), "This tab was closed.");
         assert_eq!(s.tab(&good.id).unwrap().id, good.id, "the other tabs are fine");
     }
@@ -920,13 +1091,21 @@ mod tests {
         let view = s.window_view("w-1").unwrap();
         assert_eq!(ids(&view.tabs), [a.id.as_str(), c.id.as_str()]);
         assert!(view.active.is_none(), "the active tab is the damaged one");
-        assert_eq!(s.close_tab(&ghost.id).unwrap(), Some("w-1".to_owned()), "no file is needed to close it");
+        assert_eq!(
+            s.close_tab(&ghost.id).unwrap(),
+            Some("w-1".to_owned()),
+            "no file is needed to close it"
+        );
         assert_eq!(s.window_of(&ghost.id), None);
         let view = s.window_view("w-1").unwrap();
         assert_eq!(ids(&view.tabs), [a.id.as_str(), c.id.as_str()]);
-        assert_eq!(view.active.map(|t| t.id), Some(c.id.clone()), "the tab that took its place");
+        assert_eq!(
+            view.active.map(|t| t.id),
+            Some(c.id.clone()),
+            "the tab that took its place"
+        );
         s.delete_tab(&ghost.id).unwrap(); // nothing left on disk to delete: fine
-        // A tab that was closed for real and whose file is gone still reports it.
+                                          // A tab that was closed for real and whose file is gone still reports it.
         assert_eq!(s.close_tab(&ghost.id).unwrap_err().to_string(), "This tab was closed.");
     }
 
@@ -943,7 +1122,10 @@ mod tests {
         assert!(s.tab(&tab.id).is_err());
         assert!(s.save_draft(&tab.id, "x".into()).is_err());
         let view = s.window_view("w-1").unwrap();
-        assert!(view.tabs.is_empty() && view.unreadable.is_empty(), "left out of the list, and not counted as corrupt");
+        assert!(
+            view.tabs.is_empty() && view.unreadable.is_empty(),
+            "left out of the list, and not counted as corrupt"
+        );
         assert!(path.is_dir(), "nothing was renamed or replaced");
     }
 
@@ -981,17 +1163,28 @@ mod tests {
         assert_eq!(s.close_tab(&b.id).unwrap().as_deref(), Some("w-1"));
         let view = s.window_view("w-1").unwrap();
         assert_eq!(ids(&view.tabs), [a.id.as_str(), c.id.as_str()]);
-        assert_eq!(view.active.map(|t| t.id), Some(c.id.clone()), "the tab that took its place");
+        assert_eq!(
+            view.active.map(|t| t.id),
+            Some(c.id.clone()),
+            "the tab that took its place"
+        );
         assert_eq!(ids(&view.closed), [b.id.as_str()]);
         assert!(view.closed[0].closed_at.is_some());
         assert_eq!(s.open_tab_root(&b.id).unwrap_err().to_string(), "This tab was closed.");
         assert_eq!(s.tab(&b.id).unwrap().id, b.id, "its file stays");
         assert_eq!(s.close_tab(&b.id).unwrap(), None, "closing it again changes nothing");
         s.close_tab(&c.id).unwrap();
-        assert_eq!(s.window_view("w-1").unwrap().active.map(|t| t.id), Some(a.id.clone()), "at the end: the one before it");
+        assert_eq!(
+            s.window_view("w-1").unwrap().active.map(|t| t.id),
+            Some(a.id.clone()),
+            "at the end: the one before it"
+        );
         s.close_tab(&a.id).unwrap();
         let empty = s.window_view("w-1").unwrap();
-        assert!(empty.tabs.is_empty() && empty.active.is_none(), "the window stays, empty");
+        assert!(
+            empty.tabs.is_empty() && empty.active.is_none(),
+            "the window stays, empty"
+        );
         assert_eq!(s.window_ids(), ["w-1"]);
     }
 
@@ -1008,8 +1201,16 @@ mod tests {
         // Tab files no window lists that never got `closedAt` (the app stopped mid-close),
         // and files that aren't tabs.
         let tabs = sessions(&dir).join("tabs");
-        std::fs::write(tabs.join("t-c0ffee.json"), format!(r#"{{"id":"t-c0ffee","updatedAt":{}}}"#, b_at + 100)).unwrap();
-        std::fs::write(tabs.join("t-01d.json"), format!(r#"{{"id":"t-01d","updatedAt":{}}}"#, a_at - 100)).unwrap();
+        std::fs::write(
+            tabs.join("t-c0ffee.json"),
+            format!(r#"{{"id":"t-c0ffee","updatedAt":{}}}"#, b_at + 100),
+        )
+        .unwrap();
+        std::fs::write(
+            tabs.join("t-01d.json"),
+            format!(r#"{{"id":"t-01d","updatedAt":{}}}"#, a_at - 100),
+        )
+        .unwrap();
         std::fs::write(tabs.join("t-abc.json.bad"), "kept").unwrap();
         std::fs::write(tabs.join("t-abc.json.tmp"), "half written").unwrap();
         std::fs::write(tabs.join("notes.txt"), "not a tab").unwrap();
@@ -1025,21 +1226,33 @@ mod tests {
         s.reopen_tab(&a.id, &w2).unwrap();
         let view = s.window_view(&w2).unwrap();
         assert_eq!(ids(&view.tabs), [a.id.as_str()]);
-        assert_eq!(view.active.as_ref().map(|t| (t.id.as_str(), t.closed_at)), Some((a.id.as_str(), None)));
+        assert_eq!(
+            view.active.as_ref().map(|t| (t.id.as_str(), t.closed_at)),
+            Some((a.id.as_str(), None))
+        );
         assert!(view.closed.is_empty());
         let err = s.reopen_tab(&a.id, "w-1").unwrap_err();
         assert!(matches!(err, Error::Precondition(_)));
         assert_eq!(err.to_string(), "That tab is already open in another window.");
-        assert_eq!(s.reopen_tab("t-dead", "w-1").unwrap_err().to_string(), "This tab was closed.");
+        assert_eq!(
+            s.reopen_tab("t-dead", "w-1").unwrap_err().to_string(),
+            "This tab was closed."
+        );
         s.close_tab(&a.id).unwrap();
-        assert_eq!(s.reopen_tab(&a.id, "w-9").unwrap_err().to_string(), "This window was closed.");
+        assert_eq!(
+            s.reopen_tab(&a.id, "w-9").unwrap_err().to_string(),
+            "This window was closed."
+        );
     }
 
     #[test]
     fn only_closed_tabs_can_be_deleted() {
         let (dir, s) = store();
         let a = s.create_tab("w-1", None, vec![]).unwrap();
-        assert_eq!(s.delete_tab(&a.id).unwrap_err().to_string(), "Close this tab before deleting it.");
+        assert_eq!(
+            s.delete_tab(&a.id).unwrap_err().to_string(),
+            "Close this tab before deleting it."
+        );
         s.close_tab(&a.id).unwrap();
         s.delete_tab(&a.id).unwrap();
         assert!(!sessions(&dir).join(format!("tabs/{}.json", a.id)).exists());
@@ -1078,21 +1291,47 @@ mod tests {
         let (_dir, s) = store();
         let a = s.create_tab("w-1", None, vec![]).unwrap();
         let b = s.create_tab("w-1", None, vec![]).unwrap(); // active
-        assert_eq!(s.move_tab(&b.id, None).unwrap(), ("w-1".to_owned(), "w-2".to_owned()), "None makes a new window");
+        assert_eq!(
+            s.move_tab(&b.id, None).unwrap(),
+            ("w-1".to_owned(), "w-2".to_owned()),
+            "None makes a new window"
+        );
         let here = s.window_view("w-1").unwrap();
         assert_eq!(ids(&here.tabs), [a.id.as_str()]);
-        assert_eq!(here.active.map(|t| t.id), Some(a.id.clone()), "the old window no longer shows it");
+        assert_eq!(
+            here.active.map(|t| t.id),
+            Some(a.id.clone()),
+            "the old window no longer shows it"
+        );
         let there = s.window_view("w-2").unwrap();
         assert_eq!(ids(&there.tabs), [b.id.as_str()]);
         assert_eq!(there.active.map(|t| t.id), Some(b.id.clone()));
-        assert_eq!(s.move_tab(&a.id, Some("w-2")).unwrap(), ("w-1".to_owned(), "w-2".to_owned()));
+        assert_eq!(
+            s.move_tab(&a.id, Some("w-2")).unwrap(),
+            ("w-1".to_owned(), "w-2".to_owned())
+        );
         let there = s.window_view("w-2").unwrap();
         assert_eq!(ids(&there.tabs), [b.id.as_str(), a.id.as_str()], "it joins the end");
-        assert_eq!(there.active.map(|t| t.id), Some(b.id.clone()), "that window keeps showing its own tab");
+        assert_eq!(
+            there.active.map(|t| t.id),
+            Some(b.id.clone()),
+            "that window keeps showing its own tab"
+        );
         assert!(s.window_view("w-1").unwrap().active.is_none());
-        assert_eq!(s.move_tab(&a.id, Some("w-2")).unwrap(), ("w-2".to_owned(), "w-2".to_owned()), "already there");
-        assert_eq!(s.move_tab(&a.id, Some("w-9")).unwrap_err().to_string(), "This window was closed.");
-        assert_eq!(ids(&s.window_view("w-2").unwrap().tabs), [b.id.as_str(), a.id.as_str()], "a failed move changes nothing");
+        assert_eq!(
+            s.move_tab(&a.id, Some("w-2")).unwrap(),
+            ("w-2".to_owned(), "w-2".to_owned()),
+            "already there"
+        );
+        assert_eq!(
+            s.move_tab(&a.id, Some("w-9")).unwrap_err().to_string(),
+            "This window was closed."
+        );
+        assert_eq!(
+            ids(&s.window_view("w-2").unwrap().tabs),
+            [b.id.as_str(), a.id.as_str()],
+            "a failed move changes nothing"
+        );
         s.close_tab(&a.id).unwrap();
         assert_eq!(s.move_tab(&a.id, None).unwrap_err().to_string(), "This tab was closed.");
     }
@@ -1102,19 +1341,55 @@ mod tests {
         let (dir, s) = store();
         assert!(s.window_view("w-1").unwrap().fresh);
         let drafts = vec![
-            LegacyDraft { root: Some("/b".into()), draft: "b idea".into() },
-            LegacyDraft { root: None, draft: "a loose idea".into() },
-            LegacyDraft { root: Some("/a".into()), draft: "  \n".into() },
+            LegacyDraft {
+                root: Some("/b".into()),
+                draft: "b idea".into(),
+            },
+            LegacyDraft {
+                root: None,
+                draft: "a loose idea".into(),
+            },
+            LegacyDraft {
+                root: Some("/a".into()),
+                draft: "  \n".into(),
+            },
         ];
         s.import_legacy("w-1", drafts, Some("/b".into())).unwrap();
         let view = s.window_view("w-1").unwrap();
         assert!(!view.fresh);
-        let tabs: Vec<(Option<&str>, &str)> = view.tabs.iter().map(|t| (t.root.as_deref(), t.first_line.as_str())).collect();
-        assert_eq!(tabs, [(Some("/b"), "b idea"), (None, "a loose idea")], "empty drafts are skipped");
-        assert_eq!(view.active.and_then(|t| t.root), Some("/b".to_owned()), "the last project's tab is active");
-        s.import_legacy("w-1", vec![LegacyDraft { root: None, draft: "again".into() }], None).unwrap();
-        assert_eq!(s.window_view("w-1").unwrap().tabs.len(), 2, "a second import does nothing");
-        assert!(!at(&dir).window_view("w-1").unwrap().fresh, "nor does the next launch offer one");
+        let tabs: Vec<(Option<&str>, &str)> = view
+            .tabs
+            .iter()
+            .map(|t| (t.root.as_deref(), t.first_line.as_str()))
+            .collect();
+        assert_eq!(
+            tabs,
+            [(Some("/b"), "b idea"), (None, "a loose idea")],
+            "empty drafts are skipped"
+        );
+        assert_eq!(
+            view.active.and_then(|t| t.root),
+            Some("/b".to_owned()),
+            "the last project's tab is active"
+        );
+        s.import_legacy(
+            "w-1",
+            vec![LegacyDraft {
+                root: None,
+                draft: "again".into(),
+            }],
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            s.window_view("w-1").unwrap().tabs.len(),
+            2,
+            "a second import does nothing"
+        );
+        assert!(
+            !at(&dir).window_view("w-1").unwrap().fresh,
+            "nor does the next launch offer one"
+        );
     }
 
     #[test]
@@ -1122,17 +1397,33 @@ mod tests {
         let (dir, s) = store();
         let drafts = || {
             vec![
-                LegacyDraft { root: None, draft: "one".into() },
-                LegacyDraft { root: None, draft: "two".into() },
-                LegacyDraft { root: None, draft: "three".into() },
+                LegacyDraft {
+                    root: None,
+                    draft: "one".into(),
+                },
+                LegacyDraft {
+                    root: None,
+                    draft: "two".into(),
+                },
+                LegacyDraft {
+                    root: None,
+                    draft: "three".into(),
+                },
             ]
         };
         // The second tab's id is known from the clock; a directory where its
         // temp file goes makes writing it fail.
-        let blocked = sessions(&dir).join("tabs").join(format!("{}.json.tmp", tab_id(1_760_400_001_000, 2)));
+        let blocked = sessions(&dir)
+            .join("tabs")
+            .join(format!("{}.json.tmp", tab_id(1_760_400_001_000, 2)));
         std::fs::create_dir_all(&blocked).unwrap();
         assert!(s.import_legacy("w-1", drafts(), None).is_err());
-        let files = || std::fs::read_dir(sessions(&dir).join("tabs")).unwrap().flatten().count();
+        let files = || {
+            std::fs::read_dir(sessions(&dir).join("tabs"))
+                .unwrap()
+                .flatten()
+                .count()
+        };
         assert_eq!(files(), 1, "only the blocking directory is left");
         assert!(s.window_view("w-1").unwrap().fresh, "still a first run");
         std::fs::remove_dir(&blocked).unwrap();
@@ -1146,14 +1437,35 @@ mod tests {
     fn without_a_last_project_the_no_project_draft_is_active() {
         let (_dir, s) = store();
         let drafts = vec![
-            LegacyDraft { root: Some("/a".into()), draft: "a".into() },
-            LegacyDraft { root: None, draft: "loose".into() },
+            LegacyDraft {
+                root: Some("/a".into()),
+                draft: "a".into(),
+            },
+            LegacyDraft {
+                root: None,
+                draft: "loose".into(),
+            },
         ];
         s.import_legacy("w-1", drafts, None).unwrap();
-        assert_eq!(s.window_view("w-1").unwrap().active.map(|t| t.draft), Some("loose".to_owned()));
+        assert_eq!(
+            s.window_view("w-1").unwrap().active.map(|t| t.draft),
+            Some("loose".to_owned())
+        );
         let (_dir2, s2) = store();
-        s2.import_legacy("w-1", vec![LegacyDraft { root: Some("/a".into()), draft: "a".into() }], Some("/gone".into())).unwrap();
-        assert_eq!(s2.window_view("w-1").unwrap().active.map(|t| t.draft), Some("a".to_owned()), "no match: the first tab");
+        s2.import_legacy(
+            "w-1",
+            vec![LegacyDraft {
+                root: Some("/a".into()),
+                draft: "a".into(),
+            }],
+            Some("/gone".into()),
+        )
+        .unwrap();
+        assert_eq!(
+            s2.window_view("w-1").unwrap().active.map(|t| t.draft),
+            Some("a".to_owned()),
+            "no match: the first tab"
+        );
     }
 
     #[test]
@@ -1189,15 +1501,29 @@ mod tests {
         rec.notice("Jev was slow; used keyword order.").unwrap();
         rec.check(&CheckEvent::Checking { count: 2, total: 3 }).unwrap();
         rec.check(&CheckEvent::Result(check("first"))).unwrap();
-        assert!(s.tab(&tab.id).unwrap().history.is_empty(), "nothing is saved before done");
+        assert!(
+            s.tab(&tab.id).unwrap().history.is_empty(),
+            "nothing is saved before done"
+        );
         let id = rec.done("## Intent\n- x", false).unwrap();
         let t = s.tab(&tab.id).unwrap();
         let saved = &t.history[0];
         assert_eq!(saved.id, id);
-        assert_eq!((saved.draft.as_str(), saved.context.as_str(), saved.markdown.as_str()), ("the draft", "/p|1|", "## Intent\n- x"));
+        assert_eq!(
+            (saved.draft.as_str(), saved.context.as_str(), saved.markdown.as_str()),
+            ("the draft", "/p|1|", "## Intent\n- x")
+        );
         assert_eq!(saved.notices, ["Jev was slow; used keyword order."]);
         assert_eq!(saved.checks, [check("first")]);
-        assert_eq!((saved.checks_total, saved.checks_faults, saved.checks_stopped, saved.partial), (Some(2), Some(3), false, false));
+        assert_eq!(
+            (
+                saved.checks_total,
+                saved.checks_faults,
+                saved.checks_stopped,
+                saved.partial
+            ),
+            (Some(2), Some(3), false, false)
+        );
         assert!(saved.at > 0);
         // Later checks and notices update the saved snapshot.
         rec.check(&CheckEvent::Result(check("second"))).unwrap();
@@ -1205,7 +1531,10 @@ mod tests {
         let t = s.tab(&tab.id).unwrap();
         assert_eq!(t.history.len(), 1);
         assert_eq!(t.history[0].checks, [check("first"), check("second")]);
-        assert_eq!(t.history[0].notices, ["Jev was slow; used keyword order.", "Jev is unavailable."]);
+        assert_eq!(
+            t.history[0].notices,
+            ["Jev was slow; used keyword order.", "Jev is unavailable."]
+        );
         assert!(t.history[0].checks_stopped);
     }
 
@@ -1220,7 +1549,14 @@ mod tests {
         rec.check(&CheckEvent::Result(check("first"))).unwrap();
         drop(rec);
         let t = s.tab(&tab.id).unwrap();
-        assert_eq!((t.history[0].checks.len(), t.history[0].checks_total, t.history[0].checks_stopped), (1, Some(3), false));
+        assert_eq!(
+            (
+                t.history[0].checks.len(),
+                t.history[0].checks_total,
+                t.history[0].checks_stopped
+            ),
+            (1, Some(3), false)
+        );
         assert!(t.history[0].partial);
     }
 
@@ -1234,6 +1570,9 @@ mod tests {
         drop(rec);
         assert!(s.tab(&tab.id).unwrap().history.is_empty());
         let mut gone = Recorder::new(&s, "t-dead", "d", "|0|");
-        assert_eq!(gone.done("## Intent", false).unwrap_err().to_string(), "This tab was closed.");
+        assert_eq!(
+            gone.done("## Intent", false).unwrap_err().to_string(),
+            "This tab was closed."
+        );
     }
 }

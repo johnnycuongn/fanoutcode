@@ -1,10 +1,10 @@
 //! What the app does on its own after a task changes: keep its repos watched, record its base when it enters Build,
 //! and create its worktree (`Effect::CreateWorktree`). Plan 05's runners for `effects::dispatch`.
 
+use fanoutcode_core::domain::{RepoBase, Stage, Task, TaskId};
+use fanoutcode_core::memory::TaskFolder;
+use fanoutcode_core::{db, git, pipeline, worktree, Error, Result};
 use tauri::{AppHandle, Manager};
-use teamcode_core::domain::{RepoBase, Stage, Task, TaskId};
-use teamcode_core::memory::TaskFolder;
-use teamcode_core::{db, git, pipeline, worktree, Error, Result};
 
 use crate::events;
 use crate::git_watcher;

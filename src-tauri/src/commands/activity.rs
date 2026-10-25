@@ -2,12 +2,12 @@
 //! cached change sets and the cost ledger only (no git or log reads), so it returns at once. Live updates keep
 //! flowing through `team-event`, `git-changes` and `cost-updated`.
 
+use fanoutcode_core::activity::{card_cost, TaskActivity};
+use fanoutcode_core::cost;
+use fanoutcode_core::domain::Container;
+use fanoutcode_core::settings::Scope;
+use fanoutcode_core::{db, Result};
 use tauri::State;
-use teamcode_core::activity::{card_cost, TaskActivity};
-use teamcode_core::cost;
-use teamcode_core::domain::Container;
-use teamcode_core::settings::Scope;
-use teamcode_core::{db, Result};
 
 use super::parse_container;
 use crate::state::AppState;
@@ -49,7 +49,7 @@ pub fn tasks_activity(state: State<'_, AppState>, container: Container) -> Resul
 }
 
 /// Feeds one event to the task's tracker.
-pub(crate) fn track(state: &AppState, ev: &teamcode_core::hooks::TaskEvent, repos: &[std::path::PathBuf]) {
+pub(crate) fn track(state: &AppState, ev: &fanoutcode_core::hooks::TaskEvent, repos: &[std::path::PathBuf]) {
     state
         .activity
         .lock()

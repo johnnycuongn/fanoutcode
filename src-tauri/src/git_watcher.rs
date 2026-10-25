@@ -1,21 +1,21 @@
 //! Watches each task's repos (§6.6, §9): one `notify` watcher for the app, a 500 ms debounce per task, then
 //! `git status` and `numstat`, the change set rebuilt and persisted, `git-changes` emitted, and in Commit the Done
-//! check. The logic it runs lives in `teamcode_core::{git, changes}`.
+//! check. The logic it runs lives in `fanoutcode_core::{git, changes}`.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Duration;
 
+use fanoutcode_core::changes::{self, ChangeSet, RepoSnapshot};
+use fanoutcode_core::domain::{Stage, Task, TaskId};
+use fanoutcode_core::git::{self, WatchHit};
+use fanoutcode_core::helpers::spec_watcher;
+use fanoutcode_core::helpers::HelperKind;
+use fanoutcode_core::pipeline::StageAction;
+use fanoutcode_core::{db, Result};
 use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use tauri::{AppHandle, Manager};
-use teamcode_core::changes::{self, ChangeSet, RepoSnapshot};
-use teamcode_core::domain::{Stage, Task, TaskId};
-use teamcode_core::git::{self, WatchHit};
-use teamcode_core::helpers::spec_watcher;
-use teamcode_core::helpers::HelperKind;
-use teamcode_core::pipeline::StageAction;
-use teamcode_core::{db, Result};
 
 use crate::events::{self, GitChanges};
 use crate::observe::{self, log_err};
@@ -80,7 +80,7 @@ impl GitWatcher {
                     .lock()
                     .expect("watcher lock") = Some(w)
             }
-            Err(e) => eprintln!("Team Code: couldn't watch the repositories: {e}"),
+            Err(e) => eprintln!("Fanout Code: couldn't watch the repositories: {e}"),
         }
         // every non-archived task, as at the last launch
         let tasks = {
@@ -100,7 +100,7 @@ impl GitWatcher {
         if *n == 0 {
             if let Some(w) = self.watcher.lock().expect("watcher lock").as_mut() {
                 if let Err(e) = w.watch(path, RecursiveMode::Recursive) {
-                    eprintln!("Team Code: couldn't watch {}: {e}", path.display());
+                    eprintln!("Fanout Code: couldn't watch {}: {e}", path.display());
                 }
             }
         }

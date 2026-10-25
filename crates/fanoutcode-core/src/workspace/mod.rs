@@ -1,0 +1,23 @@
+//! Workspaces (§4.1–4.3): the record and its `<name>.fanoutcode-workspace.json` mirror, linking (bound roots,
+//! `--add-dir`, protected roots, the Bash guard), prompt fragments, context docs and container conversion. The
+//! database is the source of truth; the file is a mirror (write-through in app data, explicit save elsewhere).
+
+pub mod briefs;
+pub mod context_docs;
+mod context_fetch;
+pub mod convert;
+pub mod file;
+pub mod fragments;
+pub mod guard;
+pub mod import;
+pub(crate) mod import_checks;
+pub mod launch;
+pub mod link;
+pub mod open;
+pub mod policy;
+pub(crate) mod rows;
+pub mod store;
+#[cfg(test)]
+pub(crate) mod test_support;
+pub mod url_guard;
+pub mod watcher;

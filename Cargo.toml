@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/teamcode-core", "crates/livespec-core", "src-tauri"]
+members = ["crates/fanoutcode-core", "crates/livespec-core", "src-tauri"]
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }

@@ -32,7 +32,10 @@ pub enum Question {
         #[serde(skip_serializing_if = "Option::is_none")]
         criteria: Option<NoulCriteria>,
     },
-    Choice { instructions: Value, criteria: Options },
+    Choice {
+        instructions: Value,
+        criteria: Options,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -61,8 +64,14 @@ impl Serialize for Options {
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum Answer {
-    Noul { noul: f64 },
-    Choice { choice: String, probabilities: BTreeMap<String, f64>, confidence: f64 },
+    Noul {
+        noul: f64,
+    },
+    Choice {
+        choice: String,
+        probabilities: BTreeMap<String, f64>,
+        confidence: f64,
+    },
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -107,15 +116,29 @@ pub struct Jev {
 
 impl Jev {
     pub fn new(api_key: String, model: String, http: reqwest::Client) -> Self {
-        Self { api_key, model, http, base_url: DEFAULT_BASE_URL.to_owned() }
+        Self {
+            api_key,
+            model,
+            http,
+            base_url: DEFAULT_BASE_URL.to_owned(),
+        }
     }
 
     /// Asks every question about `state` in one request. Retries 429/503/529
     /// twice and never runs past `timeout` in total.
-    pub async fn ask(&self, state: &Value, questions: &BTreeMap<String, Question>, timeout: Duration) -> Result<Response> {
+    pub async fn ask(
+        &self,
+        state: &Value,
+        questions: &BTreeMap<String, Question>,
+        timeout: Duration,
+    ) -> Result<Response> {
         let deadline = Instant::now() + timeout;
         let url = format!("{}/v1/systemone", self.base_url.trim_end_matches('/'));
-        let body = Request { state, model: &self.model, questions };
+        let body = Request {
+            state,
+            model: &self.model,
+            questions,
+        };
         let mut retries = 0;
         loop {
             let remaining = deadline.saturating_duration_since(Instant::now());
@@ -136,7 +159,9 @@ impl Jev {
             }
             let status = resp.status().as_u16();
             if status == 401 {
-                return Err(Error::Precondition("TypeSafe key rejected. Check .env.local or Settings → Jev.".into()));
+                return Err(Error::Precondition(
+                    "TypeSafe key rejected. Check .env.local or Settings → Jev.".into(),
+                ));
             }
             if matches!(status, 429 | 503 | 529) && retries < RETRY_DELAYS.len() {
                 let wait = retry_after(&resp).unwrap_or(RETRY_DELAYS[retries]);
@@ -157,7 +182,14 @@ fn timed_out() -> Error {
 }
 
 fn retry_after(resp: &reqwest::Response) -> Option<Duration> {
-    let secs: f64 = resp.headers().get(reqwest::header::RETRY_AFTER)?.to_str().ok()?.trim().parse().ok()?;
+    let secs: f64 = resp
+        .headers()
+        .get(reqwest::header::RETRY_AFTER)?
+        .to_str()
+        .ok()?
+        .trim()
+        .parse()
+        .ok()?;
     (secs.is_finite() && secs >= 0.0).then(|| Duration::from_secs_f64(secs))
 }
 
@@ -177,20 +209,30 @@ mod tests {
             "is_urgent".to_owned(),
             Question::Noul {
                 instructions: json!("Does this convey urgency?"),
-                criteria: Some(NoulCriteria { yes: json!("Explicitly time-sensitive"), no: json!("No urgency expressed") }),
+                criteria: Some(NoulCriteria {
+                    yes: json!("Explicitly time-sensitive"),
+                    no: json!("No urgency expressed"),
+                }),
             },
         )])
     }
 
     fn client(base_url: String) -> Jev {
-        Jev { base_url, ..Jev::new("test-key".into(), DEFAULT_MODEL.into(), reqwest::Client::new()) }
+        Jev {
+            base_url,
+            ..Jev::new("test-key".into(), DEFAULT_MODEL.into(), reqwest::Client::new())
+        }
     }
 
     #[test]
     fn noul_request_matches_the_api_reference() {
         let state = json!("Help! My payouts have been failing for 3 days.");
         let questions = urgent();
-        let request = Request { state: &state, model: "jev-latest", questions: &questions };
+        let request = Request {
+            state: &state,
+            model: "jev-latest",
+            questions: &questions,
+        };
         assert_eq!(
             serde_json::to_value(&request).unwrap(),
             json!({
@@ -217,7 +259,10 @@ mod tests {
         };
         let text = serde_json::to_string(&q).unwrap();
         let pos = |s: &str| text.find(s).unwrap();
-        assert!(pos("\"sales\"") < pos("\"billing\"") && pos("\"billing\"") < pos("\"technical\""), "{text}");
+        assert!(
+            pos("\"sales\"") < pos("\"billing\"") && pos("\"billing\"") < pos("\"technical\""),
+            "{text}"
+        );
         assert_eq!(serde_json::to_value(&q).unwrap()["criteria"]["technical"], Value::Null);
     }
 
@@ -236,7 +281,10 @@ mod tests {
     #[tokio::test]
     async fn retries_overload_then_answers() {
         let (url, hits) = serve(vec![Canned::new(529, "{}"), Canned::new(200, NOUL_OK)]).await;
-        let r = client(url).ask(&json!("x"), &urgent(), Duration::from_secs(5)).await.unwrap();
+        let r = client(url)
+            .ask(&json!("x"), &urgent(), Duration::from_secs(5))
+            .await
+            .unwrap();
         assert_eq!(r.noul("is_urgent"), Some(0.95));
         assert_eq!(hits.load(Ordering::SeqCst), 2);
     }
@@ -245,7 +293,10 @@ mod tests {
     async fn retries_a_momentarily_unavailable_model() {
         let busy = r#"{"detail":{"error_type":"model_unavailable","message":"The model is unavailable."}}"#;
         let (url, hits) = serve(vec![Canned::new(503, busy), Canned::new(200, NOUL_OK)]).await;
-        let r = client(url).ask(&json!("x"), &urgent(), Duration::from_secs(5)).await.unwrap();
+        let r = client(url)
+            .ask(&json!("x"), &urgent(), Duration::from_secs(5))
+            .await
+            .unwrap();
         assert_eq!(r.noul("is_urgent"), Some(0.95));
         assert_eq!(hits.load(Ordering::SeqCst), 2);
     }
@@ -253,7 +304,10 @@ mod tests {
     #[tokio::test]
     async fn gives_up_after_two_retries() {
         let (url, hits) = serve(vec![Canned::new(429, "slow down"); 3]).await;
-        let err = client(url).ask(&json!("x"), &urgent(), Duration::from_secs(5)).await.unwrap_err();
+        let err = client(url)
+            .ask(&json!("x"), &urgent(), Duration::from_secs(5))
+            .await
+            .unwrap_err();
         assert!(err.to_string().contains("Jev returned 429"), "{err}");
         assert_eq!(hits.load(Ordering::SeqCst), 3);
     }
@@ -261,7 +315,10 @@ mod tests {
     #[tokio::test]
     async fn a_rejected_key_is_a_precondition() {
         let (url, _) = serve(vec![Canned::new(401, "{}")]).await;
-        let err = client(url).ask(&json!("x"), &urgent(), Duration::from_secs(5)).await.unwrap_err();
+        let err = client(url)
+            .ask(&json!("x"), &urgent(), Duration::from_secs(5))
+            .await
+            .unwrap_err();
         assert!(matches!(err, Error::Precondition(_)), "{err}");
     }
 }

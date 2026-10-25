@@ -1,9 +1,9 @@
 //! IPC commands, one file per domain. Every command is `#[tauri::command] #[specta::specta]` and listed in
 //! `specta::builder()`.
 
-use teamcode_core::domain::{Container, ProjectId, WorkspaceId};
-use teamcode_core::settings::Scope;
-use teamcode_core::Result;
+use fanoutcode_core::domain::{Container, ProjectId, WorkspaceId};
+use fanoutcode_core::settings::Scope;
+use fanoutcode_core::Result;
 
 pub mod activity;
 pub mod canvas;
@@ -47,7 +47,7 @@ pub(crate) fn parse_scope(s: &Scope) -> Result<Scope> {
         task: s
             .task
             .as_ref()
-            .map(|t| teamcode_core::domain::TaskId::parse(t.as_str()))
+            .map(|t| fanoutcode_core::domain::TaskId::parse(t.as_str()))
             .transpose()?,
     })
 }

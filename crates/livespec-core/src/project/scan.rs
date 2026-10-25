@@ -13,18 +13,37 @@ const MAX_TREE_PATHS: usize = 10_000;
 
 /// Directories that are never source, even without a .gitignore.
 const SKIP_DIRS: &[&str] = &[
-    "node_modules", "target", "dist", "build", "out", ".next", ".nuxt", "vendor",
-    "coverage", "__pycache__", ".venv", "venv", ".gradle", "Pods", "DerivedData",
+    "node_modules",
+    "target",
+    "dist",
+    "build",
+    "out",
+    ".next",
+    ".nuxt",
+    "vendor",
+    "coverage",
+    "__pycache__",
+    ".venv",
+    "venv",
+    ".gradle",
+    "Pods",
+    "DerivedData",
 ];
 const SKIP_FILES: &[&str] = &[
-    "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "Cargo.lock", "poetry.lock",
-    "composer.lock", "Gemfile.lock", "bun.lockb", "go.sum",
+    "package-lock.json",
+    "yarn.lock",
+    "pnpm-lock.yaml",
+    "Cargo.lock",
+    "poetry.lock",
+    "composer.lock",
+    "Gemfile.lock",
+    "bun.lockb",
+    "go.sum",
 ];
 const BINARY_EXTS: &[&str] = &[
-    "png", "jpg", "jpeg", "gif", "webp", "ico", "icns", "bmp", "svgz", "pdf", "zip", "gz",
-    "tgz", "xz", "7z", "rar", "jar", "wasm", "so", "dylib", "dll", "exe", "bin", "o", "a",
-    "class", "woff", "woff2", "ttf", "otf", "eot", "mp3", "mp4", "mov", "webm", "wav",
-    "gguf", "onnx", "pt", "sqlite", "db", "lockb",
+    "png", "jpg", "jpeg", "gif", "webp", "ico", "icns", "bmp", "svgz", "pdf", "zip", "gz", "tgz", "xz", "7z", "rar",
+    "jar", "wasm", "so", "dylib", "dll", "exe", "bin", "o", "a", "class", "woff", "woff2", "ttf", "otf", "eot", "mp3",
+    "mp4", "mov", "webm", "wav", "gguf", "onnx", "pt", "sqlite", "db", "lockb",
 ];
 
 #[derive(Debug)]
@@ -77,7 +96,11 @@ pub fn scan(root: &Path) -> Result<ProjectIndex> {
         let Ok(rel) = path.strip_prefix(&root) else { continue };
         let rel = rel.to_string_lossy().replace('\\', "/");
         let Ok(meta) = entry.metadata() else { continue };
-        let mtime = meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map_or(0, |d| d.as_secs());
+        let mtime = meta
+            .modified()
+            .ok()
+            .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+            .map_or(0, |d| d.as_secs());
         stamps.push((rel.clone(), meta.len(), mtime));
         if tree.len() < MAX_TREE_PATHS {
             tree.push(rel.clone());
@@ -90,9 +113,16 @@ pub fn scan(root: &Path) -> Result<ProjectIndex> {
         if bytes.iter().take(8_000).any(|b| *b == 0) {
             continue; // binary without a telltale extension
         }
-        let Ok(content) = String::from_utf8(bytes) else { continue };
+        let Ok(content) = String::from_utf8(bytes) else {
+            continue;
+        };
         let terms = count_terms(&rel, &content);
-        files.push(FileEntry { rel, size: meta.len(), content, terms });
+        files.push(FileEntry {
+            rel,
+            size: meta.len(),
+            content,
+            terms,
+        });
     }
 
     files.sort_by(|a, b| a.rel.cmp(&b.rel));
@@ -113,8 +143,17 @@ pub fn scan(root: &Path) -> Result<ProjectIndex> {
         }
     }
 
-    let name = root.file_name().map_or_else(|| root.display().to_string(), |n| n.to_string_lossy().into_owned());
-    Ok(ProjectIndex { root, name, files, tree, fingerprint: fp.hex(), doc_freq })
+    let name = root
+        .file_name()
+        .map_or_else(|| root.display().to_string(), |n| n.to_string_lossy().into_owned());
+    Ok(ProjectIndex {
+        root,
+        name,
+        files,
+        tree,
+        fingerprint: fp.hex(),
+        doc_freq,
+    })
 }
 
 fn is_indexable(path: &Path, size: u64) -> bool {
@@ -125,7 +164,10 @@ fn is_indexable(path: &Path, size: u64) -> bool {
     if SKIP_FILES.contains(&name.as_ref()) || name.ends_with(".min.js") || name.ends_with(".map") {
         return false;
     }
-    let ext = path.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
+    let ext = path
+        .extension()
+        .map(|e| e.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
     !BINARY_EXTS.contains(&ext.as_str())
 }
 
@@ -152,7 +194,10 @@ pub(crate) mod tests {
         w(".gitignore", "secret.txt\n");
         w("secret.txt", "do not index");
         w("README.md", "# Shop\nAn online shop with carts and invoices.");
-        w("src/billing/invoice.ts", "export function createInvoice(cartId: string) {\n  // invoice totals\n}\n");
+        w(
+            "src/billing/invoice.ts",
+            "export function createInvoice(cartId: string) {\n  // invoice totals\n}\n",
+        );
         w("src/cart/cart.ts", "export class CartStore { addItem() {} }\n");
         w("node_modules/x/index.js", "ignored");
         w("logo.png", "\u{89}PNG");

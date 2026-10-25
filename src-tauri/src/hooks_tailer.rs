@@ -8,14 +8,14 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex};
 
+use fanoutcode_core::domain::TaskId;
+use fanoutcode_core::hooks::cursor::EventCursor;
+use fanoutcode_core::hooks::parse::{parse_line, split_complete_lines};
+use fanoutcode_core::hooks::subscribers::{HookSubscriber, Subscribers};
+use fanoutcode_core::hooks::{event_log_path, HookEvent};
+use fanoutcode_core::Result;
 use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use tauri::{AppHandle, Manager};
-use teamcode_core::domain::TaskId;
-use teamcode_core::hooks::cursor::EventCursor;
-use teamcode_core::hooks::parse::{parse_line, split_complete_lines};
-use teamcode_core::hooks::subscribers::{HookSubscriber, Subscribers};
-use teamcode_core::hooks::{event_log_path, HookEvent};
-use teamcode_core::Result;
 
 use crate::hook_feed;
 use crate::observe::log_err;
@@ -65,7 +65,7 @@ impl HooksTailer {
         let state = app.state::<AppState>();
         let dir = state.data_dir.join("events");
         if let Err(e) = std::fs::create_dir_all(&dir) {
-            eprintln!("Team Code: couldn't create the events folder: {e}");
+            eprintln!("Fanout Code: couldn't create the events folder: {e}");
             return;
         }
         let ids: Vec<TaskId> = std::fs::read_dir(&dir)
@@ -92,11 +92,11 @@ impl HooksTailer {
         match watcher {
             Ok(mut w) => {
                 if let Err(e) = w.watch(&dir, RecursiveMode::NonRecursive) {
-                    eprintln!("Team Code: couldn't watch the events folder: {e}");
+                    eprintln!("Fanout Code: couldn't watch the events folder: {e}");
                 }
                 *state.tailer.watcher.lock().expect("tailer lock") = Some(w);
             }
-            Err(e) => eprintln!("Team Code: couldn't watch the events folder: {e}"),
+            Err(e) => eprintln!("Fanout Code: couldn't watch the events folder: {e}"),
         }
     }
 
@@ -130,7 +130,7 @@ async fn pump(app: &AppHandle, id: &TaskId, live: bool) -> Result<()> {
             Ok(ev) => {
                 log_err("handling a hook event", hook_feed::handle(app, ev, &line, live).await);
             }
-            Err(e) => eprintln!("Team Code: skipped event line {} of {id}: {e}", cursor.seq),
+            Err(e) => eprintln!("Fanout Code: skipped event line {} of {id}: {e}", cursor.seq),
         }
     }
     cursor.byte_offset += consumed;

@@ -65,7 +65,7 @@ export function WorkspaceFileSection(): ReactElement | null {
   if (!ws) return null;
   const explicit = status?.explicit_save ?? false;
   const saveAs = async () => {
-    const path = await pickSavePath(`${ws.name}.teamcode-workspace.json`);
+    const path = await pickSavePath(`${ws.name}.fanoutcode-workspace.json`);
     if (path) await workspaceStore.saveAs(path);
   };
   return (

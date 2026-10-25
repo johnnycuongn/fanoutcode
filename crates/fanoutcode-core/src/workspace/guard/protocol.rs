@@ -1,0 +1,131 @@
+//! The hook side of the guard: Claude Code's `PreToolUse` stdin/stdout protocol, the per-task roots file, and the
+//! `HookSpec` that runs `fanoutcode guard <roots-file>` before every Bash call.
+
+use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
+
+use serde::{Deserialize, Serialize};
+
+use super::{evaluate, GuardDecision, GuardInput};
+use crate::domain::TaskId;
+use crate::hooks::{sh_single_quote, HookSpec};
+use crate::memory::store::write_atomic;
+use crate::Result;
+
+/// `<app_data>/guards/<task-id>.guard.json`.
+#[derive(Debug, Serialize, Deserialize)]
+struct RootsFile {
+    protected: Vec<PathBuf>,
+    home_dir: PathBuf,
+}
+
+#[derive(Deserialize)]
+struct HookInput {
+    tool_name: Option<String>,
+    tool_input: Option<serde_json::Value>,
+    cwd: Option<PathBuf>,
+}
+
+/// Reads one hook payload from `stdin` and prints a deny decision for a Bash command that writes under a protected
+/// root. Always returns 0: a missing roots file or malformed input is reported on stderr and allowed (fail open; the
+/// `Edit` deny rules remain the hard guarantee).
+pub fn run_guard(stdin: &mut dyn Read, stdout: &mut dyn Write, roots_file: &Path) -> i32 {
+    let roots: RootsFile = match std::fs::read(roots_file)
+        .ok()
+        .and_then(|b| serde_json::from_slice(&b).ok())
+    {
+        Some(r) => r,
+        None => {
+            eprintln!("fanoutcode guard: cannot read {}; allowing", roots_file.display());
+            return 0;
+        }
+    };
+    let mut text = String::new();
+    let input: HookInput = match stdin
+        .read_to_string(&mut text)
+        .ok()
+        .and_then(|_| serde_json::from_str(&text).ok())
+    {
+        Some(i) => i,
+        None => {
+            eprintln!("fanoutcode guard: malformed hook input; allowing");
+            return 0;
+        }
+    };
+    if input.tool_name.as_deref() != Some("Bash") {
+        return 0;
+    }
+    let Some(command) = input
+        .tool_input
+        .as_ref()
+        .and_then(|t| t.get("command"))
+        .and_then(|c| c.as_str())
+    else {
+        return 0;
+    };
+    let cwd = input.cwd.unwrap_or_else(|| PathBuf::from("/"));
+    let decision = evaluate(
+        &GuardInput {
+            command: command.to_owned(),
+            cwd,
+        },
+        &roots.protected,
+        &roots.home_dir,
+    );
+    if let GuardDecision::Deny { reason, .. } = decision {
+        let out = serde_json::json!({"hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "deny",
+            "permissionDecisionReason": reason,
+        }});
+        let _ = writeln!(stdout, "{out}");
+    }
+    0
+}
+
+/// Writes the task's roots file (the task id re-validated, since it becomes a file name).
+pub fn write_roots_file(
+    guards_dir: &Path,
+    task_id: &TaskId,
+    protected: &[PathBuf],
+    home_dir: &Path,
+) -> Result<PathBuf> {
+    let id = TaskId::parse(task_id.as_str())?;
+    let path = guards_dir.join(format!("{id}.guard.json"));
+    let body = RootsFile {
+        protected: protected.to_vec(),
+        home_dir: home_dir.to_owned(),
+    };
+    write_atomic(&path, &serde_json::to_vec_pretty(&body)?)?;
+    Ok(path)
+}
+
+/// `'<exe>' guard '<roots_file>'` on `PreToolUse` for `Bash`, five-second timeout.
+pub fn guard_hook_spec(exe: &Path, roots_file: &Path) -> HookSpec {
+    HookSpec {
+        event: "PreToolUse".into(),
+        matcher: Some("Bash".into()),
+        command: format!(
+            "{} guard {}",
+            sh_single_quote(&exe.display().to_string()),
+            sh_single_quote(&roots_file.display().to_string())
+        ),
+        timeout_s: Some(5),
+    }
+}
+
+/// `None` without protected roots; otherwise writes `<app_data>/guards/<task-id>.guard.json` and returns the hook to
+/// add to the task's generated settings. Called at every launch.
+pub fn prepare_guard(
+    app_data: &Path,
+    exe: &Path,
+    task_id: &TaskId,
+    protected: &[PathBuf],
+    home_dir: &Path,
+) -> Result<Option<HookSpec>> {
+    if protected.is_empty() {
+        return Ok(None);
+    }
+    let file = write_roots_file(&app_data.join("guards"), task_id, protected, home_dir)?;
+    Ok(Some(guard_hook_spec(exe, &file)))
+}

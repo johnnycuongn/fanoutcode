@@ -4,10 +4,10 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
+use fanoutcode_core::db;
+use fanoutcode_core::sessions::STOP_GRACE;
 use tauri::{AppHandle, ExitRequestApi, Manager};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
-use teamcode_core::db;
-use teamcode_core::sessions::STOP_GRACE;
 
 use super::stop_all_blocking;
 use crate::state::AppState;
@@ -63,7 +63,7 @@ pub fn on_exit_requested(app: &AppHandle, code: Option<i32>, api: &ExitRequestAp
             titles.len(),
             titles.join("\n")
         ))
-        .title("Quit Team Code?")
+        .title("Quit Fanout Code?")
         .buttons(MessageDialogButtons::OkCancelCustom("Quit".into(), "Cancel".into()))
         .show(move |confirmed| {
             if confirmed {

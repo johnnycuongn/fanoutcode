@@ -3,17 +3,17 @@
 
 use std::path::PathBuf;
 
+use fanoutcode_core::changes::{self, FileDiff, RepoChanges};
+use fanoutcode_core::domain::TaskId;
+use fanoutcode_core::git::{self, FileStatus};
+use fanoutcode_core::helpers::commit_messages::{self, RepoCommits};
+use fanoutcode_core::memory::store::write_atomic;
+use fanoutcode_core::memory::{IndexEntry, MemoryFile, TaskFolder, TimelineKind};
+use fanoutcode_core::pipeline::{self, Effect};
+use fanoutcode_core::settings::{keys, resolve};
+use fanoutcode_core::Result;
+use fanoutcode_core::{db, Error};
 use tauri::{AppHandle, State};
-use teamcode_core::changes::{self, FileDiff, RepoChanges};
-use teamcode_core::domain::TaskId;
-use teamcode_core::git::{self, FileStatus};
-use teamcode_core::helpers::commit_messages::{self, RepoCommits};
-use teamcode_core::memory::store::write_atomic;
-use teamcode_core::memory::{IndexEntry, MemoryFile, TaskFolder, TimelineKind};
-use teamcode_core::pipeline::{self, Effect};
-use teamcode_core::settings::{keys, resolve};
-use teamcode_core::Result;
-use teamcode_core::{db, Error};
 
 use crate::events::{self, GitChanges};
 use crate::git_watcher;
@@ -26,7 +26,7 @@ fn target(
     task_id: &TaskId,
     repo: &std::path::Path,
     path: &str,
-) -> Result<(teamcode_core::domain::Task, PathBuf, PathBuf)> {
+) -> Result<(fanoutcode_core::domain::Task, PathBuf, PathBuf)> {
     let id = TaskId::parse(task_id.as_str())?;
     let (task, home) = observe::task_and_home(state, &id)?;
     let repo = observe::checked_repo(&observe::repos(&task, &home), repo)?;
@@ -131,7 +131,7 @@ pub fn git_drafts(state: State<'_, AppState>, task_id: TaskId) -> Result<Vec<Rep
     Ok(commit_messages::parse_commits_md(&md))
 }
 
-/// Commits draft `index` of `repo` (only with "Team Code may commit"), logs it on the timeline, emits
+/// Commits draft `index` of `repo` (only with "Fanout Code may commit"), logs it on the timeline, emits
 /// `git-changes`; the new sha.
 pub(crate) async fn commit_one(app: &AppHandle, id: &TaskId, repo: &std::path::Path, index: usize) -> Result<String> {
     let state = tauri::Manager::state::<AppState>(app);
@@ -173,7 +173,7 @@ pub(crate) async fn commit_one(app: &AppHandle, id: &TaskId, repo: &std::path::P
     Ok(sha)
 }
 
-/// The Commit tab's Commit button for one draft; refused unless "Team Code may commit" is on.
+/// The Commit tab's Commit button for one draft; refused unless "Fanout Code may commit" is on.
 #[tauri::command]
 #[specta::specta]
 pub async fn git_commit(app: AppHandle, task_id: TaskId, repo: PathBuf, index: u32) -> Result<String> {

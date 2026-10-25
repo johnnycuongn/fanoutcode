@@ -3,16 +3,16 @@
 
 use std::path::{Path, PathBuf};
 
+use fanoutcode_core::changes::attributor::Probe;
+use fanoutcode_core::cost::{ledger, LiveCost};
+use fanoutcode_core::domain::{AgentState, Task, TaskId};
+use fanoutcode_core::hooks::attribution::read_agent_meta;
+use fanoutcode_core::hooks::plan_steps::{dispatch_from_tool_input, Dispatch};
+use fanoutcode_core::hooks::{artifact, feed, HookEvent, TaskEvent};
+use fanoutcode_core::memory::TaskFolder;
+use fanoutcode_core::{db, git, pipeline, Result};
 use serde_json::Value;
 use tauri::{AppHandle, Manager};
-use teamcode_core::changes::attributor::Probe;
-use teamcode_core::cost::{ledger, LiveCost};
-use teamcode_core::domain::{AgentState, Task, TaskId};
-use teamcode_core::hooks::attribution::read_agent_meta;
-use teamcode_core::hooks::plan_steps::{dispatch_from_tool_input, Dispatch};
-use teamcode_core::hooks::{artifact, feed, HookEvent, TaskEvent};
-use teamcode_core::memory::TaskFolder;
-use teamcode_core::{db, git, pipeline, Result};
 
 use crate::events::{self, CostUpdated, TeamEvent};
 use crate::observation;
@@ -200,5 +200,5 @@ fn ingest_all(state: &AppState, task: &Task) -> Result<bool> {
 
 /// The memory folder's plan, for `hooks_plan_steps`.
 pub fn plan_text(memory_dir: &Path) -> Result<Option<String>> {
-    TaskFolder::open(memory_dir.to_owned()).read(teamcode_core::memory::MemoryFile::Plan)
+    TaskFolder::open(memory_dir.to_owned()).read(fanoutcode_core::memory::MemoryFile::Plan)
 }

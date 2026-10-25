@@ -6,7 +6,7 @@ import type { LaneState } from "./types";
 export type { LaneState };
 
 export const laneStorageKey = (container: Container): string =>
-  `teamcode.board.lanes.${container.type}.${container.id}`;
+  `fanoutcode.board.lanes.${container.type}.${container.id}`;
 
 const strings = (value: unknown): string[] =>
   Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];

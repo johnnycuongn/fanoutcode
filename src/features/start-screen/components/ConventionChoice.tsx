@@ -10,9 +10,9 @@ const OPTIONS: Array<{ value: WorktreeConvention; title: string; body: string }>
     body: "Launched with claude --worktree under .claude/worktrees/. A clean worktree is removed when its session exits; a dirty one gets Claude's keep-or-remove prompt in the terminal; stale worktrees are swept by Claude Code; claude rm removes a session's worktree when safe.",
   },
   {
-    value: "TeamCodeManaged",
-    title: "Team Code-managed",
-    body: "git worktree add <root>/.worktrees/<task-slug> -b tc/<task-slug>. Removing a worktree on archive is offered, never automatic.",
+    value: "FanoutCodeManaged",
+    title: "Fanout Code-managed",
+    body: "git worktree add <root>/.worktrees/<task-slug> -b fo/<task-slug>. Removing a worktree on archive is offered, never automatic.",
   },
 ];
 

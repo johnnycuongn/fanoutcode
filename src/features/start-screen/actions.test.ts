@@ -14,14 +14,14 @@ describe("newWorkspaceFromOpenWindows", () => {
       workspacesCreate: vi.fn().mockResolvedValue({
         id: "ws-d4",
         name: "Alpha workspace",
-        file_path: "/data/Alpha workspace.teamcode-workspace.json",
+        file_path: "/data/Alpha workspace.fanoutcode-workspace.json",
       }),
       windowsOpenWorkspace: vi.fn().mockResolvedValue(undefined),
       windowsClose: vi.fn().mockResolvedValue(undefined),
     };
     expect(await newWorkspaceFromOpenWindows(deps)).toBe("ws-d4");
     expect(deps.workspacesCreate).toHaveBeenCalledWith("Alpha workspace", ["proj-a1", "proj-b2"]);
-    expect(deps.windowsOpenWorkspace).toHaveBeenCalledWith("/data/Alpha workspace.teamcode-workspace.json");
+    expect(deps.windowsOpenWorkspace).toHaveBeenCalledWith("/data/Alpha workspace.fanoutcode-workspace.json");
     expect(deps.windowsClose.mock.calls.map((c) => c[0])).toEqual(["w-1", "w-2", "w-3"]);
   });
   it("does nothing without project windows", async () => {

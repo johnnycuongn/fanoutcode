@@ -37,7 +37,7 @@ export interface ModePersist {
   write(m: DiffMode): void;
 }
 
-const MODE_KEY = "teamcode.changes.mode";
+const MODE_KEY = "fanoutcode.changes.mode";
 
 export const localModePersist: ModePersist = {
   read() {

@@ -453,7 +453,7 @@ async gitDrafts(taskId: TaskId) : Promise<Result<RepoCommits[], string>> {
 }
 },
 /**
- * The Commit tab's Commit button for one draft; refused unless "Team Code may commit" is on.
+ * The Commit tab's Commit button for one draft; refused unless "Fanout Code may commit" is on.
  */
 async gitCommit(taskId: TaskId, repo: string, index: number) : Promise<Result<string, string>> {
     try {
@@ -1213,7 +1213,7 @@ export type ImportRoot = {
  */
 warning: string | null; path: string; exists: boolean; is_dir: boolean; 
 /**
- * No project with this root is open in Team Code yet.
+ * No project with this root is open in Fanout Code yet.
  */
 new_to_app: boolean; protected: boolean }
 export type Issue = { key: string; summary: string; status: string; assignee: string | null; issue_type: string; 
@@ -1512,7 +1512,7 @@ explicit_save: boolean }
  * Per task, resolved from the project default at creation.
  */
 export type WorktreeChoice = "Off" | "On"
-export type WorktreeConvention = "ClaudeCode" | "TeamCodeManaged"
+export type WorktreeConvention = "ClaudeCode" | "FanoutCodeManaged"
 
 /** tauri-specta globals **/
 

@@ -1,5 +1,5 @@
 // The Spec stage's writing surface. Copied from LiveSpec (src/components/DraftPane.tsx) and moved onto the Textarea
-// primitive and Team Code's tokens; Literata comes from the theme's `font-serif`.
+// primitive and Fanout Code's tokens; Literata comes from the theme's `font-serif`.
 import { useEffect, useState } from "react";
 import { Button, Textarea, cx } from "@/components/ui";
 import { copyText } from "./clipboard";

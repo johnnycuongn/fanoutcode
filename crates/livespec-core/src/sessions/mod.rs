@@ -92,7 +92,11 @@ pub struct Workspace {
 
 impl Default for Workspace {
     fn default() -> Self {
-        Self { version: 1, next_window: 1, windows: Vec::new() }
+        Self {
+            version: 1,
+            next_window: 1,
+            windows: Vec::new(),
+        }
     }
 }
 
@@ -186,14 +190,21 @@ impl Workspace {
     pub fn sanitized(mut self) -> Self {
         let mut seen = HashSet::new();
         let mut listed = HashSet::new();
-        self.windows.retain(|w| w.id.starts_with("w-") && valid_id(&w.id) && seen.insert(w.id.clone()));
+        self.windows
+            .retain(|w| w.id.starts_with("w-") && valid_id(&w.id) && seen.insert(w.id.clone()));
         for w in &mut self.windows {
-            w.tabs.retain(|t| t.starts_with("t-") && valid_id(t) && listed.insert(t.clone()));
+            w.tabs
+                .retain(|t| t.starts_with("t-") && valid_id(t) && listed.insert(t.clone()));
             if !w.active.as_ref().is_some_and(|a| w.tabs.contains(a)) {
                 w.active = w.tabs.first().cloned();
             }
         }
-        let highest = self.windows.iter().filter_map(|w| w.id.strip_prefix("w-")?.parse::<u64>().ok()).max().unwrap_or(0);
+        let highest = self
+            .windows
+            .iter()
+            .filter_map(|w| w.id.strip_prefix("w-")?.parse::<u64>().ok())
+            .max()
+            .unwrap_or(0);
         self.next_window = self.next_window.max(highest.saturating_add(1));
         self
     }
@@ -202,7 +213,11 @@ impl Workspace {
     pub fn push_window(&mut self) -> String {
         let id = window_id(self.next_window);
         self.next_window = self.next_window.saturating_add(1);
-        self.windows.push(WindowEntry { id: id.clone(), tabs: Vec::new(), active: None });
+        self.windows.push(WindowEntry {
+            id: id.clone(),
+            tabs: Vec::new(),
+            active: None,
+        });
         id
     }
 
@@ -212,7 +227,10 @@ impl Workspace {
 
     /// The window that lists `tab`, if the tab is open.
     pub fn window_of(&self, tab: &str) -> Option<&str> {
-        self.windows.iter().find(|w| w.tabs.iter().any(|t| t == tab)).map(|w| w.id.as_str())
+        self.windows
+            .iter()
+            .find(|w| w.tabs.iter().any(|t| t == tab))
+            .map(|w| w.id.as_str())
     }
 }
 
@@ -220,7 +238,9 @@ impl WindowEntry {
     /// Removes `tab`. If it was active, the tab that took its place (else the
     /// one before it) becomes active.
     pub fn remove_tab(&mut self, tab: &str) {
-        let Some(pos) = self.tabs.iter().position(|t| t == tab) else { return };
+        let Some(pos) = self.tabs.iter().position(|t| t == tab) else {
+            return;
+        };
         self.tabs.remove(pos);
         if self.active.as_deref() == Some(tab) {
             self.active = self.tabs.get(pos).or_else(|| self.tabs.last()).cloned();
@@ -283,7 +303,11 @@ mod tests {
                 }]
             })
         );
-        assert_eq!(serde_json::from_value::<Tab>(json).unwrap(), tab, "and reads back unchanged");
+        assert_eq!(
+            serde_json::from_value::<Tab>(json).unwrap(),
+            tab,
+            "and reads back unchanged"
+        );
         let summary = serde_json::to_value(tab.summary()).unwrap();
         assert_eq!(summary["firstLine"], "d");
         assert_eq!(summary["closedAt"], serde_json::Value::Null);
@@ -300,13 +324,19 @@ mod tests {
     fn first_line_matches_the_frontend() {
         // The same strings as `firstLine` in src/lib/tabTitle.test.ts.
         assert_eq!(first_line(""), "");
-        assert_eq!(first_line("\n  \n\t Retry failed checkout payments  \nsecond line"), "Retry failed checkout payments");
+        assert_eq!(
+            first_line("\n  \n\t Retry failed checkout payments  \nsecond line"),
+            "Retry failed checkout payments"
+        );
         assert_eq!(first_line("line one\r\nline two"), "line one");
         assert_eq!(first_line(&"a".repeat(60)), "a".repeat(48));
         assert_eq!(first_line(&format!("{} yz", "x".repeat(47))), "x".repeat(47));
         assert_eq!(first_line(&"😀".repeat(50)), "😀".repeat(48));
         // Unicode White_Space is trimmed (NEL, no-break and ideographic spaces); a BOM is not whitespace.
-        assert_eq!(first_line("\u{85}\u{a0}Retry\u{2003}payments\u{3000}\nmore"), "Retry\u{2003}payments");
+        assert_eq!(
+            first_line("\u{85}\u{a0}Retry\u{2003}payments\u{3000}\nmore"),
+            "Retry\u{2003}payments"
+        );
         assert_eq!(first_line("\u{feff}Retry"), "\u{feff}Retry");
     }
 
@@ -315,7 +345,10 @@ mod tests {
         let mut s = Snapshot::default();
         s.apply_check(&CheckEvent::Checking { count: 2, total: 3 });
         s.apply_check(&CheckEvent::Result(check()));
-        assert_eq!((s.checks_total, s.checks_faults, s.checks.len(), s.checks_stopped), (Some(2), Some(3), 1, false));
+        assert_eq!(
+            (s.checks_total, s.checks_faults, s.checks.len(), s.checks_stopped),
+            (Some(2), Some(3), 1, false)
+        );
         s.apply_check(&CheckEvent::Notice("Jev is unavailable.".into()));
         assert_eq!(s.notices, ["Jev is unavailable."]);
         assert!(s.checks_stopped, "a failed fact-check is checksStopped, as it is live");
@@ -335,9 +368,18 @@ mod tests {
         let windows: Vec<(&str, Vec<&str>, Option<&str>)> = ws
             .windows
             .iter()
-            .map(|w| (w.id.as_str(), w.tabs.iter().map(String::as_str).collect(), w.active.as_deref()))
+            .map(|w| {
+                (
+                    w.id.as_str(),
+                    w.tabs.iter().map(String::as_str).collect(),
+                    w.active.as_deref(),
+                )
+            })
             .collect();
-        assert_eq!(windows, [("w-1", vec!["t-1", "t-2"], Some("t-1")), ("w-4", vec![], None)]);
+        assert_eq!(
+            windows,
+            [("w-1", vec!["t-1", "t-2"], Some("t-1")), ("w-4", vec![], None)]
+        );
         assert_eq!(ws.next_window, 5, "a window id is never reused");
     }
 
@@ -366,14 +408,22 @@ mod tests {
 
     #[test]
     fn removing_the_active_tab_activates_its_neighbour() {
-        let mut w = WindowEntry { id: "w-1".into(), tabs: vec!["t-a".into(), "t-b".into(), "t-c".into()], active: Some("t-b".into()) };
+        let mut w = WindowEntry {
+            id: "w-1".into(),
+            tabs: vec!["t-a".into(), "t-b".into(), "t-c".into()],
+            active: Some("t-b".into()),
+        };
         w.remove_tab("t-b");
         assert_eq!(w.active.as_deref(), Some("t-c"), "the tab that took its place");
         w.remove_tab("t-c");
         assert_eq!(w.active.as_deref(), Some("t-a"), "at the end: the one before it");
         w.tabs.push("t-d".into());
         w.remove_tab("t-d");
-        assert_eq!(w.active.as_deref(), Some("t-a"), "closing another tab leaves the active one");
+        assert_eq!(
+            w.active.as_deref(),
+            Some("t-a"),
+            "closing another tab leaves the active one"
+        );
         w.remove_tab("t-e");
         assert_eq!(w.tabs, ["t-a"], "a tab the window doesn't list changes nothing");
         w.remove_tab("t-a");

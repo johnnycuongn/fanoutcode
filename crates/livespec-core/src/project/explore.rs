@@ -28,7 +28,13 @@ pub struct Note {
 }
 
 pub fn in_slice(rel: &str, prefixes: &[String]) -> bool {
-    prefixes.iter().any(|p| if p.ends_with('/') { rel.starts_with(p.as_str()) } else { rel == p })
+    prefixes.iter().any(|p| {
+        if p.ends_with('/') {
+            rel.starts_with(p.as_str())
+        } else {
+            rel == p
+        }
+    })
 }
 
 /// Up to `n` slices of roughly equal size. Root-level README and manifest
@@ -77,7 +83,13 @@ pub fn slices(index: &ProjectIndex, n: usize) -> Vec<Slice> {
     let count = n.min(groups.len()).max(1);
     let mut ordered: Vec<(String, (usize, u64))> = groups.into_iter().collect();
     ordered.sort_by(|a, b| b.1 .1.cmp(&a.1 .1).then(a.0.cmp(&b.0)));
-    let mut out: Vec<Slice> = (0..count).map(|_| Slice { prefixes: vec![], files: 0, bytes: 0 }).collect();
+    let mut out: Vec<Slice> = (0..count)
+        .map(|_| Slice {
+            prefixes: vec![],
+            files: 0,
+            bytes: 0,
+        })
+        .collect();
     for (prefix, (files, bytes)) in ordered {
         let lightest = out.iter_mut().min_by_key(|s| s.bytes).expect("count >= 1");
         lightest.prefixes.push(prefix);
@@ -99,7 +111,12 @@ fn whole(groups: &BTreeMap<String, (usize, u64)>) -> Slice {
 }
 
 fn has_subfolders(index: &ProjectIndex, prefix: Option<&String>) -> bool {
-    prefix.is_some_and(|p| index.files.iter().any(|f| f.rel.strip_prefix(p.as_str()).is_some_and(|rest| rest.contains('/'))))
+    prefix.is_some_and(|p| {
+        index
+            .files
+            .iter()
+            .any(|f| f.rel.strip_prefix(p.as_str()).is_some_and(|rest| rest.contains('/')))
+    })
 }
 
 /// Notes from the explorers that succeeded with something to say, and the
@@ -108,7 +125,11 @@ pub fn collect_notes(slices: &[Slice], results: Vec<Result<String>>) -> Result<(
     let (mut notes, mut unmapped, mut first_error) = (Vec::new(), Vec::new(), None);
     for (i, (slice, result)) in slices.iter().zip(results).enumerate() {
         match result.map(|t| t.trim().to_owned()) {
-            Ok(text) if !text.is_empty() => notes.push(Note { agent: i + 1, prefixes: slice.prefixes.clone(), text }),
+            Ok(text) if !text.is_empty() => notes.push(Note {
+                agent: i + 1,
+                prefixes: slice.prefixes.clone(),
+                text,
+            }),
             Ok(_) => unmapped.extend(slice.prefixes.iter().cloned()),
             Err(e) => {
                 unmapped.extend(slice.prefixes.iter().cloned());
@@ -130,7 +151,6 @@ pub fn brief_source(provider_label: &str, agents: usize) -> String {
         provider_label.to_owned()
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -176,7 +196,13 @@ mod tests {
         let mut groups: Vec<Vec<String>> = two.iter().map(|s| s.prefixes.clone()).collect();
         groups.sort();
         // 4+1 vs 3+2: largest-first into the lightest slice.
-        assert_eq!(groups, [vec!["a/".to_string(), "d/".to_string()], vec!["b/".to_string(), "c/".to_string()]]);
+        assert_eq!(
+            groups,
+            [
+                vec!["a/".to_string(), "d/".to_string()],
+                vec!["b/".to_string(), "c/".to_string()]
+            ]
+        );
         assert_eq!(slices(&idx, 8).len(), 4, "never more slices than folders");
         assert_eq!(slices(&idx, 1).len(), 1);
     }
@@ -190,7 +216,10 @@ mod tests {
                 let holders = s.iter().filter(|slice| in_slice(&f.rel, &slice.prefixes)).count();
                 assert_eq!(holders, 1, "n={n} {}", f.rel);
             }
-            assert!(s.iter().all(|slice| !in_slice("README.md", &slice.prefixes)), "root files go to the merge");
+            assert!(
+                s.iter().all(|slice| !in_slice("README.md", &slice.prefixes)),
+                "root files go to the merge"
+            );
         }
     }
 
@@ -221,22 +250,47 @@ mod tests {
     }
 
     fn slice(prefix: &str) -> Slice {
-        Slice { prefixes: vec![prefix.into()], files: 1, bytes: 1 }
+        Slice {
+            prefixes: vec![prefix.into()],
+            files: 1,
+            bytes: 1,
+        }
     }
 
     #[test]
     fn failed_or_empty_explorers_become_unmapped() {
         let s = vec![slice("a/"), slice("b/"), slice("c/")];
-        let (notes, unmapped) =
-            collect_notes(&s, vec![Ok("## Modules\n- a".into()), Err(Error::Provider("boom".into())), Ok("  ".into())]).unwrap();
-        assert_eq!(notes, vec![Note { agent: 1, prefixes: vec!["a/".into()], text: "## Modules\n- a".into() }]);
+        let (notes, unmapped) = collect_notes(
+            &s,
+            vec![
+                Ok("## Modules\n- a".into()),
+                Err(Error::Provider("boom".into())),
+                Ok("  ".into()),
+            ],
+        )
+        .unwrap();
+        assert_eq!(
+            notes,
+            vec![Note {
+                agent: 1,
+                prefixes: vec!["a/".into()],
+                text: "## Modules\n- a".into()
+            }]
+        );
         assert_eq!(unmapped, ["b/", "c/"]);
     }
 
     #[test]
     fn all_explorers_failing_is_an_error() {
         let s = vec![slice("a/"), slice("b/")];
-        let err = collect_notes(&s, vec![Err(Error::Provider("first".into())), Err(Error::Provider("second".into()))]).unwrap_err();
+        let err = collect_notes(
+            &s,
+            vec![
+                Err(Error::Provider("first".into())),
+                Err(Error::Provider("second".into())),
+            ],
+        )
+        .unwrap_err();
         assert_eq!(err.to_string(), "first");
     }
 
@@ -267,10 +321,17 @@ mod tests {
         assert!(s.len() > 1);
         for i in 0..30 {
             let rel = format!("server{i}.go");
-            assert_eq!(s.iter().filter(|slice| in_slice(&rel, &slice.prefixes)).count(), 1, "{rel}");
+            assert_eq!(
+                s.iter().filter(|slice| in_slice(&rel, &slice.prefixes)).count(),
+                1,
+                "{rel}"
+            );
         }
         for key in ["README.md", "go.mod"] {
-            assert!(s.iter().all(|slice| !in_slice(key, &slice.prefixes)), "{key} stays with the merge's overview");
+            assert!(
+                s.iter().all(|slice| !in_slice(key, &slice.prefixes)),
+                "{key} stays with the merge's overview"
+            );
         }
     }
 }

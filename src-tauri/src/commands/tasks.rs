@@ -2,13 +2,13 @@
 //! `pipeline::apply`; then, with the lock released, dispatch the external effects and notify every window.
 
 use chrono::{Local, Utc};
+use fanoutcode_core::domain::{Container, ProjectId, Stage, Task, TaskId, WorkspaceId};
+use fanoutcode_core::helpers::HelperKind;
+use fanoutcode_core::memory::TaskFolder;
+use fanoutcode_core::pipeline::{self, Effect, NewTask, StageAction, TaskPatch};
+use fanoutcode_core::{db, Error, Result};
 use serde::Serialize;
 use tauri::{AppHandle, State};
-use teamcode_core::domain::{Container, ProjectId, Stage, Task, TaskId, WorkspaceId};
-use teamcode_core::helpers::HelperKind;
-use teamcode_core::memory::TaskFolder;
-use teamcode_core::pipeline::{self, Effect, NewTask, StageAction, TaskPatch};
-use teamcode_core::{db, Error, Result};
 
 use super::parse_container;
 use crate::events::{self, TasksReloaded};
@@ -93,7 +93,7 @@ pub(crate) fn run_action(app: &AppHandle, state: &AppState, id: &TaskId, action:
         pipeline::transition(task, action.clone(), tctx)
     })?;
     for t in &outcome.toasts {
-        eprintln!("Team Code: {} ({})", t, outcome.task.id);
+        eprintln!("Fanout Code: {} ({})", t, outcome.task.id);
     }
     Ok(outcome.task)
 }

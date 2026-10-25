@@ -69,7 +69,7 @@ export function makeWorkspace(over: Partial<Workspace> = {}): Workspace {
   return {
     id: "ws-d4",
     name: "Alpha workspace",
-    file_path: "/data/Alpha workspace.teamcode-workspace.json",
+    file_path: "/data/Alpha workspace.fanoutcode-workspace.json",
     dirty: false,
     projects: [{ project_id: "proj-a1", order: 0, protected: false }],
     policy: "ReadAndModifyOnRequest",

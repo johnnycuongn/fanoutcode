@@ -62,7 +62,11 @@ pub fn find(id: &str) -> Option<&'static SectionSpec> {
 
 /// Known ids in catalogue order, each once. Empty stays empty: the default set.
 pub fn normalize(ids: &[String]) -> Vec<String> {
-    CATALOGUE.iter().filter(|s| ids.iter().any(|id| id == s.id)).map(|s| s.id.to_owned()).collect()
+    CATALOGUE
+        .iter()
+        .filter(|s| ids.iter().any(|id| id == s.id))
+        .map(|s| s.id.to_owned())
+        .collect()
 }
 
 /// The specs a tab asked for, normalized. Nothing known (an empty list, or
@@ -101,21 +105,38 @@ mod tests {
     #[test]
     fn the_catalogue_is_the_default_set_in_order() {
         assert_eq!(ids(&CATALOGUE.iter().collect::<Vec<_>>()), DEFAULT_SECTIONS);
-        assert_eq!(DEFAULT_SECTIONS, ["intent", "conflicts", "gaps", "ambiguities", "questions"]);
-        assert_eq!(CATALOGUE.iter().filter(|s| s.checkable).map(|s| s.id).collect::<Vec<_>>(), ["conflicts"]);
+        assert_eq!(
+            DEFAULT_SECTIONS,
+            ["intent", "conflicts", "gaps", "ambiguities", "questions"]
+        );
+        assert_eq!(
+            CATALOGUE
+                .iter()
+                .filter(|s| s.checkable)
+                .map(|s| s.id)
+                .collect::<Vec<_>>(),
+            ["conflicts"]
+        );
     }
 
     #[test]
     fn resolve_keeps_known_ids_in_catalogue_order_once_each() {
         let picked = resolve(&["questions".into(), "intent".into(), "questions".into(), "bogus".into()]);
         assert_eq!(ids(&picked), ["intent", "questions"]);
-        assert_eq!(normalize(&["questions".into(), "intent".into(), "questions".into()]), ["intent", "questions"]);
+        assert_eq!(
+            normalize(&["questions".into(), "intent".into(), "questions".into()]),
+            ["intent", "questions"]
+        );
     }
 
     #[test]
     fn nothing_known_means_the_default_set() {
         assert_eq!(ids(&resolve(&[])), DEFAULT_SECTIONS);
-        assert_eq!(ids(&resolve(&["bogus".into()])), DEFAULT_SECTIONS, "a hand-edited file falls back, never to zero sections");
+        assert_eq!(
+            ids(&resolve(&["bogus".into()])),
+            DEFAULT_SECTIONS,
+            "a hand-edited file falls back, never to zero sections"
+        );
         assert!(normalize(&[]).is_empty(), "stored as empty: the default set");
         assert!(normalize(&["bogus".into()]).is_empty());
     }
@@ -141,6 +162,9 @@ mod tests {
             assert_eq!(heading_id(word), None, "{word}");
         }
         assert_eq!(find("gaps").map(|s| s.heading), Some("Gaps"));
-        assert!(find("directions").is_none(), "the old build's section is not in the catalogue");
+        assert!(
+            find("directions").is_none(),
+            "the old build's section is not in the catalogue"
+        );
     }
 }

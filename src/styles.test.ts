@@ -1,4 +1,4 @@
-/* eslint-disable teamcode/no-colour-literals -- this test pins the hex values of the theme file */
+/* eslint-disable fanoutcode/no-colour-literals -- this test pins the hex values of the theme file */
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { expect, it } from "vitest";
 

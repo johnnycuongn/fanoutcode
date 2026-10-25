@@ -65,7 +65,7 @@ export function TerminalPane({
 
   const onBring = () => {
     term?.reset();
-    bring(sessionId, paneId, deliver).catch((err: unknown) => console.error("Team Code: bring failed", err));
+    bring(sessionId, paneId, deliver).catch((err: unknown) => console.error("Fanout Code: bring failed", err));
   };
   const elsewhere = state.status === "elsewhere" && state.attachedTo;
   const line = statusLine(state.status, state.exitCode, state.pending);

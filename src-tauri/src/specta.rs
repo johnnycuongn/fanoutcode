@@ -3,9 +3,9 @@
 
 use std::path::Path;
 
+use fanoutcode_core::{Error, Result};
 use specta_typescript::{BigIntExportBehavior, Typescript};
 use tauri_specta::{collect_commands, collect_events, Builder};
-use teamcode_core::{Error, Result};
 
 use crate::commands::tests as test_runs;
 use crate::commands::{

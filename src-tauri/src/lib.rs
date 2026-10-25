@@ -1,4 +1,4 @@
-//! Tauri shell: wires `teamcode-core` to the webview. Kept thin on purpose; logic that doesn't need Tauri lives in
+//! Tauri shell: wires `fanoutcode-core` to the webview. Kept thin on purpose; logic that doesn't need Tauri lives in
 //! the core crate.
 
 pub mod commands;
@@ -22,9 +22,9 @@ pub mod state;
 pub mod windows;
 pub mod workspace_sync;
 
+use fanoutcode_core::db;
+use fanoutcode_core::windows::SavedWindow;
 use tauri::Manager;
-use teamcode_core::db;
-use teamcode_core::windows::SavedWindow;
 
 use state::AppState;
 
@@ -52,7 +52,7 @@ pub fn run() {
             windows::on_window_event(window, event);
             // a closed window's panes are gone; their sessions keep running, detached (Review Focus 2)
             if let tauri::WindowEvent::Destroyed = event {
-                if let Ok(id) = teamcode_core::ids::WindowId::parse(window.label()) {
+                if let Ok(id) = fanoutcode_core::ids::WindowId::parse(window.label()) {
                     window.app_handle().state::<AppState>().registry().detach_window(&id);
                 }
             }
@@ -64,11 +64,11 @@ pub fn run() {
             app.manage(AppState::new(&data_dir, &config_dir)?);
             // an Owned PTY cannot outlive the app: every session row still marked running is stale
             if let Err(e) = db::sessions::mark_all_exited(&app.state::<AppState>().db.lock().expect("db lock"), -1) {
-                eprintln!("Team Code: couldn't sweep the stale sessions: {e}");
+                eprintln!("Fanout Code: couldn't sweep the stale sessions: {e}");
             }
             // the shipped subagents, written once; an edited or deleted-and-restored file is never replaced
-            if let Err(e) = teamcode_core::roster::install_shipped(&config_dir) {
-                eprintln!("Team Code: couldn't install the shipped agents: {e}");
+            if let Err(e) = fanoutcode_core::roster::install_shipped(&config_dir) {
+                eprintln!("Fanout Code: couldn't install the shipped agents: {e}");
             }
             // Plan 04's note_hook_event, subscribed before the replay (A18); the tailer never names session_service
             let handle = app.handle().clone();
@@ -86,7 +86,7 @@ pub fn run() {
             let open = {
                 let conn = state.db.lock().expect("db lock");
                 let saved = db::app_setting::<Vec<SavedWindow>>(&conn, "open_windows").unwrap_or_else(|e| {
-                    eprintln!("Team Code: couldn't read the saved windows: {e}");
+                    eprintln!("Fanout Code: couldn't read the saved windows: {e}");
                     None
                 });
                 let mut registry = state.windows.lock().expect("windows lock");
@@ -102,14 +102,14 @@ pub fn run() {
                 match windows::build(app.handle(), info) {
                     Ok(_) => built += 1,
                     Err(e) => {
-                        eprintln!("Team Code: couldn't open window {}: {e}", info.window_id);
+                        eprintln!("Fanout Code: couldn't open window {}: {e}", info.window_id);
                         state.windows.lock().expect("windows lock").close(&info.window_id);
                         last_error = Some(e);
                     }
                 }
             }
             if let Err(e) = state.save_windows() {
-                eprintln!("Team Code: couldn't save the open windows: {e}");
+                eprintln!("Fanout Code: couldn't save the open windows: {e}");
             }
             match last_error {
                 Some(e) if built == 0 => Err(e.into()),
@@ -117,7 +117,7 @@ pub fn run() {
             }
         })
         .build(tauri::generate_context!())
-        .expect("failed to build Team Code")
+        .expect("failed to build Fanout Code")
         .run(|app, event| {
             if let tauri::RunEvent::ExitRequested { code, api, .. } = event {
                 session_service::on_exit_requested(app, code, &api);

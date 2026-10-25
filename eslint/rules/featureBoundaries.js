@@ -1,4 +1,4 @@
-// teamcode/feature-boundaries (spec §15.1): a feature's only public surface is its index.ts. Any import that resolves
+// fanoutcode/feature-boundaries (spec §15.1): a feature's only public surface is its index.ts. Any import that resolves
 // into src/features/<b>/ from outside feature <b> must be written `@/features/<b>` or `@/features/<b>/index`.
 // Resolution is by path only (`@/` → src/, relative to the importing file); the filesystem is never read.
 

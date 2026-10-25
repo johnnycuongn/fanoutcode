@@ -1,8 +1,8 @@
 //! Workspace file watching at runtime (Plan 10): every explicitly saved workspace is watched from launch, and the
 //! watcher's reports become `workspace-file-changed` for the window to offer a reload.
 
+use fanoutcode_core::workspace::file::is_in_app_data;
 use tauri::{AppHandle, Manager};
-use teamcode_core::workspace::file::is_in_app_data;
 
 use crate::events::{self, WorkspaceFileChanged};
 use crate::observe::log_err;
@@ -29,7 +29,7 @@ pub fn start(app: &AppHandle) {
                 }
             }
         }
-        Err(e) => eprintln!("Team Code: couldn't list the workspaces: {e}"),
+        Err(e) => eprintln!("Fanout Code: couldn't list the workspaces: {e}"),
     }
     let app = app.clone();
     std::thread::spawn(move || {

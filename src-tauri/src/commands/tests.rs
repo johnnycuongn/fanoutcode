@@ -3,12 +3,12 @@
 
 use std::sync::Arc;
 
+use fanoutcode_core::domain::{ProjectId, TaskId};
+use fanoutcode_core::settings::{keys, resolve, Scope};
+use fanoutcode_core::testrun::{self, Attached, LiveOutput, TestCommand};
+use fanoutcode_core::{db, pipeline, Error, Result};
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, State};
-use teamcode_core::domain::{ProjectId, TaskId};
-use teamcode_core::settings::{keys, resolve, Scope};
-use teamcode_core::testrun::{self, Attached, LiveOutput, TestCommand};
-use teamcode_core::{db, pipeline, Error, Result};
 
 use crate::events::{self, TestFinished, TestStarted};
 use crate::observe::{self, log_err};

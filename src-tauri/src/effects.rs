@@ -3,9 +3,9 @@
 //! `session_service::apply_effects`, worktrees, tests and helpers (`CreateWorktree`, `RunTest`, `RunHelper`) to
 //! Plan 05's (`RunTest` starts the run, or attaches to the one in flight).
 
+use fanoutcode_core::domain::Task;
+use fanoutcode_core::pipeline::{Effect, StageAction};
 use tauri::AppHandle;
-use teamcode_core::domain::Task;
-use teamcode_core::pipeline::{Effect, StageAction};
 
 use crate::state::AppState;
 use crate::{observation, observe, session_service};
@@ -47,7 +47,7 @@ pub fn dispatch(
             // apply consumes the persistence effects; none reaches here
             e @ (Effect::SetStage(_) | Effect::SetState(_) | Effect::SetArchived(_) | Effect::WriteIndex(_)) => {
                 eprintln!(
-                    "Team Code: effect {e:?} was not applied before dispatch (task {})",
+                    "Fanout Code: effect {e:?} was not applied before dispatch (task {})",
                     task.id
                 )
             }

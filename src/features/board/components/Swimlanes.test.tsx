@@ -31,7 +31,7 @@ const props = {
   onNewTask: vi.fn(),
 };
 const scrollSpy = vi.fn();
-const LANES_KEY = "teamcode.board.lanes.Workspace.ws-1";
+const LANES_KEY = "fanoutcode.board.lanes.Workspace.ws-1";
 
 describe("Swimlanes", () => {
   let m: ReturnType<typeof mockIpc>;

@@ -1,5 +1,5 @@
 // The Commit tab (§6.6): the drafted messages per repo with their files and a Copy button; the Commit button only
-// when "Team Code may commit" is on, behind a confirmation; Draft again after a failed draft. The app never commits on
+// when "Fanout Code may commit" is on, behind a confirmation; Draft again after a failed draft. The app never commits on
 // its own.
 import { useEffect, useState, type ReactElement } from "react";
 import {
@@ -19,7 +19,7 @@ import { commitSummary, type CommitDraft } from "../commits";
 import { commitStore, type CommitStore } from "../commitStore";
 
 const EMPTY: CommitDraft[] = [];
-const OFF_HINT = "Team Code may commit is off for this project; commit from your own terminal.";
+const OFF_HINT = "Fanout Code may commit is off for this project; commit from your own terminal.";
 
 export function CommitTab({
   task,

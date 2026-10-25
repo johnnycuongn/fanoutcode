@@ -1,5 +1,5 @@
 // The generated commands answer `Result<T, string>`; the task page's stores want a call that resolves to the value
-// and rejects with the error string (Team Code's `Error` serialises as a plain string), so their command sets can be
+// and rejects with the error string (Fanout Code's `Error` serialises as a plain string), so their command sets can be
 // faked with plain `vi.fn`s. `live(...names)` builds such a set over the generated `commands`, looked up at call time.
 import { commands, type Result } from "@/lib/bindings";
 

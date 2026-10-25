@@ -1,14 +1,14 @@
 //! Context doc commands (Plan 10): the references listed per project or workspace, and fetching a URL's or a
 //! Confluence page's text into `<app_data>/context/<container>/<doc-id>.md`.
 
+use fanoutcode_core::domain::Container;
+use fanoutcode_core::jira::settings::resolve_with_account;
+use fanoutcode_core::memory::store::write_atomic;
+use fanoutcode_core::settings::Scope;
+use fanoutcode_core::workspace::context_docs::{fetch_text, text_cache_path, ContextDoc, ContextDocKind};
+use fanoutcode_core::workspace::url_guard::NetGuard;
+use fanoutcode_core::{db, Error, Result};
 use tauri::{AppHandle, State};
-use teamcode_core::domain::Container;
-use teamcode_core::jira::settings::resolve_with_account;
-use teamcode_core::memory::store::write_atomic;
-use teamcode_core::settings::Scope;
-use teamcode_core::workspace::context_docs::{fetch_text, text_cache_path, ContextDoc, ContextDocKind};
-use teamcode_core::workspace::url_guard::NetGuard;
-use teamcode_core::{db, Error, Result};
 
 use super::parse_container;
 use crate::events::{self, ContextDocsChanged};

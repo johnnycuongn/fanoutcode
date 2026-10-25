@@ -47,7 +47,10 @@ pub fn pick(candidates: Vec<Snippet>, scores: &[f64], keep: usize, per_file_char
         .take(keep)
         .map(|(_, mut s)| {
             if s.text.len() > per_file_chars {
-                let cut = (0..=per_file_chars).rev().find(|i| s.text.is_char_boundary(*i)).unwrap_or(0);
+                let cut = (0..=per_file_chars)
+                    .rev()
+                    .find(|i| s.text.is_char_boundary(*i))
+                    .unwrap_or(0);
                 s.text.truncate(cut);
             }
             s
@@ -72,7 +75,9 @@ pub async fn scores(jev: &Jev, draft: &str, candidates: &[Snippet], deadline: In
         .buffer_unordered(RERANK_CONCURRENCY));
     let mut out = vec![0.0; candidates.len()];
     while let Some((i, answer)) = answers.next().await {
-        out[i] = answer?.noul("relevant").ok_or_else(|| Error::Provider("Jev returned an unexpected answer.".into()))?;
+        out[i] = answer?
+            .noul("relevant")
+            .ok_or_else(|| Error::Provider("Jev returned an unexpected answer.".into()))?;
     }
     Ok(out)
 }
@@ -88,11 +93,18 @@ mod tests {
     use crate::jev::DEFAULT_MODEL;
 
     fn judge(base_url: String) -> Jev {
-        Jev { base_url, ..Jev::new("test-key".into(), DEFAULT_MODEL.into(), reqwest::Client::new()) }
+        Jev {
+            base_url,
+            ..Jev::new("test-key".into(), DEFAULT_MODEL.into(), reqwest::Client::new())
+        }
     }
 
     fn snip(path: &str, text: &str) -> Snippet {
-        Snippet { path: path.into(), start_line: 1, text: text.into() }
+        Snippet {
+            path: path.into(),
+            start_line: 1,
+            text: text.into(),
+        }
     }
 
     #[test]
@@ -112,26 +124,67 @@ mod tests {
 
     #[test]
     fn picks_the_best_scores_with_ties_in_shortlist_order() {
-        let candidates = vec![snip("a.ts", "aaaa"), snip("b.ts", "bbbbbbbb"), snip("c.ts", "cccc"), snip("d.ts", "dddd")];
+        let candidates = vec![
+            snip("a.ts", "aaaa"),
+            snip("b.ts", "bbbbbbbb"),
+            snip("c.ts", "cccc"),
+            snip("d.ts", "dddd"),
+        ];
         let picked = pick(candidates, &[0.2, 0.9, 0.5, 0.5], 3, 4);
-        assert_eq!(picked.iter().map(|s| s.path.as_str()).collect::<Vec<_>>(), ["b.ts", "c.ts", "d.ts"]);
+        assert_eq!(
+            picked.iter().map(|s| s.path.as_str()).collect::<Vec<_>>(),
+            ["b.ts", "c.ts", "d.ts"]
+        );
         assert_eq!(picked[0].text, "bbbb", "clipped to the per-file budget");
     }
 
     #[tokio::test]
     async fn scores_come_back_in_candidate_order() {
-        let (url, hits) = serve_with(|body: &str| Some(Canned::noul("relevant", if body.contains("createInvoice") { 0.9 } else { 0.1 }))).await;
-        let candidates = vec![snip("src/cart/cart.ts", "export class CartStore {}"), snip("src/billing/invoice.ts", "export function createInvoice() {}")];
-        let got = scores(&judge(url), "invoices need discounts", &candidates, Instant::now() + Duration::from_secs(5)).await.unwrap();
+        let (url, hits) = serve_with(|body: &str| {
+            Some(Canned::noul(
+                "relevant",
+                if body.contains("createInvoice") { 0.9 } else { 0.1 },
+            ))
+        })
+        .await;
+        let candidates = vec![
+            snip("src/cart/cart.ts", "export class CartStore {}"),
+            snip("src/billing/invoice.ts", "export function createInvoice() {}"),
+        ];
+        let got = scores(
+            &judge(url),
+            "invoices need discounts",
+            &candidates,
+            Instant::now() + Duration::from_secs(5),
+        )
+        .await
+        .unwrap();
         assert_eq!(got, [0.1, 0.9]);
         assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 2);
     }
 
     #[tokio::test]
     async fn one_failed_request_fails_the_ranking() {
-        let (url, _) = serve_with(|body: &str| Some(if body.contains("CartStore") { Canned::new(500, "boom") } else { Canned::noul("relevant", 0.9) })).await;
-        let candidates = vec![snip("src/cart/cart.ts", "export class CartStore {}"), snip("src/billing/invoice.ts", "createInvoice")];
-        assert!(scores(&judge(url), "invoices", &candidates, Instant::now() + Duration::from_secs(5)).await.is_err());
+        let (url, _) = serve_with(|body: &str| {
+            Some(if body.contains("CartStore") {
+                Canned::new(500, "boom")
+            } else {
+                Canned::noul("relevant", 0.9)
+            })
+        })
+        .await;
+        let candidates = vec![
+            snip("src/cart/cart.ts", "export class CartStore {}"),
+            snip("src/billing/invoice.ts", "createInvoice"),
+        ];
+        assert!(scores(
+            &judge(url),
+            "invoices",
+            &candidates,
+            Instant::now() + Duration::from_secs(5)
+        )
+        .await
+        .is_err());
     }
 
     #[tokio::test]
@@ -141,11 +194,17 @@ mod tests {
         let (url, hits) = serve_with(|_: &str| Some(Canned::noul("relevant", 0.5).delayed(1_000))).await;
         let candidates: Vec<Snippet> = (0..SHORTLIST).map(|i| snip(&format!("src/f{i}.ts"), "code")).collect();
         let jev = judge(url);
-        let (result, in_flight) = tokio::join!(scores(&jev, "draft", &candidates, Instant::now() + Duration::from_secs(5)), async {
-            tokio::time::sleep(Duration::from_millis(400)).await;
-            hits.load(std::sync::atomic::Ordering::SeqCst)
-        });
+        let (result, in_flight) = tokio::join!(
+            scores(&jev, "draft", &candidates, Instant::now() + Duration::from_secs(5)),
+            async {
+                tokio::time::sleep(Duration::from_millis(400)).await;
+                hits.load(std::sync::atomic::Ordering::SeqCst)
+            }
+        );
         assert!(result.is_ok());
-        assert_eq!(in_flight, SHORTLIST, "all shortlisted snippets are scored in one round trip");
+        assert_eq!(
+            in_flight, SHORTLIST,
+            "all shortlisted snippets are scored in one round trip"
+        );
     }
 }

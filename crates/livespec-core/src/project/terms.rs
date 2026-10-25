@@ -4,20 +4,93 @@
 const MIN_LEN: usize = 3;
 
 const STOPWORDS: &[&str] = &[
-    "the", "and", "for", "with", "that", "this", "from", "have", "are", "was", "not", "but",
-    "you", "your", "will", "can", "use", "using", "into", "when", "then", "than", "what",
-    "which", "also", "there", "their", "some", "just", "like", "want", "need", "should",
-    "would", "could", "about", "them", "they", "its", "our", "all", "any", "has", "how",
-    "get", "set", "let", "var", "const", "function", "return", "import", "export", "pub",
-    "mut", "self", "true", "false", "null", "none", "string", "impl", "struct", "class",
-    "def", "async", "await", "else", "elif", "while", "new", "type", "maybe", "think",
-    "something", "thing", "things", "make", "does", "doing", "done", "here", "where",
+    "the",
+    "and",
+    "for",
+    "with",
+    "that",
+    "this",
+    "from",
+    "have",
+    "are",
+    "was",
+    "not",
+    "but",
+    "you",
+    "your",
+    "will",
+    "can",
+    "use",
+    "using",
+    "into",
+    "when",
+    "then",
+    "than",
+    "what",
+    "which",
+    "also",
+    "there",
+    "their",
+    "some",
+    "just",
+    "like",
+    "want",
+    "need",
+    "should",
+    "would",
+    "could",
+    "about",
+    "them",
+    "they",
+    "its",
+    "our",
+    "all",
+    "any",
+    "has",
+    "how",
+    "get",
+    "set",
+    "let",
+    "var",
+    "const",
+    "function",
+    "return",
+    "import",
+    "export",
+    "pub",
+    "mut",
+    "self",
+    "true",
+    "false",
+    "null",
+    "none",
+    "string",
+    "impl",
+    "struct",
+    "class",
+    "def",
+    "async",
+    "await",
+    "else",
+    "elif",
+    "while",
+    "new",
+    "type",
+    "maybe",
+    "think",
+    "something",
+    "thing",
+    "things",
+    "make",
+    "does",
+    "doing",
+    "done",
+    "here",
+    "where",
 ];
 
 fn keep(word: &str) -> bool {
-    word.len() >= MIN_LEN
-        && !word.bytes().all(|b| b.is_ascii_digit())
-        && !STOPWORDS.contains(&word)
+    word.len() >= MIN_LEN && !word.bytes().all(|b| b.is_ascii_digit()) && !STOPWORDS.contains(&word)
 }
 
 /// Common English and keyword noise; `word` must be lowercase.
@@ -53,7 +126,13 @@ pub fn tokens(text: &str) -> Vec<String> {
         if parts.len() > 1 && keep(&whole) {
             out.push(singular(whole.replace('_', "")));
         }
-        out.extend(parts.into_iter().map(|p| p.to_lowercase()).filter(|p| keep(p)).map(singular));
+        out.extend(
+            parts
+                .into_iter()
+                .map(|p| p.to_lowercase())
+                .filter(|p| keep(p))
+                .map(singular),
+        );
     }
     out
 }
@@ -84,7 +163,10 @@ mod tests {
 
     #[test]
     fn splits_identifiers() {
-        assert_eq!(tokens("userProfileService"), ["userprofileservice", "user", "profile", "service"]);
+        assert_eq!(
+            tokens("userProfileService"),
+            ["userprofileservice", "user", "profile", "service"]
+        );
         assert_eq!(tokens("HTTPServer"), ["httpserver", "http", "server"]);
         assert_eq!(tokens("auth_token"), ["authtoken", "auth", "token"]);
     }
@@ -96,6 +178,9 @@ mod tests {
 
     #[test]
     fn folds_plurals_only() {
-        assert_eq!(tokens("invoices categories boxes classes status caching"), ["invoice", "category", "box", "class", "status", "caching"]);
+        assert_eq!(
+            tokens("invoices categories boxes classes status caching"),
+            ["invoice", "category", "box", "class", "status", "caching"]
+        );
     }
 }

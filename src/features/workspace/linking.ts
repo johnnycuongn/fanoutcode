@@ -1,5 +1,5 @@
 // The linking copy shared by the settings screen, the task page and the new-task sheet. The policy labels are the
-// same strings as `teamcode_core::workspace::policy`.
+// same strings as `fanoutcode_core::workspace::policy`.
 import type { AgentKind, LinkStatus } from "@/lib/bindings";
 
 export const READ_ONLY_LABEL = "Read only: file tools blocked, shell commands checked";

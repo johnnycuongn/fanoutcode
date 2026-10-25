@@ -44,7 +44,9 @@ pub fn unchanged(noul: f64) -> bool {
 pub async fn is_unchanged(jev: &Jev, previous: &str, current: &str, timeout: Duration) -> Result<bool> {
     let questions = BTreeMap::from([("changed".to_owned(), question())]);
     let response = jev.ask(&state(previous, current), &questions, timeout).await?;
-    let noul = response.noul("changed").ok_or_else(|| Error::Provider("Jev returned an unexpected answer.".into()))?;
+    let noul = response
+        .noul("changed")
+        .ok_or_else(|| Error::Provider("Jev returned an unexpected answer.".into()))?;
     Ok(unchanged(noul))
 }
 
@@ -58,7 +60,10 @@ mod tests {
     use crate::Error;
 
     fn judge(base_url: String) -> Jev {
-        Jev { base_url, ..Jev::new("test-key".into(), DEFAULT_MODEL.into(), reqwest::Client::new()) }
+        Jev {
+            base_url,
+            ..Jev::new("test-key".into(), DEFAULT_MODEL.into(), reqwest::Client::new())
+        }
     }
 
     #[test]
@@ -95,14 +100,27 @@ mod tests {
     async fn asks_jev_and_reads_the_answer() {
         let (url, _) = serve(vec![Canned::noul("changed", 0.1), Canned::noul("changed", 0.9)]).await;
         let jev = judge(url);
-        assert!(is_unchanged(&jev, "Cache the index.", "Cache the index!", Duration::from_secs(5)).await.unwrap());
-        assert!(!is_unchanged(&jev, "Cache the index.", "Cache the index per branch.", Duration::from_secs(5)).await.unwrap());
+        assert!(
+            is_unchanged(&jev, "Cache the index.", "Cache the index!", Duration::from_secs(5))
+                .await
+                .unwrap()
+        );
+        assert!(!is_unchanged(
+            &jev,
+            "Cache the index.",
+            "Cache the index per branch.",
+            Duration::from_secs(5)
+        )
+        .await
+        .unwrap());
     }
 
     #[tokio::test]
     async fn errors_reach_the_caller() {
         let (url, _) = serve(vec![Canned::new(401, "{}")]).await;
-        let err = is_unchanged(&judge(url), "a", "b", Duration::from_secs(5)).await.unwrap_err();
+        let err = is_unchanged(&judge(url), "a", "b", Duration::from_secs(5))
+            .await
+            .unwrap_err();
         assert!(matches!(err, Error::Precondition(_)), "{err}");
     }
 }

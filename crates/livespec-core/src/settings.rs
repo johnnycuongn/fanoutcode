@@ -93,7 +93,11 @@ pub enum ProviderSettings {
 impl ProviderSettings {
     pub fn label(&self) -> String {
         match self {
-            Self::ClaudeCli { fast_model, auth: ClaudeAuth::ApiKey, .. } => format!("Claude Code (API key, {fast_model})"),
+            Self::ClaudeCli {
+                fast_model,
+                auth: ClaudeAuth::ApiKey,
+                ..
+            } => format!("Claude Code (API key, {fast_model})"),
             Self::ClaudeCli { fast_model, .. } => format!("Claude Code ({fast_model})"),
             Self::AnthropicApi { fast_model, .. } => format!("Anthropic API ({fast_model})"),
             Self::Local { model_id } => format!("Local ({model_id})"),
@@ -146,7 +150,12 @@ pub struct JevSettings {
 
 impl Default for JevSettings {
     fn default() -> Self {
-        Self { gate: true, rerank: true, check: true, model: DEFAULT_MODEL.into() }
+        Self {
+            gate: true,
+            rerank: true,
+            check: true,
+            model: DEFAULT_MODEL.into(),
+        }
     }
 }
 
@@ -166,7 +175,11 @@ impl Default for AgentSettings {
     fn default() -> Self {
         // Parallel notes and briefs are opt-in: neither measured faster
         // than one agent with Claude Code (see the spec's measurements).
-        Self { max_agents: 4, parallel_brief: false, parallel_notes: false }
+        Self {
+            max_agents: 4,
+            parallel_brief: false,
+            parallel_notes: false,
+        }
     }
 }
 
@@ -248,7 +261,13 @@ mod tests {
         let path = dir.path().join("settings.json");
         assert_eq!(Settings::load(&path), Settings::default());
 
-        let s = Settings { provider: ProviderSettings::Local { model_id: "qwen3-4b".into() }, debounce_ms: 900, ..Default::default() };
+        let s = Settings {
+            provider: ProviderSettings::Local {
+                model_id: "qwen3-4b".into(),
+            },
+            debounce_ms: 900,
+            ..Default::default()
+        };
         s.save(&path).unwrap();
         assert_eq!(Settings::load(&path), s);
 
@@ -260,7 +279,11 @@ mod tests {
     fn files_from_before_jev_get_its_defaults() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("settings.json");
-        std::fs::write(&path, r#"{"provider":{"kind":"local","modelId":"qwen3-4b"},"debounceMs":900}"#).unwrap();
+        std::fs::write(
+            &path,
+            r#"{"provider":{"kind":"local","modelId":"qwen3-4b"},"debounceMs":900}"#,
+        )
+        .unwrap();
         let s = Settings::load(&path);
         assert_eq!(s.debounce_ms, 900);
         assert_eq!(s.jev, JevSettings::default());
@@ -271,11 +294,21 @@ mod tests {
     fn local_models_never_send_code_to_jev() {
         let mut s = Settings::default();
         assert!(s.jev_allowed() && s.jev_check_enabled() && s.jev_gate_enabled() && s.jev_rerank_enabled());
-        s.provider = ProviderSettings::Local { model_id: "qwen3-4b-instruct".into() };
-        assert!(!s.jev_allowed(), "the Local option promises nothing leaves this computer");
+        s.provider = ProviderSettings::Local {
+            model_id: "qwen3-4b-instruct".into(),
+        };
+        assert!(
+            !s.jev_allowed(),
+            "the Local option promises nothing leaves this computer"
+        );
         assert!(!s.jev_check_enabled() && !s.jev_gate_enabled() && !s.jev_rerank_enabled());
         s.provider = Settings::default().provider;
-        s.jev = JevSettings { gate: false, rerank: false, check: false, ..JevSettings::default() };
+        s.jev = JevSettings {
+            gate: false,
+            rerank: false,
+            check: false,
+            ..JevSettings::default()
+        };
         assert!(s.jev_allowed());
         assert!(!s.jev_check_enabled() && !s.jev_gate_enabled() && !s.jev_rerank_enabled());
     }
@@ -283,22 +316,46 @@ mod tests {
     #[test]
     fn note_agents_follow_the_settings() {
         let mut s = Settings::default();
-        assert_eq!((s.max_agents(), s.effective_note_agents()), (4, 1), "parallel notes are opt-in: measured slower with Claude Code");
+        assert_eq!(
+            (s.max_agents(), s.effective_note_agents()),
+            (4, 1),
+            "parallel notes are opt-in: measured slower with Claude Code"
+        );
         s.agents.parallel_notes = true;
         assert_eq!(s.effective_note_agents(), 4);
         s.agents.max_agents = 2;
         assert_eq!(s.effective_note_agents(), 2);
         s.agents.max_agents = 8;
-        assert_eq!((s.max_agents(), s.effective_note_agents()), (8, 4), "at most one agent per section");
+        assert_eq!(
+            (s.max_agents(), s.effective_note_agents()),
+            (8, 4),
+            "at most one agent per section"
+        );
         s.agents.max_agents = 0;
-        assert_eq!((s.max_agents(), s.effective_note_agents()), (1, 1), "clamped to at least one");
+        assert_eq!(
+            (s.max_agents(), s.effective_note_agents()),
+            (1, 1),
+            "clamped to at least one"
+        );
         s.agents.max_agents = 200;
         assert_eq!(s.max_agents(), 8, "clamped to at most eight");
-        s.agents = AgentSettings { parallel_notes: false, ..AgentSettings::default() };
+        s.agents = AgentSettings {
+            parallel_notes: false,
+            ..AgentSettings::default()
+        };
         assert_eq!(s.effective_note_agents(), 1);
-        s.agents = AgentSettings { parallel_notes: true, ..AgentSettings::default() };
-        s.provider = ProviderSettings::Local { model_id: "qwen3-4b-instruct".into() };
-        assert_eq!(s.effective_note_agents(), 1, "one local server would just queue the requests");
+        s.agents = AgentSettings {
+            parallel_notes: true,
+            ..AgentSettings::default()
+        };
+        s.provider = ProviderSettings::Local {
+            model_id: "qwen3-4b-instruct".into(),
+        };
+        assert_eq!(
+            s.effective_note_agents(),
+            1,
+            "one local server would just queue the requests"
+        );
     }
 
     #[test]
@@ -307,9 +364,19 @@ mod tests {
         let path = dir.path().join("settings.json");
         std::fs::write(&path, r#"{"provider":{"kind":"claudeCli","binaryPath":null,"fastModel":"haiku","deepModel":"sonnet"},"debounceMs":900}"#).unwrap();
         let s = Settings::load(&path);
-        assert_eq!(s.agents, AgentSettings { max_agents: 4, parallel_brief: false, parallel_notes: false });
+        assert_eq!(
+            s.agents,
+            AgentSettings {
+                max_agents: 4,
+                parallel_brief: false,
+                parallel_notes: false
+            }
+        );
         let json = serde_json::to_value(&s).unwrap();
-        assert_eq!(json["agents"], serde_json::json!({"maxAgents": 4, "parallelBrief": false, "parallelNotes": false}));
+        assert_eq!(
+            json["agents"],
+            serde_json::json!({"maxAgents": 4, "parallelBrief": false, "parallelNotes": false})
+        );
     }
 
     #[test]
@@ -322,10 +389,18 @@ mod tests {
         assert_eq!(s.effective_brief_agents(), 6, "explorers are not capped at four");
         s.agents.max_agents = 1;
         assert_eq!(s.effective_brief_agents(), 1);
-        s.agents = AgentSettings { parallel_brief: false, ..AgentSettings::default() };
+        s.agents = AgentSettings {
+            parallel_brief: false,
+            ..AgentSettings::default()
+        };
         assert_eq!(s.effective_brief_agents(), 1);
-        s.agents = AgentSettings { parallel_brief: true, ..AgentSettings::default() };
-        s.provider = ProviderSettings::Local { model_id: "qwen3-4b-instruct".into() };
+        s.agents = AgentSettings {
+            parallel_brief: true,
+            ..AgentSettings::default()
+        };
+        s.provider = ProviderSettings::Local {
+            model_id: "qwen3-4b-instruct".into(),
+        };
         assert_eq!(s.effective_brief_agents(), 1);
     }
 
@@ -347,10 +422,19 @@ mod tests {
                 auth: ClaudeAuth::Login,
             }
         );
-        std::fs::write(&path, r#"{"provider":{"kind":"anthropicApi","fastModel":"a","deepModel":"b"}}"#).unwrap();
+        std::fs::write(
+            &path,
+            r#"{"provider":{"kind":"anthropicApi","fastModel":"a","deepModel":"b"}}"#,
+        )
+        .unwrap();
         assert_eq!(
             Settings::load(&path).provider,
-            ProviderSettings::AnthropicApi { fast_model: "a".into(), deep_model: "b".into(), fast_effort: None, deep_effort: None }
+            ProviderSettings::AnthropicApi {
+                fast_model: "a".into(),
+                deep_model: "b".into(),
+                fast_effort: None,
+                deep_effort: None
+            }
         );
     }
 
@@ -372,7 +456,11 @@ mod tests {
         );
         assert_eq!(serde_json::from_value::<ProviderSettings>(json).unwrap(), p);
         for e in [Effort::Low, Effort::Medium, Effort::High, Effort::Xhigh, Effort::Max] {
-            assert_eq!(serde_json::to_value(e).unwrap(), e.as_str(), "the CLI flag and the JSON agree");
+            assert_eq!(
+                serde_json::to_value(e).unwrap(),
+                e.as_str(),
+                "the CLI flag and the JSON agree"
+            );
         }
     }
 
@@ -388,10 +476,20 @@ mod tests {
         .unwrap();
         let s = Settings::load(&path);
         assert_eq!(s.debounce_ms, 900, "the rest of the file still loads");
-        let ProviderSettings::ClaudeCli { fast_model, fast_effort, deep_effort, auth, .. } = s.provider else {
+        let ProviderSettings::ClaudeCli {
+            fast_model,
+            fast_effort,
+            deep_effort,
+            auth,
+            ..
+        } = s.provider
+        else {
             panic!("kept the provider")
         };
-        assert_eq!((fast_model.as_str(), fast_effort, deep_effort, auth), ("opus", None, Some(Effort::Max), ClaudeAuth::Login));
+        assert_eq!(
+            (fast_model.as_str(), fast_effort, deep_effort, auth),
+            ("opus", None, Some(Effort::Max), ClaudeAuth::Login)
+        );
     }
 
     #[test]

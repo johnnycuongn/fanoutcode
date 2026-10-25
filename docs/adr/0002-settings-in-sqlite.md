@@ -6,7 +6,7 @@
 
 Spec §14 put settings in JSON under `<app_config>`. Settings resolve along a scope chain, app → workspace → project →
 task, most specific wins (§6.8, §13). That needs per-scope rows that Plan 03's `settings::resolve` reads, and the app
-already opens `<app_data>/teamcode.db` for everything else.
+already opens `<app_data>/fanoutcode.db` for everything else.
 
 ## Decision
 

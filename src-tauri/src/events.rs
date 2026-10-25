@@ -1,13 +1,13 @@
 //! The event catalogue: app-wide facts emitted to every window. Each struct's kebab-case name is the event name
 //! (`TaskChanged` → `task-changed`). Emit with `tauri_specta::Event::emit(&payload, &app)`. `team-event` is Plan 05's.
 
+use fanoutcode_core::db;
+use fanoutcode_core::domain::{Container, PaneId, SessionId, Task, TaskId, WindowId, Workspace, WorkspaceId};
+use fanoutcode_core::hooks::TaskEvent;
+use fanoutcode_core::{Error, Result};
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
-use teamcode_core::db;
-use teamcode_core::domain::{Container, PaneId, SessionId, Task, TaskId, WindowId, Workspace, WorkspaceId};
-use teamcode_core::hooks::TaskEvent;
-use teamcode_core::{Error, Result};
 
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type, tauri_specta::Event)]
 pub struct TaskChanged {

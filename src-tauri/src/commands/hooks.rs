@@ -1,12 +1,12 @@
 //! Hook commands for the Team canvas (A6): the task's whole event log, and its `plan.md` steps.
 
+use fanoutcode_core::domain::TaskId;
+use fanoutcode_core::hooks::attribution::{read_agent_meta, Correlator};
+use fanoutcode_core::hooks::parse::read_all;
+use fanoutcode_core::hooks::plan_steps::{dispatch_from_tool_input, parse_plan, PlanDoc};
+use fanoutcode_core::hooks::{event_log_path, HookEvent, TaskEvent};
+use fanoutcode_core::{db, Error, Result};
 use tauri::State;
-use teamcode_core::domain::TaskId;
-use teamcode_core::hooks::attribution::{read_agent_meta, Correlator};
-use teamcode_core::hooks::parse::read_all;
-use teamcode_core::hooks::plan_steps::{dispatch_from_tool_input, parse_plan, PlanDoc};
-use teamcode_core::hooks::{event_log_path, HookEvent, TaskEvent};
-use teamcode_core::{db, Error, Result};
 
 use crate::hook_feed;
 use crate::state::AppState;

@@ -31,7 +31,7 @@ describe("lanes", () => {
     });
   });
   it("laneStorageKey is per container", () => {
-    expect(laneStorageKey(workspaceContainer("ws-1"))).toBe("teamcode.board.lanes.Workspace.ws-1");
+    expect(laneStorageKey(workspaceContainer("ws-1"))).toBe("fanoutcode.board.lanes.Workspace.ws-1");
   });
   it("saving never throws when storage is blocked", () => {
     const original = Storage.prototype.setItem;

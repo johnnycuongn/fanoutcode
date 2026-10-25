@@ -46,12 +46,23 @@ async fn four_lanes_vs_one() {
         let per_lane: Vec<String> = done
             .iter()
             .zip(&groups)
-            .map(|((at, r), g)| format!("{}={}ms/{}ch", g.iter().map(|s| s.id).collect::<Vec<_>>().join("+"), at.as_millis(), r.as_ref().map_or(0, |(len, _)| *len)))
+            .map(|((at, r), g)| {
+                format!(
+                    "{}={}ms/{}ch",
+                    g.iter().map(|s| s.id).collect::<Vec<_>>().join("+"),
+                    at.as_millis(),
+                    r.as_ref().map_or(0, |(len, _)| *len)
+                )
+            })
             .collect();
         let results = done.into_iter().map(|(_, r)| r.map(|(_, text)| text)).collect();
         let (text, notices) = analysis::merge_lanes(&groups, results).expect("notes");
         let complete = started.elapsed();
-        let missing: Vec<_> = chosen.iter().filter(|s| prompt::section_body(&text, s.id).is_none()).map(|s| s.heading).collect();
+        let missing: Vec<_> = chosen
+            .iter()
+            .filter(|s| prompt::section_body(&text, s.id).is_none())
+            .map(|s| s.heading)
+            .collect();
         eprintln!(
             "lanes={n}  first text {:>5} ms  complete {:>5} ms  missing={missing:?}  notices={notices:?}\n          per lane: {}",
             first_text.lock().unwrap().map_or(0, |d| d.as_millis()),

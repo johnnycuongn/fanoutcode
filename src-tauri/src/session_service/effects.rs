@@ -3,12 +3,12 @@
 
 use std::time::{Duration, Instant};
 
+use fanoutcode_core::domain::{AgentKind, AgentState, SessionId, Task, TaskId};
+use fanoutcode_core::hooks::HookEvent;
+use fanoutcode_core::pipeline::{Effect, StageAction};
+use fanoutcode_core::sessions::{QueueOutcome, INJECT_ENTER_DELAY};
+use fanoutcode_core::Result;
 use tauri::{AppHandle, Manager};
-use teamcode_core::domain::{AgentKind, AgentState, SessionId, Task, TaskId};
-use teamcode_core::hooks::HookEvent;
-use teamcode_core::pipeline::{Effect, StageAction};
-use teamcode_core::sessions::{QueueOutcome, INJECT_ENTER_DELAY};
-use teamcode_core::Result;
 
 use super::{open_primary, queue_changed, stop_blocking};
 use crate::observe::log_err;
@@ -135,7 +135,7 @@ pub fn note_hook_event(app: &AppHandle, task_id: &TaskId, event: &HookEvent) {
             queue_changed(app, &id, pending);
         }
         Ok(None) => {}
-        Err(e) => eprintln!("Team Code: sending a queued prompt for {task_id}: {e}"),
+        Err(e) => eprintln!("Fanout Code: sending a queued prompt for {task_id}: {e}"),
     }
 }
 
@@ -189,8 +189,8 @@ pub fn codex_tick(app: &AppHandle) {
 
 #[cfg(test)]
 mod tests {
-    use teamcode_core::domain::Stage;
-    use teamcode_core::pipeline::{Effect, StageAction};
+    use fanoutcode_core::domain::Stage;
+    use fanoutcode_core::pipeline::{Effect, StageAction};
 
     use super::*;
 

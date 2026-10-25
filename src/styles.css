@@ -1,4 +1,4 @@
-/* Team Code theme: the only file in the repository that may contain a hex colour.
+/* Fanout Code theme: the only file in the repository that may contain a hex colour.
    Components use semantic classes (`bg-page text-ink border-line`, `bg-stage-plan`, `bg-swatch-violet`); the two
    themes are switched by the `data-theme` attribute on <html>, which src/lib/theme.ts sets before first paint
    (it resolves System from macOS), and `data-accent` picks an accent preset. Fonts are bundled (Fontsource),

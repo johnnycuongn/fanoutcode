@@ -6,13 +6,27 @@ use super::explore::in_slice;
 use super::{FileEntry, ProjectIndex};
 
 const KEY_FILES: &[&str] = &[
-    "readme.md", "readme", "claude.md", "agents.md", "architecture.md", "package.json",
-    "cargo.toml", "pyproject.toml", "go.mod", "pom.xml", "build.gradle", "build.gradle.kts",
-    "composer.json", "gemfile", "tauri.conf.json", "docker-compose.yml", "schema.prisma",
+    "readme.md",
+    "readme",
+    "claude.md",
+    "agents.md",
+    "architecture.md",
+    "package.json",
+    "cargo.toml",
+    "pyproject.toml",
+    "go.mod",
+    "pom.xml",
+    "build.gradle",
+    "build.gradle.kts",
+    "composer.json",
+    "gemfile",
+    "tauri.conf.json",
+    "docker-compose.yml",
+    "schema.prisma",
 ];
 const CENTRAL_STEMS: &[&str] = &[
-    "main", "lib", "index", "app", "mod", "server", "routes", "router", "schema", "types",
-    "models", "api", "store", "config",
+    "main", "lib", "index", "app", "mod", "server", "routes", "router", "schema", "types", "models", "api", "store",
+    "config",
 ];
 const HEAD_LINES: usize = 80;
 
@@ -78,7 +92,10 @@ fn push_tree(out: &mut String, index: &ProjectIndex, budget: usize, keep: &impl 
         *dirs.entry(top).or_default() += 1;
     }
     for (d, n) in dirs {
-        out.push_str(&format!("{d}{}\n", if n > 1 { format!("/ ({n} files)") } else { String::new() }));
+        out.push_str(&format!(
+            "{d}{}\n",
+            if n > 1 { format!("/ ({n} files)") } else { String::new() }
+        ));
     }
 }
 
@@ -90,7 +107,10 @@ fn push_file(out: &mut String, f: &FileEntry, max_lines: usize, max_chars: usize
     }
     let body: String = f.content.lines().take(max_lines).collect::<Vec<_>>().join("\n");
     let limit = max_chars.min(room - 100);
-    let cut = (0..=limit.min(body.len())).rev().find(|i| body.is_char_boundary(*i)).unwrap_or(0);
+    let cut = (0..=limit.min(body.len()))
+        .rev()
+        .find(|i| body.is_char_boundary(*i))
+        .unwrap_or(0);
     out.push_str(&format!("\n<file path=\"{}\">\n{}\n</file>\n", f.rel, &body[..cut]));
     true
 }
@@ -132,7 +152,10 @@ mod tests {
         let d = build_slice(&idx, &["src/billing/".to_string()], 4_000);
         assert!(d.contains("src/billing/invoice.ts") && d.contains("createInvoice"));
         assert!(!d.contains("CartStore") && !d.contains("src/cart/cart.ts"));
-        assert!(!d.contains("An online shop"), "root files belong to the merge, not to a slice");
+        assert!(
+            !d.contains("An online shop"),
+            "root files belong to the merge, not to a slice"
+        );
         assert!(d.len() <= 4_000);
     }
 

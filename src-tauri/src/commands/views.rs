@@ -1,11 +1,11 @@
 //! View commands. Every mutation validates the new layout, saves it, and sends `views-changed` for the view's
 //! container to every window.
 
+use fanoutcode_core::domain::{Container, LayoutNode, PaneContent, PaneId, SplitDirection, View, ViewId};
+use fanoutcode_core::views::layout::{self, Branch};
+use fanoutcode_core::views::new_view;
+use fanoutcode_core::{db, Error, Result};
 use tauri::{AppHandle, State};
-use teamcode_core::domain::{Container, LayoutNode, PaneContent, PaneId, SplitDirection, View, ViewId};
-use teamcode_core::views::layout::{self, Branch};
-use teamcode_core::views::new_view;
-use teamcode_core::{db, Error, Result};
 
 use super::parse_container;
 use crate::events::{self, ViewsChanged};

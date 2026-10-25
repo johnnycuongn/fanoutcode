@@ -12,7 +12,13 @@ fn main() {
     };
     let started = std::time::Instant::now();
     let index = scan(std::path::Path::new(&dir)).expect("scan failed");
-    println!("{}: {} indexed / {} files in {:?}", index.name, index.files.len(), index.tree.len(), started.elapsed());
+    println!(
+        "{}: {} indexed / {} files in {:?}",
+        index.name,
+        index.files.len(),
+        index.tree.len(),
+        started.elapsed()
+    );
 
     let started = std::time::Instant::now();
     let hits = retrieve(&index, &draft, 4, 6_000);

@@ -138,7 +138,7 @@ export function useXterm(opts: XtermOptions): {
       const observer = new ResizeObserver(refit);
       observer.observe(el);
       refit();
-      attach(sessionId, paneId, deliver).catch((err: unknown) => console.error("Team Code: attach failed", err));
+      attach(sessionId, paneId, deliver).catch((err: unknown) => console.error("Fanout Code: attach failed", err));
       cleanup = () => {
         if (frame) cancelAnimationFrame(frame);
         observer.disconnect();

@@ -2,10 +2,10 @@
 
 use std::path::PathBuf;
 
+use fanoutcode_core::domain::{Container, MemoryLocation, Project, ProjectColor, ProjectId};
+use fanoutcode_core::{db, Error, Result};
 use serde::Deserialize;
 use tauri::{AppHandle, Manager, State};
-use teamcode_core::domain::{Container, MemoryLocation, Project, ProjectColor, ProjectId};
-use teamcode_core::{db, Error, Result};
 
 use crate::state::AppState;
 

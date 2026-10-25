@@ -24,7 +24,7 @@ export function Onboarding({ onDone }: { onDone(): void }): ReactElement {
   return (
     <main className="grid h-full place-items-center bg-page p-6 text-ink">
       <Panel variant="card" padding="md" className="flex w-full max-w-2xl flex-col gap-4">
-        <EmptyState size="sm" title="Welcome to Team Code" description={step === 1 ? "Step 1 of 2" : "Step 2 of 2"} />
+        <EmptyState size="sm" title="Welcome to Fanout Code" description={step === 1 ? "Step 1 of 2" : "Step 2 of 2"} />
         {step === 1 ? (
           <>
             <h2 className="font-medium">How should task worktrees be managed?</h2>

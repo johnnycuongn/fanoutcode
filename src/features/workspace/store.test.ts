@@ -9,7 +9,7 @@ function ws(id: string, over: Partial<Workspace> = {}): Workspace {
   return {
     id,
     name: "Shop",
-    file_path: "/app/ws/Shop.teamcode-workspace.json",
+    file_path: "/app/ws/Shop.fanoutcode-workspace.json",
     dirty: false,
     projects: [],
     policy: "ReadAndModifyOnRequest",

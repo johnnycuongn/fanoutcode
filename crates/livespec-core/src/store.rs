@@ -15,7 +15,9 @@ pub enum Loaded<T> {
     Missing,
     Parsed(T),
     /// The file didn't parse. It was renamed to `kept`; `None` if even that failed.
-    Corrupt { kept: Option<PathBuf> },
+    Corrupt {
+        kept: Option<PathBuf>,
+    },
 }
 
 /// Atomic write: `<file>.tmp` then rename; creates the parent dir.
@@ -74,7 +76,10 @@ mod tests {
         let path = dir.path().join("a/b/doc.json");
         write_atomic(&path, br#"{"n":1}"#).unwrap();
         assert_eq!(std::fs::read_to_string(&path).unwrap(), r#"{"n":1}"#);
-        assert!(!dir.path().join("a/b/doc.json.tmp").exists(), "the temporary file is renamed, not left behind");
+        assert!(
+            !dir.path().join("a/b/doc.json.tmp").exists(),
+            "the temporary file is renamed, not left behind"
+        );
         write_atomic(&path, br#"{"n":2}"#).unwrap();
         assert!(matches!(load_json::<Doc>(&path).unwrap(), Loaded::Parsed(Doc { n: 2 })));
     }
@@ -82,7 +87,10 @@ mod tests {
     #[test]
     fn a_missing_file_is_missing() {
         let dir = tempfile::tempdir().unwrap();
-        assert!(matches!(load_json::<Doc>(&dir.path().join("nope.json")).unwrap(), Loaded::Missing));
+        assert!(matches!(
+            load_json::<Doc>(&dir.path().join("nope.json")).unwrap(),
+            Loaded::Missing
+        ));
     }
 
     #[test]
@@ -91,14 +99,29 @@ mod tests {
         let path = dir.path().join("doc.json");
         for (i, body) in ["first", "second", "third"].iter().enumerate() {
             std::fs::write(&path, body).unwrap();
-            let Loaded::Corrupt { kept: Some(kept) } = load_json::<Doc>(&path).unwrap() else { panic!("not kept") };
-            let name = if i == 0 { "doc.json.bad".to_owned() } else { format!("doc.json.bad.{i}") };
+            let Loaded::Corrupt { kept: Some(kept) } = load_json::<Doc>(&path).unwrap() else {
+                panic!("not kept")
+            };
+            let name = if i == 0 {
+                "doc.json.bad".to_owned()
+            } else {
+                format!("doc.json.bad.{i}")
+            };
             assert_eq!(kept, dir.path().join(name));
             assert!(!path.exists(), "the damaged file moved aside");
         }
-        assert_eq!(std::fs::read_to_string(dir.path().join("doc.json.bad")).unwrap(), "first");
-        assert_eq!(std::fs::read_to_string(dir.path().join("doc.json.bad.1")).unwrap(), "second");
-        assert_eq!(std::fs::read_to_string(dir.path().join("doc.json.bad.2")).unwrap(), "third");
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("doc.json.bad")).unwrap(),
+            "first"
+        );
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("doc.json.bad.1")).unwrap(),
+            "second"
+        );
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("doc.json.bad.2")).unwrap(),
+            "third"
+        );
     }
 
     #[test]
@@ -109,6 +132,9 @@ mod tests {
         std::fs::create_dir(&path).unwrap();
         assert!(load_json::<Doc>(&path).is_err());
         assert!(path.is_dir(), "nothing was renamed");
-        assert!(!dir.path().join("doc.json.bad").exists(), "a read failure is not corruption");
+        assert!(
+            !dir.path().join("doc.json.bad").exists(),
+            "a read failure is not corruption"
+        );
     }
 }

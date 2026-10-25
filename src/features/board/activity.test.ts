@@ -48,11 +48,15 @@ describe("reduceActivity", () => {
   it("Stop sets the last line to the first non-sentinel line and leaves it when only the sentinel is present", () => {
     const a = reduceActivity(emptyActivity, {
       type: "Stop",
-      last_assistant_message: "All steps done.\nTEAMCODE: build done",
+      last_assistant_message: "All steps done.\nFANOUTCODE: build done",
       background_tasks: 0,
     });
     expect(a.lastLine).toBe("All steps done.");
-    const b = reduceActivity(a, { type: "Stop", last_assistant_message: "TEAMCODE: build done", background_tasks: 0 });
+    const b = reduceActivity(a, {
+      type: "Stop",
+      last_assistant_message: "FANOUTCODE: build done",
+      background_tasks: 0,
+    });
     expect(b.lastLine).toBe("All steps done.");
   });
   it("SubagentStart adds a working member keyed by agent_id and SubagentStop marks it done", () => {

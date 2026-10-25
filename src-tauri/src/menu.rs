@@ -101,7 +101,7 @@ pub fn on_menu_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
         .find(|w| w.is_focused().unwrap_or(false));
     if let Some(w) = focused {
         if let Err(e) = w.close() {
-            eprintln!("Team Code: couldn't close the window: {e}");
+            eprintln!("Fanout Code: couldn't close the window: {e}");
         }
     }
 }

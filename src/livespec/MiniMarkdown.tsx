@@ -1,6 +1,6 @@
 // Renders the small Markdown subset models produce here: headings, bullets, numbered items, task checkboxes
 // (`- [ ] 1. Step`), fenced code blocks, `code` and **bold**. React elements only, no innerHTML, so model output can
-// never inject markup. Copied from LiveSpec (src/components/MiniMarkdown.tsx) and moved to Team Code's tokens.
+// never inject markup. Copied from LiveSpec (src/components/MiniMarkdown.tsx) and moved to Fanout Code's tokens.
 import type { ReactNode } from "react";
 import { cx } from "@/components/ui";
 

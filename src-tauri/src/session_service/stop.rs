@@ -2,10 +2,10 @@
 
 use std::time::{Duration, Instant};
 
+use fanoutcode_core::domain::SessionId;
+use fanoutcode_core::sessions::{stop, SystemClock};
+use fanoutcode_core::{Error, Result};
 use tauri::{AppHandle, Manager};
-use teamcode_core::domain::SessionId;
-use teamcode_core::sessions::{stop, SystemClock};
-use teamcode_core::{Error, Result};
 
 use crate::observe::log_err;
 use crate::state::AppState;

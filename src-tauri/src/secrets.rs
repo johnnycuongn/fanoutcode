@@ -1,11 +1,11 @@
-//! Secrets live in the OS keychain under service `app.teamcode.desktop` (A9), never in SQLite or the webview.
+//! Secrets live in the OS keychain under service `app.fanoutcode.desktop` (A9), never in SQLite or the webview.
 //! Nothing here crosses IPC: `Secret` has no `Serialize`, `Deserialize` or `specta::Type`.
 //!
 //! Accounts are `[a-z0-9._:-]{1,128}`, by convention `<domain>:<id>` (e.g. `jira:p-18f2a3b4c5d-1`).
 
-use teamcode_core::{Error, Result};
+use fanoutcode_core::{Error, Result};
 
-pub const SERVICE: &str = "app.teamcode.desktop";
+pub const SERVICE: &str = "app.fanoutcode.desktop";
 
 /// A secret value. `Debug` prints `Secret(***)`; read the value only with `expose`, at the point of use.
 pub struct Secret(String);
@@ -164,7 +164,7 @@ mod tests {
     #[test]
     #[ignore = "touches the real macOS keychain; run by hand"]
     fn os_keychain_round_trip() {
-        let account = format!("test:{}", teamcode_core::ids::new_id("t"));
+        let account = format!("test:{}", fanoutcode_core::ids::new_id("t"));
         write(&account, "v").unwrap();
         assert_eq!(read(&account).unwrap().unwrap().expose(), "v");
         delete(&account).unwrap();

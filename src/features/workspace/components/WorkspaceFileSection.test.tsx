@@ -10,7 +10,7 @@ import { WorkspaceFileSection } from "./WorkspaceFileSection";
 describe("WorkspaceFileSection", () => {
   it("shows dirty chip, explicit mode and the reload banner", () => {
     mockWorkspace(
-      { dirty: true, file_path: "/w/Shop.teamcode-workspace.json" },
+      { dirty: true, file_path: "/w/Shop.fanoutcode-workspace.json" },
       { explicit_save: true, file_missing: false, missing_projects: [] },
       { externalChange: true },
     );

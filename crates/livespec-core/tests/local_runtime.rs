@@ -14,7 +14,10 @@ async fn installs_runtime_and_server_runs() {
     let bin = runtime::install(&http, &paths, |_, _| reports += 1).await.unwrap();
     assert!(reports > 1, "progress should be reported");
     assert_eq!(paths.server_binary().as_deref(), Some(bin.as_path()));
-    assert!(!paths.downloads_dir().join(runtime::asset_name().unwrap()).exists(), "archive cleaned up");
+    assert!(
+        !paths.downloads_dir().join(runtime::asset_name().unwrap()).exists(),
+        "archive cleaned up"
+    );
 
     // Shared libraries must resolve next to the binary.
     let out = std::process::Command::new(&bin)
@@ -22,6 +25,10 @@ async fn installs_runtime_and_server_runs() {
         .env("LD_LIBRARY_PATH", bin.parent().unwrap())
         .output()
         .unwrap();
-    let text = format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
     assert!(text.contains("version"), "unexpected output: {text}");
 }

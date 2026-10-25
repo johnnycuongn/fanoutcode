@@ -2,11 +2,11 @@
 
 use std::path::{Path, PathBuf};
 
+use fanoutcode_core::domain::{Container, ProjectId, WindowId};
+use fanoutcode_core::recent::{self, RecentEntry, RecentKind};
+use fanoutcode_core::windows::WindowInfo;
+use fanoutcode_core::{db, Error, Result};
 use tauri::{AppHandle, Manager, State, Window};
-use teamcode_core::domain::{Container, ProjectId, WindowId};
-use teamcode_core::recent::{self, RecentEntry, RecentKind};
-use teamcode_core::windows::WindowInfo;
-use teamcode_core::{db, Error, Result};
 
 use crate::state::AppState;
 use crate::windows;
@@ -126,7 +126,7 @@ pub async fn windows_open_workspace(window: Window, state: State<'_, AppState>, 
 /// `windows_open_workspace` for callers in the shell.
 pub(crate) fn open_workspace_window(window: &Window, state: &AppState, path: &Path) -> Result<WindowInfo> {
     let file = canonical(path, "That workspace file no longer exists. Relocate or remove it.")?;
-    let workspace = teamcode_core::workspace::import::open_file(&state.workspaces, &file)?;
+    let workspace = fanoutcode_core::workspace::import::open_file(&state.workspaces, &file)?;
     let id = workspace.id.clone();
     let project_ids: Vec<ProjectId> = workspace.projects.iter().map(|p| p.project_id.clone()).collect();
     let entry = recent_entry(RecentKind::Workspace, id.as_str(), &workspace.name, &file);

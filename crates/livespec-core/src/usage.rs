@@ -78,9 +78,15 @@ pub fn price(model: &str) -> Option<Price> {
     let row = |id: &str| PRICES.iter().find(|(m, _, _)| *m == id);
     let alias = || ALIASES.iter().find(|(a, _)| *a == model).and_then(|&(_, id)| row(id));
     if let Some((_, input, output)) = row(model).or_else(alias) {
-        return Some(Price { input_per_mtok: *input, output_per_mtok: *output });
+        return Some(Price {
+            input_per_mtok: *input,
+            output_per_mtok: *output,
+        });
     }
-    crate::local::catalog::find(model).map(|_| Price { input_per_mtok: 0.0, output_per_mtok: 0.0 })
+    crate::local::catalog::find(model).map(|_| Price {
+        input_per_mtok: 0.0,
+        output_per_mtok: 0.0,
+    })
 }
 
 // ---------- the ledger ----------
@@ -221,12 +227,17 @@ fn start_from(loaded: Result<Loaded<LedgerFile>>, path: &Path) -> (Vec<UsageBuck
         Ok(Loaded::Parsed(file)) => (file.buckets, true),
         Ok(Loaded::Missing) => (Vec::new(), true),
         Ok(Loaded::Corrupt { kept }) => {
-            let name = kept.as_ref().map_or_else(|| "nothing".to_owned(), |p| p.display().to_string());
+            let name = kept
+                .as_ref()
+                .map_or_else(|| "nothing".to_owned(), |p| p.display().to_string());
             eprintln!("usage.json couldn't be parsed; kept it as {name} and started a new ledger");
             (Vec::new(), kept.is_some())
         }
         Err(e) => {
-            eprintln!("Couldn't read {}: {e}. Usage is counted for this session but not saved.", path.display());
+            eprintln!(
+                "Couldn't read {}: {e}. Usage is counted for this session but not saved.",
+                path.display()
+            );
             (Vec::new(), false)
         }
     }
@@ -257,7 +268,11 @@ impl UsageLedger {
         }
         Self {
             path,
-            inner: Mutex::new(Inner { buckets, dirty: false, persist }),
+            inner: Mutex::new(Inner {
+                buckets,
+                dirty: false,
+                persist,
+            }),
             writing: Mutex::new(()),
             on_record: Mutex::new(None),
         }
@@ -285,7 +300,15 @@ impl UsageLedger {
         self.record_part_at(now, tag, usage, estimated, true, true)
     }
 
-    fn record_part_at(&self, now: u64, tag: &UsageTag, usage: &Usage, estimated: bool, new_run: bool, new_unpriced: bool) {
+    fn record_part_at(
+        &self,
+        now: u64,
+        tag: &UsageTag,
+        usage: &Usage,
+        estimated: bool,
+        new_run: bool,
+        new_unpriced: bool,
+    ) {
         {
             let mut inner = lock(&self.inner);
             let hour = now / 3600;
@@ -303,7 +326,12 @@ impl UsageLedger {
 
     /// Buckets from `since_hour` on, sorted by (hour, root, kind, model).
     pub fn report(&self, since_hour: u64) -> Vec<UsageBucket> {
-        lock(&self.inner).buckets.values().filter(|b| b.hour >= since_hour).cloned().collect()
+        lock(&self.inner)
+            .buckets
+            .values()
+            .filter(|b| b.hour >= since_hour)
+            .cloned()
+            .collect()
     }
 
     /// Writes the ledger if anything changed since the last write.
@@ -323,7 +351,10 @@ impl UsageLedger {
             if !inner.persist || !(always || inner.dirty) {
                 return Ok(());
             }
-            let file = LedgerFile { version: 1, buckets: inner.buckets.values().cloned().collect() };
+            let file = LedgerFile {
+                version: 1,
+                buckets: inner.buckets.values().cloned().collect(),
+            };
             inner.dirty = false;
             serde_json::to_vec(&file)?
         };
@@ -356,7 +387,16 @@ pub struct Meter {
 
 impl Meter {
     pub fn new(ledger: Arc<UsageLedger>, tag: UsageTag, model: String, sent_chars: usize) -> Self {
-        Self { ledger, tag, model, sent_chars, received_chars: 0, reported: false, unpriced_counted: false, settled: false }
+        Self {
+            ledger,
+            tag,
+            model,
+            sent_chars,
+            received_chars: 0,
+            reported: false,
+            unpriced_counted: false,
+            settled: false,
+        }
     }
 
     pub fn observe(&mut self, chunk: &Chunk) {
@@ -367,7 +407,8 @@ impl Meter {
                 // One call is one run, however many models it reports: only the first record counts it.
                 let unpriced = !u.cost_usd.is_some_and(f64::is_finite);
                 let new_unpriced = unpriced && !self.unpriced_counted;
-                self.ledger.record_part(&self.tag, u, false, !self.reported, new_unpriced);
+                self.ledger
+                    .record_part(&self.tag, u, false, !self.reported, new_unpriced);
                 self.unpriced_counted |= unpriced;
                 self.reported = true;
             }
@@ -445,7 +486,10 @@ mod tests {
     use super::*;
 
     const fn p(input_per_mtok: f64, output_per_mtok: f64) -> Price {
-        Price { input_per_mtok, output_per_mtok }
+        Price {
+            input_per_mtok,
+            output_per_mtok,
+        }
     }
 
     #[test]
@@ -502,7 +546,13 @@ mod tests {
             cost_usd: None,
         };
         assert!((p(0.10, 0.50).cost(&u) - 0.80).abs() < 1e-12);
-        let small = Usage { input: 1200, cache_write: 0, cache_read: 0, output: 310, ..u };
+        let small = Usage {
+            input: 1200,
+            cache_write: 0,
+            cache_read: 0,
+            output: 310,
+            ..u
+        };
         assert!((p(0.10, 0.50).cost(&small) - 0.000275).abs() < 1e-15);
     }
 
@@ -514,11 +564,21 @@ mod tests {
     const DAY: u64 = 86_400;
 
     fn tag(root: &str, kind: UsageKind) -> UsageTag {
-        UsageTag { root: Some(root.into()), kind }
+        UsageTag {
+            root: Some(root.into()),
+            kind,
+        }
     }
 
     fn used(model: &str, input: u64, output: u64, cost_usd: Option<f64>) -> Usage {
-        Usage { model: model.into(), input, cache_write: 0, cache_read: 0, output, cost_usd }
+        Usage {
+            model: model.into(),
+            input,
+            cache_write: 0,
+            cache_read: 0,
+            output,
+            cost_usd,
+        }
     }
 
     fn ledger() -> (tempfile::TempDir, UsageLedger) {
@@ -534,14 +594,29 @@ mod tests {
         l.record_at(T + 10, &notes, &used("claude-haiku-5-5", 100, 10, Some(0.001)), false);
         l.record_at(T + 3599, &notes, &used("claude-haiku-5-5", 200, 20, Some(0.002)), false);
         l.record_at(T + 3600, &notes, &used("claude-haiku-5-5", 1, 1, Some(0.0)), false);
-        l.record_at(T + 20, &tag("/b", UsageKind::Notes), &used("claude-haiku-5-5", 1, 1, Some(0.0)), false);
-        l.record_at(T + 30, &tag("/a", UsageKind::Brief), &used("claude-sonnet-5-5", 1, 1, Some(0.0)), false);
+        l.record_at(
+            T + 20,
+            &tag("/b", UsageKind::Notes),
+            &used("claude-haiku-5-5", 1, 1, Some(0.0)),
+            false,
+        );
+        l.record_at(
+            T + 30,
+            &tag("/a", UsageKind::Brief),
+            &used("claude-sonnet-5-5", 1, 1, Some(0.0)),
+            false,
+        );
         l.record_at(T + 40, &notes, &used("haiku", 1, 1, Some(0.0)), false);
         let all = l.report(0);
         assert_eq!(all.len(), 5, "{all:?}");
         let first = all
             .iter()
-            .find(|b| b.hour == 489_000 && b.root.as_deref() == Some("/a") && b.kind == UsageKind::Notes && b.model == "claude-haiku-5-5")
+            .find(|b| {
+                b.hour == 489_000
+                    && b.root.as_deref() == Some("/a")
+                    && b.kind == UsageKind::Notes
+                    && b.model == "claude-haiku-5-5"
+            })
             .unwrap();
         assert_eq!((first.input, first.output, first.runs), (300, 30, 2));
         assert!((first.cost_usd - 0.003).abs() < 1e-12);
@@ -567,10 +642,18 @@ mod tests {
     #[test]
     fn the_file_has_the_spec_shape() {
         let (dir, l) = ledger();
-        let u = Usage { model: "claude-haiku-5-5".into(), input: 1200, cache_write: 22000, cache_read: 90000, output: 3100, cost_usd: Some(0.0123) };
+        let u = Usage {
+            model: "claude-haiku-5-5".into(),
+            input: 1200,
+            cache_write: 22000,
+            cache_read: 90000,
+            output: 3100,
+            cost_usd: Some(0.0123),
+        };
         l.record_at(T, &tag("/Users/me/code/shop-api", UsageKind::Notes), &u, false);
         l.flush().unwrap();
-        let v: serde_json::Value = serde_json::from_slice(&std::fs::read(dir.path().join("usage.json")).unwrap()).unwrap();
+        let v: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(dir.path().join("usage.json")).unwrap()).unwrap();
         assert_eq!(
             v,
             serde_json::json!({ "version": 1, "buckets": [{
@@ -591,7 +674,11 @@ mod tests {
         let again = UsageLedger::load_at(dir.path().join("usage.json"), T);
         let kept: Vec<(u64, u64)> = again.report(0).iter().map(|b| (b.hour, b.input)).collect();
         assert_eq!(kept, [((T - 89 * DAY) / 3600, 2), (T / 3600, 3)]);
-        assert_eq!(again.report(0)[1].unpriced_runs, 1, "every field survives the round trip");
+        assert_eq!(
+            again.report(0)[1].unpriced_runs,
+            1,
+            "every field survives the round trip"
+        );
     }
 
     #[test]
@@ -605,7 +692,11 @@ mod tests {
         assert_eq!(std::fs::read_to_string(&bad).unwrap(), "{ not json");
         l.record_at(T, &tag("/a", UsageKind::Notes), &used("m", 1, 1, Some(0.0)), false);
         l.flush().unwrap();
-        assert_eq!(std::fs::read_to_string(&bad).unwrap(), "{ not json", "later writes never touch the .bad copy");
+        assert_eq!(
+            std::fs::read_to_string(&bad).unwrap(),
+            "{ not json",
+            "later writes never touch the .bad copy"
+        );
         assert_eq!(UsageLedger::load_at(path, T).report(0).len(), 1);
     }
 
@@ -626,8 +717,16 @@ mod tests {
     #[test]
     fn a_corrupt_file_that_could_not_be_set_aside_is_never_overwritten() {
         let (_, persist) = start_from(Ok(Loaded::Corrupt { kept: None }), Path::new("usage.json"));
-        assert!(!persist, "the unparseable file we couldn't keep must not be written over");
-        let (_, persist) = start_from(Ok(Loaded::Corrupt { kept: Some(PathBuf::from("usage.json.bad")) }), Path::new("usage.json"));
+        assert!(
+            !persist,
+            "the unparseable file we couldn't keep must not be written over"
+        );
+        let (_, persist) = start_from(
+            Ok(Loaded::Corrupt {
+                kept: Some(PathBuf::from("usage.json.bad")),
+            }),
+            Path::new("usage.json"),
+        );
         assert!(persist, "once it is safely set aside the ledger may write a fresh file");
     }
 
@@ -646,13 +745,19 @@ mod tests {
         l.record_at(T, &t, &huge, false);
         l.record_at(T, &t, &huge, false);
         let b = &l.report(0)[0];
-        assert_eq!((b.input, b.cache_write, b.cache_read, b.output), (u64::MAX, u64::MAX, u64::MAX, u64::MAX));
+        assert_eq!(
+            (b.input, b.cache_write, b.cache_read, b.output),
+            (u64::MAX, u64::MAX, u64::MAX, u64::MAX)
+        );
         assert_eq!(b.runs, 2);
         let mut sum = b.clone();
         sum.merge(b);
         assert_eq!((sum.input, sum.output, sum.runs), (u64::MAX, u64::MAX, 4));
         let c = p(0.10, 0.50).cost(&huge);
-        assert!(c.is_finite() && c > 0.0, "the three input counts are summed as f64, not u64: {c}");
+        assert!(
+            c.is_finite() && c > 0.0,
+            "the three input counts are summed as f64, not u64: {c}"
+        );
     }
 
     #[test]
@@ -727,7 +832,11 @@ mod tests {
         m.observe(&Chunk::Activity("Read src/main.rs".into()));
         drop(m);
         let b = total(&l);
-        assert_eq!((b.input, b.output, b.runs, b.estimated_runs), (1001, 1, 1, 1), "ceil(4001 / 4) and ceil(4 / 4)");
+        assert_eq!(
+            (b.input, b.output, b.runs, b.estimated_runs),
+            (1001, 1, 1, 1),
+            "ceil(4001 / 4) and ceil(4 / 4)"
+        );
         let expected = (1001.0 * 0.10 + 1.0 * 0.50) / 1e6;
         assert!((b.cost_usd - expected).abs() < 1e-15);
         assert!((b.estimated_cost_usd - expected).abs() < 1e-15);
@@ -739,14 +848,25 @@ mod tests {
         Meter::new(l.clone(), tag("/a", UsageKind::Notes), "haiku".into(), 40).finish(true);
         Meter::new(l.clone(), tag("/b", UsageKind::Notes), "haiku".into(), 40).finish(false);
         let b = total(&l);
-        assert_eq!((b.runs, b.estimated_runs, b.input), (1, 1, 10), "a failed call without usage is assumed unbilled");
+        assert_eq!(
+            (b.runs, b.estimated_runs, b.input),
+            (1, 1, 10),
+            "a failed call without usage is assumed unbilled"
+        );
         assert_eq!(l.report(0)[0].root.as_deref(), Some("/a"));
     }
 
     #[test]
     fn reported_usage_is_recorded_exactly_once() {
         let (_dir, l) = shared();
-        let exact = Usage { model: "claude-haiku-5-5".into(), input: 2, cache_write: 2198, cache_read: 535, output: 45, cost_usd: Some(0.00046765) };
+        let exact = Usage {
+            model: "claude-haiku-5-5".into(),
+            input: 2,
+            cache_write: 2198,
+            cache_read: 535,
+            output: 45,
+            cost_usd: Some(0.00046765),
+        };
         let meter = || Meter::new(l.clone(), tag("/a", UsageKind::Notes), "haiku".into(), 4000);
         let mut m = meter();
         m.observe(&Chunk::Usage(exact.clone()));
@@ -774,7 +894,11 @@ mod tests {
         let by = |model: &str| report.iter().find(|b| b.model == model).unwrap().clone();
         let (sonnet, haiku) = (by("claude-sonnet-5-5"), by("claude-haiku-5-5"));
         assert_eq!((sonnet.input, sonnet.output, sonnet.runs), (100, 10, 1));
-        assert_eq!((haiku.input, haiku.output, haiku.runs), (40, 4, 0), "tokens and cost, but not a second run");
+        assert_eq!(
+            (haiku.input, haiku.output, haiku.runs),
+            (40, 4, 0),
+            "tokens and cost, but not a second run"
+        );
         assert!((haiku.cost_usd - 0.0002).abs() < 1e-15);
         assert_eq!(total(&l).runs, 1);
     }
@@ -797,30 +921,58 @@ mod tests {
         m.observe(&Chunk::Usage(used("claude-sonnet-9", 40, 4, None)));
         m.observe(&Chunk::Usage(used("claude-sonnet-10", 8, 1, None)));
         m.finish(true);
-        assert_eq!((total(&l).runs, total(&l).unpriced_runs), (1, 1), "unpriced first: not counted again");
+        assert_eq!(
+            (total(&l).runs, total(&l).unpriced_runs),
+            (1, 1),
+            "unpriced first: not counted again"
+        );
     }
 
     #[test]
     fn an_estimate_for_an_unpriced_model_counts_tokens_but_no_cost() {
         let (_dir, l) = shared();
-        drop(Meter::new(l.clone(), tag("/a", UsageKind::Notes), "claude-sonnet-9".into(), 400));
+        drop(Meter::new(
+            l.clone(),
+            tag("/a", UsageKind::Notes),
+            "claude-sonnet-9".into(),
+            400,
+        ));
         let b = total(&l);
         assert_eq!((b.input, b.runs, b.unpriced_runs, b.cost_usd), (100, 1, 1, 0.0));
     }
 
     #[test]
     fn sent_chars_counts_characters_not_bytes() {
-        let req = ChatRequest { system: "ééé".into(), user: "ab".into(), max_tokens: 1, cwd: None, allow_repo_tools: false, max_turns: None };
+        let req = ChatRequest {
+            system: "ééé".into(),
+            user: "ab".into(),
+            max_tokens: 1,
+            cwd: None,
+            allow_repo_tools: false,
+            max_turns: None,
+        };
         assert_eq!(sent_chars(&req), 5);
     }
 
     fn local(base_url: String, model: &str) -> Provider {
-        Provider::OpenAiCompat(OpenAiCompat { base_url, model: model.into(), context_tokens: 4096, http: reqwest::Client::new() })
+        Provider::OpenAiCompat(OpenAiCompat {
+            base_url,
+            model: model.into(),
+            context_tokens: 4096,
+            http: reqwest::Client::new(),
+        })
     }
 
     /// 400 characters: an estimate of 100 input tokens.
     fn request() -> ChatRequest {
-        ChatRequest { system: "s".repeat(40), user: "u".repeat(360), max_tokens: 100, cwd: None, allow_repo_tools: false, max_turns: None }
+        ChatRequest {
+            system: "s".repeat(40),
+            user: "u".repeat(360),
+            max_tokens: 100,
+            cwd: None,
+            allow_repo_tools: false,
+            max_turns: None,
+        }
     }
 
     const WITH_USAGE: &str = "data: {\"choices\":[{\"delta\":{\"content\":\"Hi\"}}]}\n\n\
@@ -834,11 +986,22 @@ mod tests {
         let (_dir, l) = shared();
         let mut seen = Vec::new();
         let provider = local(url, "qwen3-4b-instruct");
-        let text = metered(&provider, &request(), l.clone(), tag("/a", UsageKind::Notes), &mut |c: Chunk| seen.push(c)).await.unwrap();
+        let text = metered(
+            &provider,
+            &request(),
+            l.clone(),
+            tag("/a", UsageKind::Notes),
+            &mut |c: Chunk| seen.push(c),
+        )
+        .await
+        .unwrap();
         assert_eq!(text, "Hi");
         assert_eq!(seen, vec![Chunk::Text("Hi".into())], "usage is recorded, never shown");
         let b = total(&l);
-        assert_eq!((b.input, b.output, b.runs, b.estimated_runs, b.cost_usd), (31, 2, 1, 0, 0.0));
+        assert_eq!(
+            (b.input, b.output, b.runs, b.estimated_runs, b.cost_usd),
+            (31, 2, 1, 0, 0.0)
+        );
     }
 
     #[tokio::test]
@@ -846,9 +1009,21 @@ mod tests {
         let (url, _) = serve(vec![Canned::new(200, WITHOUT_USAGE)]).await;
         let (_dir, l) = shared();
         let provider = local(url, "claude-haiku-5-5"); // priced, to check the arithmetic
-        metered(&provider, &request(), l.clone(), tag("/a", UsageKind::Notes), &mut |_: Chunk| {}).await.unwrap();
+        metered(
+            &provider,
+            &request(),
+            l.clone(),
+            tag("/a", UsageKind::Notes),
+            &mut |_: Chunk| {},
+        )
+        .await
+        .unwrap();
         let b = total(&l);
-        assert_eq!((b.input, b.output, b.estimated_runs), (100, 1, 1), "400 characters sent, 2 received");
+        assert_eq!(
+            (b.input, b.output, b.estimated_runs),
+            (100, 1, 1),
+            "400 characters sent, 2 received"
+        );
         assert!((b.estimated_cost_usd - (100.0 * 0.10 + 1.0 * 0.50) / 1e6).abs() < 1e-15);
     }
 
@@ -857,7 +1032,14 @@ mod tests {
         let (url, _) = serve(vec![Canned::new(500, "{}")]).await;
         let (_dir, l) = shared();
         let provider = local(url, "qwen3-4b-instruct");
-        let result = metered(&provider, &request(), l.clone(), tag("/a", UsageKind::Notes), &mut |_: Chunk| {}).await;
+        let result = metered(
+            &provider,
+            &request(),
+            l.clone(),
+            tag("/a", UsageKind::Notes),
+            &mut |_: Chunk| {},
+        )
+        .await;
         assert!(result.is_err());
         assert!(l.report(0).is_empty());
     }
@@ -869,9 +1051,16 @@ mod tests {
         let (provider, req) = (local(url, "qwen3-4b-instruct"), request());
         let mut sink = |_: Chunk| {};
         let call = metered(&provider, &req, l.clone(), tag("/a", UsageKind::Notes), &mut sink);
-        assert!(tokio::time::timeout(Duration::from_millis(200), call).await.is_err(), "the keystroke came first");
+        assert!(
+            tokio::time::timeout(Duration::from_millis(200), call).await.is_err(),
+            "the keystroke came first"
+        );
         let b = total(&l);
-        assert_eq!((b.runs, b.estimated_runs, b.input, b.output, b.cost_usd), (1, 1, 100, 0, 0.0), "local models are free");
+        assert_eq!(
+            (b.runs, b.estimated_runs, b.input, b.output, b.cost_usd),
+            (1, 1, 100, 0, 0.0),
+            "local models are free"
+        );
     }
 
     #[tokio::test]
@@ -881,7 +1070,14 @@ mod tests {
         let provider = local(url, "qwen3-4b-instruct");
         let run = async {
             tokio::time::sleep(Duration::from_secs(5)).await; // the Jev pre-phase
-            metered(&provider, &request(), l.clone(), tag("/a", UsageKind::Notes), &mut |_: Chunk| {}).await
+            metered(
+                &provider,
+                &request(),
+                l.clone(),
+                tag("/a", UsageKind::Notes),
+                &mut |_: Chunk| {},
+            )
+            .await
         };
         assert!(tokio::time::timeout(Duration::from_millis(100), run).await.is_err());
         assert!(l.report(0).is_empty(), "no meter existed yet");

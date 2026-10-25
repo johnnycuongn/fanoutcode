@@ -25,7 +25,9 @@ pub struct LocalPaths {
 
 impl LocalPaths {
     pub fn new(app_data: &Path) -> Self {
-        Self { root: app_data.join("local") }
+        Self {
+            root: app_data.join("local"),
+        }
     }
     pub fn runtime_dir(&self) -> PathBuf {
         self.root.join("runtime")
@@ -71,7 +73,10 @@ pub fn inventory(paths: &LocalPaths) -> LocalInventory {
         platform_supported: runtime::asset_name().is_some(),
         models: CATALOG
             .iter()
-            .map(|spec| ModelState { spec, downloaded: paths.model_path(spec).is_file() })
+            .map(|spec| ModelState {
+                spec,
+                downloaded: paths.model_path(spec).is_file(),
+            })
             .collect(),
     }
 }

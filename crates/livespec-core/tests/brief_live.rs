@@ -9,8 +9,16 @@ use livespec_core::llm::{Chunk, ClaudeCli, Provider};
 use livespec_core::project::{explore, scan};
 use livespec_core::{agents, prompt, shell_env};
 
-const SECTIONS: [&str; 8] =
-    ["Purpose", "Architecture", "Modules", "Core flows", "Conventions", "Existing features", "Gaps and TODOs", "Glossary"];
+const SECTIONS: [&str; 8] = [
+    "Purpose",
+    "Architecture",
+    "Modules",
+    "Core flows",
+    "Conventions",
+    "Existing features",
+    "Gaps and TODOs",
+    "Glossary",
+];
 
 #[tokio::test]
 #[ignore = "runs Claude Code several times; uses the subscription"]
@@ -28,7 +36,10 @@ async fn four_explorers_vs_one() {
         let started = Instant::now();
         let slices = explore::slices(&index, n);
         let text = if slices.len() <= 1 {
-            provider.stream(&prompt::brief_request(&index, &provider), &mut |_: Chunk| {}).await.unwrap()
+            provider
+                .stream(&prompt::brief_request(&index, &provider), &mut |_: Chunk| {})
+                .await
+                .unwrap()
         } else {
             let mut explorers = Vec::new();
             for (k, slice) in slices.iter().enumerate() {
@@ -49,10 +60,14 @@ async fn four_explorers_vs_one() {
                     result.as_ref().map_or(0, |t| t.split_whitespace().count())
                 );
             }
-            let (notes, unmapped) = explore::collect_notes(&slices, done.into_iter().map(|(_, r)| r).collect()).unwrap();
+            let (notes, unmapped) =
+                explore::collect_notes(&slices, done.into_iter().map(|(_, r)| r).collect()).unwrap();
             let merging = Instant::now();
             let text = provider
-                .stream(&prompt::merge_request(&index, &provider, &notes, &unmapped), &mut |_: Chunk| {})
+                .stream(
+                    &prompt::merge_request(&index, &provider, &notes, &unmapped),
+                    &mut |_: Chunk| {},
+                )
                 .await
                 .unwrap();
             eprintln!("  merge: {} ms, unmapped={unmapped:?}", merging.elapsed().as_millis());

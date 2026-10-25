@@ -1,25 +1,25 @@
 //! Runs `Effect::RunHelper(kind)` (§7.4): one slot per `(task, kind)`, a new run replacing (aborting) the old, as
 //! LiveSpec does. Naming runs on the fast tier; the spec watcher and commit messages on the deep tier. The prompts,
-//! parsing and rules live in `teamcode_core::helpers`.
+//! parsing and rules live in `fanoutcode_core::helpers`.
 
 use std::time::Duration;
 
 use chrono::Utc;
+use fanoutcode_core::db;
+use fanoutcode_core::domain::Stage;
+use fanoutcode_core::domain::TaskId;
+use fanoutcode_core::domain::{AgentState, HandbackReason};
+use fanoutcode_core::helpers::commit_messages::{self, RepoCommits};
+use fanoutcode_core::helpers::spec_watcher::{self, SpecWatchOutcome};
+use fanoutcode_core::helpers::{briefs, call, naming, tag_for, HelperKind};
+use fanoutcode_core::memory::slug::title_from_intent;
+use fanoutcode_core::memory::{IndexEntry, TimelineKind};
+use fanoutcode_core::memory::{MemoryFile, TaskFolder};
+use fanoutcode_core::pipeline::{self, Effect};
+use fanoutcode_core::Result;
 use livespec_core::llm::Usage;
 use livespec_core::settings::Tier;
 use tauri::{AppHandle, Manager};
-use teamcode_core::db;
-use teamcode_core::domain::Stage;
-use teamcode_core::domain::TaskId;
-use teamcode_core::domain::{AgentState, HandbackReason};
-use teamcode_core::helpers::commit_messages::{self, RepoCommits};
-use teamcode_core::helpers::spec_watcher::{self, SpecWatchOutcome};
-use teamcode_core::helpers::{briefs, call, naming, tag_for, HelperKind};
-use teamcode_core::memory::slug::title_from_intent;
-use teamcode_core::memory::{IndexEntry, TimelineKind};
-use teamcode_core::memory::{MemoryFile, TaskFolder};
-use teamcode_core::pipeline::{self, Effect};
-use teamcode_core::Result;
 
 use crate::events::{self, CostUpdated, SpecWatcher};
 use crate::observe::{self, log_err};
@@ -45,7 +45,7 @@ pub fn run_after(app: &AppHandle, task_id: &TaskId, kind: HelperKind, delay: Dur
     let handle = tauri::async_runtime::spawn(async move {
         tokio::time::sleep(delay).await;
         if let Err(e) = job(&app2, &id, kind).await {
-            eprintln!("Team Code: the {kind:?} helper: {e}");
+            eprintln!("Fanout Code: the {kind:?} helper: {e}");
             log_err("handing back a failed helper", hand_back_failure(&app2, &id, kind, &e));
         }
     });
@@ -61,7 +61,7 @@ pub fn run_after(app: &AppHandle, task_id: &TaskId, kind: HelperKind, delay: Dur
 }
 
 /// A failed commit-message draft moves the card off "working" (`pipeline::on_helper_failed`).
-fn hand_back_failure(app: &AppHandle, id: &TaskId, kind: HelperKind, e: &teamcode_core::Error) -> Result<()> {
+fn hand_back_failure(app: &AppHandle, id: &TaskId, kind: HelperKind, e: &fanoutcode_core::Error) -> Result<()> {
     let state = app.state::<AppState>();
     let task = db::tasks::require(&state.db.lock().expect("db lock"), id)?;
     match pipeline::on_helper_failed(&task, kind, &e.to_string()) {
@@ -190,7 +190,7 @@ async fn commit_messages(app: &AppHandle, id: &TaskId) -> Result<()> {
     Ok(())
 }
 
-/// The Commit action (only with "Team Code may commit"): every draft in `commits.md`, in order.
+/// The Commit action (only with "Fanout Code may commit"): every draft in `commits.md`, in order.
 async fn commit_all(app: &AppHandle, id: &TaskId) -> Result<()> {
     let state = app.state::<AppState>();
     let (task, _) = observe::task_and_home(&state, id)?;
@@ -225,7 +225,7 @@ async fn project_briefs(app: &AppHandle, id: &TaskId) -> Result<()> {
 pub fn note_usage(app: &AppHandle, task_id: &TaskId, usage: &[Usage]) {
     let state = app.state::<AppState>();
     if let Err(e) = state.usage.flush_if_dirty() {
-        eprintln!("Team Code: couldn't save the usage ledger: {e}");
+        eprintln!("Fanout Code: couldn't save the usage ledger: {e}");
     }
     if usage.is_empty() {
         return;
@@ -235,7 +235,7 @@ pub fn note_usage(app: &AppHandle, task_id: &TaskId, usage: &[Usage]) {
         db::tasks::get(&conn, task_id).ok().flatten().map(|t| {
             usage
                 .iter()
-                .try_for_each(|u| teamcode_core::cost::ledger::record_helper(&conn, task_id, t.stage, u))
+                .try_for_each(|u| fanoutcode_core::cost::ledger::record_helper(&conn, task_id, t.stage, u))
         })
     };
     if let Some(r) = recorded {

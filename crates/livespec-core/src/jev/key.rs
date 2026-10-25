@@ -47,15 +47,27 @@ mod tests {
 
     #[test]
     fn lookup_order_is_keychain_then_environment_then_env_file() {
-        assert_eq!(pick_key(some("kc"), some("env"), || some("file")), Some(("kc".into(), KeySource::Keychain)));
-        assert_eq!(pick_key(None, some("env"), || some("file")), Some(("env".into(), KeySource::Environment)));
-        assert_eq!(pick_key(None, None, || some("file")), Some(("file".into(), KeySource::EnvFile)));
+        assert_eq!(
+            pick_key(some("kc"), some("env"), || some("file")),
+            Some(("kc".into(), KeySource::Keychain))
+        );
+        assert_eq!(
+            pick_key(None, some("env"), || some("file")),
+            Some(("env".into(), KeySource::Environment))
+        );
+        assert_eq!(
+            pick_key(None, None, || some("file")),
+            Some(("file".into(), KeySource::EnvFile))
+        );
         assert_eq!(pick_key(None, None, || None), None);
     }
 
     #[test]
     fn blank_values_never_shadow_a_real_key() {
-        assert_eq!(pick_key(some("  "), some(""), || some(" file-key ")), Some(("file-key".into(), KeySource::EnvFile)));
+        assert_eq!(
+            pick_key(some("  "), some(""), || some(" file-key ")),
+            Some(("file-key".into(), KeySource::EnvFile))
+        );
     }
 
     #[test]
@@ -71,9 +83,17 @@ mod tests {
 
     #[test]
     fn status_serializes_only_the_source() {
-        let status = KeyStatus { source: Some(KeySource::EnvFile) };
-        assert_eq!(serde_json::to_value(&status).unwrap(), serde_json::json!({"source": "envFile"}));
-        assert_eq!(serde_json::to_value(KeyStatus { source: None }).unwrap(), serde_json::json!({"source": null}));
+        let status = KeyStatus {
+            source: Some(KeySource::EnvFile),
+        };
+        assert_eq!(
+            serde_json::to_value(&status).unwrap(),
+            serde_json::json!({"source": "envFile"})
+        );
+        assert_eq!(
+            serde_json::to_value(KeyStatus { source: None }).unwrap(),
+            serde_json::json!({"source": null})
+        );
         assert_eq!(serde_json::to_value(KeySource::Keychain).unwrap(), "keychain");
         assert_eq!(serde_json::to_value(KeySource::Environment).unwrap(), "environment");
     }

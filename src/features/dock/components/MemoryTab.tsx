@@ -108,7 +108,7 @@ export function MemoryTab({ task, ipc = memoryIpc }: { task: Task; ipc?: MemoryI
         {error === null && isEditable(file) && (
           <Switch size="sm" label="Edit" checked={editing} onCheckedChange={toggleEdit} />
         )}
-        {error === null && !isEditable(file) && <span className="text-xs text-mute">Written by Team Code</span>}
+        {error === null && !isEditable(file) && <span className="text-xs text-mute">Written by Fanout Code</span>}
       </div>
       <div className="min-h-0 flex-1 overflow-auto px-4 py-3">
         {error !== null && (

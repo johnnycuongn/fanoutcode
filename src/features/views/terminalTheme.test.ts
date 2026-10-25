@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-/* eslint-disable teamcode/no-colour-literals -- the test sets CSS variables the way styles.css does */
+/* eslint-disable fanoutcode/no-colour-literals -- the test sets CSS variables the way styles.css does */
 import { describe, it, expect } from "vitest";
 import { readXtermTheme, rendererFor, resolvePalette } from "./terminalTheme";
 

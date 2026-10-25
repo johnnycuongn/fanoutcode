@@ -62,17 +62,17 @@ describe("ProjectSettings", () => {
   });
   it('keeps "may commit" off by default and writes it when switched', () => {
     render(<ProjectSettings projectId="proj-a1" />);
-    const sw = screen.getByRole("switch", { name: "Team Code may commit" });
+    const sw = screen.getByRole("switch", { name: "Fanout Code may commit" });
     expect(sw).not.toBeChecked();
     fireEvent.click(sw);
     expect(commands.settingsSet).toHaveBeenCalledWith(scope, "may_commit", true);
   });
-  it("disables advance-on-green without a test command and shows the worktrees dir only for Team Code-managed", () => {
+  it("disables advance-on-green without a test command and shows the worktrees dir only for Fanout Code-managed", () => {
     render(<ProjectSettings projectId="proj-a1" />);
     expect(screen.getByRole("switch", { name: "Advance on green" })).toBeDisabled();
     expect(screen.queryByLabelText("Worktrees dir")).toBeNull();
-    fireEvent.click(screen.getByRole("radio", { name: "Team Code-managed" }));
-    expect(commands.settingsSet).toHaveBeenCalledWith(scope, "worktree_convention", "TeamCodeManaged");
+    fireEvent.click(screen.getByRole("radio", { name: "Fanout Code-managed" }));
+    expect(commands.settingsSet).toHaveBeenCalledWith(scope, "worktree_convention", "FanoutCodeManaged");
   });
   it("shows the costs panel when the overview is on", async () => {
     render(<ProjectSettings projectId="proj-a1" />);

@@ -16,7 +16,7 @@ export function mockWorkspace(
     workspace: {
       id: "ws-1",
       name: "Shop",
-      file_path: "/app/workspaces/ws-1/Shop.teamcode-workspace.json",
+      file_path: "/app/workspaces/ws-1/Shop.fanoutcode-workspace.json",
       dirty: false,
       projects: [],
       policy: "ReadAndModifyOnRequest",

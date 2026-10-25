@@ -1,10 +1,10 @@
 //! Settings commands: first-run state (§4.4) and scoped settings (§6.8, §13).
 
+use fanoutcode_core::db;
+use fanoutcode_core::domain::{ThemePreference, WorktreeConvention};
+use fanoutcode_core::settings::{self, ResolvedSettings, Scope};
+use fanoutcode_core::Result;
 use tauri::State;
-use teamcode_core::db;
-use teamcode_core::domain::{ThemePreference, WorktreeConvention};
-use teamcode_core::settings::{self, ResolvedSettings, Scope};
-use teamcode_core::Result;
 
 use super::parse_scope;
 use crate::state::AppState;
@@ -43,7 +43,7 @@ pub fn settings_get(state: State<'_, AppState>, scope: Scope) -> Result<Resolved
 pub fn settings_set(state: State<'_, AppState>, scope: Scope, key: String, value: serde_json::Value) -> Result<()> {
     let (kind, id) = parse_scope(&scope)?.most_specific();
     // only linking writes the Jira site, so a setting can't repoint a stored token
-    teamcode_core::jira::settings::check_settable(&key)?;
+    fanoutcode_core::jira::settings::check_settable(&key)?;
     settings::validate(&key, kind, &value)?;
     db::settings::set(&state.db.lock().expect("db lock"), kind, &id, &key, &value)
 }

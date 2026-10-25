@@ -1,4 +1,4 @@
-// teamcode/no-colour-literals: colours live in src/styles.css as tokens (spec §15.3). Reports hex colours in strings
+// fanoutcode/no-colour-literals: colours live in src/styles.css as tokens (spec §15.3). Reports hex colours in strings
 // and templates, and inline colour styles (colour properties or CSS custom properties). No file is exempt.
 
 const HEX = /#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})\b/i;

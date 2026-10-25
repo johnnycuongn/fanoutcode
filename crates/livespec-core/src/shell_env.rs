@@ -58,7 +58,13 @@ pub fn find_executable(name: &str, path_env: Option<&str>) -> Option<PathBuf> {
         .unwrap_or_default();
 
     if let Some(home) = home_dir() {
-        for rel in [".claude/local", ".local/bin", ".npm-global/bin", ".bun/bin", ".volta/bin"] {
+        for rel in [
+            ".claude/local",
+            ".local/bin",
+            ".npm-global/bin",
+            ".bun/bin",
+            ".volta/bin",
+        ] {
             dirs.push(home.join(rel));
         }
     }
@@ -74,7 +80,9 @@ fn is_executable(p: &Path) -> bool {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        p.metadata().map(|m| m.is_file() && m.permissions().mode() & 0o111 != 0).unwrap_or(false)
+        p.metadata()
+            .map(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+            .unwrap_or(false)
     }
     #[cfg(not(unix))]
     {

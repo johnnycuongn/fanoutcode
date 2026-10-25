@@ -76,7 +76,9 @@ pub async fn download(
 
     if let Some(t) = total {
         if done != t {
-            return Err(Error::Provider(format!("Download incomplete ({done} of {t} bytes). Try again to resume.")));
+            return Err(Error::Provider(format!(
+                "Download incomplete ({done} of {t} bytes). Try again to resume."
+            )));
         }
     }
     tokio::fs::rename(&part, dest).await?;

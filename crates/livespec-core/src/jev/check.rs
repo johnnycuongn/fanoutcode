@@ -28,8 +28,8 @@ const MAX_SPECIFIC_FILES: usize = 8;
 /// Extensions that make a backticked span a file path: `cart.ts` is a file,
 /// `state.local` is code.
 const SOURCE_EXTS: &[&str] = &[
-    "rs", "ts", "tsx", "js", "jsx", "mjs", "json", "toml", "md", "css", "html", "py", "go", "java", "kt",
-    "swift", "c", "h", "cpp", "rb", "php", "yml", "yaml", "sh", "sql",
+    "rs", "ts", "tsx", "js", "jsx", "mjs", "json", "toml", "md", "css", "html", "py", "go", "java", "kt", "swift", "c",
+    "h", "cpp", "rb", "php", "yml", "yaml", "sh", "sql",
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -56,7 +56,10 @@ pub struct CheckResult {
 #[derive(Debug, Clone, PartialEq)]
 pub enum CheckEvent {
     /// `count` of the `total` Faults name code that can be checked.
-    Checking { count: usize, total: usize },
+    Checking {
+        count: usize,
+        total: usize,
+    },
     Result(CheckResult),
     /// Jev failed; the remaining claims are dropped. At most one per run.
     Notice(String),
@@ -89,7 +92,9 @@ fn bullet_text(line: &str) -> Option<&str> {
     let t = line.trim_start();
     let rest = ["- ", "* ", "• "].iter().find_map(|m| t.strip_prefix(m)).or_else(|| {
         let digits = t.len() - t.trim_start_matches(|c: char| c.is_ascii_digit()).len();
-        (digits > 0).then(|| &t[digits..]).and_then(|r| r.strip_prefix(". ").or_else(|| r.strip_prefix(") ")))
+        (digits > 0)
+            .then(|| &t[digits..])
+            .and_then(|r| r.strip_prefix(". ").or_else(|| r.strip_prefix(") ")))
     })?;
     Some(rest.trim()).filter(|r| !r.is_empty())
 }
@@ -118,7 +123,11 @@ fn strip_line_suffix(s: &str) -> &str {
 /// extension, and no spaces, quotes or parentheses (`app.get('/')` is code).
 fn is_path(span: &str) -> bool {
     let plain = !span.contains(|c: char| c.is_whitespace() || matches!(c, '\'' | '"' | '(' | ')'));
-    plain && (span.contains('/') || span.rsplit_once('.').is_some_and(|(stem, ext)| !stem.is_empty() && SOURCE_EXTS.contains(&ext)))
+    plain
+        && (span.contains('/')
+            || span
+                .rsplit_once('.')
+                .is_some_and(|(stem, ext)| !stem.is_empty() && SOURCE_EXTS.contains(&ext)))
 }
 
 /// `rel` is `span` or ends with `/span`: whole path segments, so `cart.ts`
@@ -157,16 +166,28 @@ pub fn locate_evidence(index: &ProjectIndex, claim: &str) -> Evidence {
     let mut spans: Vec<Span> = Vec::new();
     for text in code_spans(claim) {
         if is_path(&text) {
-            let hits: Vec<usize> = (0..index.files.len()).filter(|&i| path_matches(&index.files[i].rel, &text)).collect();
+            let hits: Vec<usize> = (0..index.files.len())
+                .filter(|&i| path_matches(&index.files[i].rel, &text))
+                .collect();
             if !hits.is_empty() {
-                spans.push(Span { text, hits, is_file: true });
+                spans.push(Span {
+                    text,
+                    hits,
+                    is_file: true,
+                });
                 continue;
             }
         }
         // Not a file (or no such file): `res.json` and `state.local` are code.
-        let hits: Vec<usize> = (0..index.files.len()).filter(|&i| contains_ident(&index.files[i].content, &text)).collect();
+        let hits: Vec<usize> = (0..index.files.len())
+            .filter(|&i| contains_ident(&index.files[i].content, &text))
+            .collect();
         if hits.len() <= generic_above {
-            spans.push(Span { text, hits, is_file: false });
+            spans.push(Span {
+                text,
+                hits,
+                is_file: false,
+            });
         }
     }
     if spans.is_empty() {
@@ -204,9 +225,18 @@ pub fn question() -> Question {
     Question::Choice {
         instructions: json!("How does `code` relate to `claim`?"),
         criteria: Options(vec![
-            ("supports".into(), json!("The code shows the claim is true, or directly implies it.")),
-            ("contradicts".into(), json!("The code shows the claim is false, or directly implies the opposite.")),
-            ("says_nothing".into(), json!("The code does not address the claim either way.")),
+            (
+                "supports".into(),
+                json!("The code shows the claim is true, or directly implies it."),
+            ),
+            (
+                "contradicts".into(),
+                json!("The code shows the claim is false, or directly implies the opposite."),
+            ),
+            (
+                "says_nothing".into(),
+                json!("The code does not address the claim either way."),
+            ),
         ]),
     }
 }
@@ -240,7 +270,10 @@ pub async fn run(jev: &Jev, index: &ProjectIndex, faults: &str, mut on_event: im
     if located.is_empty() {
         return;
     }
-    on_event(CheckEvent::Checking { count: located.len(), total });
+    on_event(CheckEvent::Checking {
+        count: located.len(),
+        total,
+    });
 
     let mut to_judge = Vec::new();
     for (claim, evidence) in located {
@@ -266,8 +299,14 @@ pub async fn run(jev: &Jev, index: &ProjectIndex, faults: &str, mut on_event: im
         .buffer_unordered(JEV_CONCURRENCY));
     while let Some((claim, code, line, answer)) = answers.next().await {
         let picked = match answer {
-            Ok(response) => response.choice("relation").map(|(choice, confidence)| (verdict(choice, confidence), confidence)),
-            Err(e) => return on_event(CheckEvent::Notice(format!("Couldn't check the notes against the code: {e}"))),
+            Ok(response) => response
+                .choice("relation")
+                .map(|(choice, confidence)| (verdict(choice, confidence), confidence)),
+            Err(e) => {
+                return on_event(CheckEvent::Notice(format!(
+                    "Couldn't check the notes against the code: {e}"
+                )))
+            }
         };
         let Some((verdict, confidence)) = picked else {
             return on_event(CheckEvent::Notice(
@@ -317,13 +356,23 @@ mod tests {
             line: Some(3),
         };
         let json = serde_json::to_string(&r).unwrap();
-        assert_eq!(json, r#"{"claim":"`x` is wrong","verdict":"notShown","confidence":0.9,"path":"src/x.rs","line":3}"#);
-        assert_eq!(serde_json::from_str::<CheckResult>(&json).unwrap(), r, "saved checks read back unchanged");
+        assert_eq!(
+            json,
+            r#"{"claim":"`x` is wrong","verdict":"notShown","confidence":0.9,"path":"src/x.rs","line":3}"#
+        );
+        assert_eq!(
+            serde_json::from_str::<CheckResult>(&json).unwrap(),
+            r,
+            "saved checks read back unchanged"
+        );
     }
 
     #[test]
     fn spans_drop_short_generic_names_and_line_numbers() {
-        assert_eq!(code_spans("`createInvoice` uses `id`, `self` and `src/cart/cart.ts:12`"), ["createInvoice", "src/cart/cart.ts"]);
+        assert_eq!(
+            code_spans("`createInvoice` uses `id`, `self` and `src/cart/cart.ts:12`"),
+            ["createInvoice", "src/cart/cart.ts"]
+        );
         assert_eq!(code_spans("`Error::Provider` is returned"), ["Error::Provider"]);
     }
 
@@ -344,14 +393,23 @@ mod tests {
     fn finds_a_named_file() {
         let idx = scan(fixture().path()).unwrap();
         let found = locate_evidence(&idx, "`src/cart/cart.ts:3` has no removeItem");
-        assert!(matches!(found, Evidence::Found(ref code, _) if code.path == "src/cart/cart.ts"), "{found:?}");
+        assert!(
+            matches!(found, Evidence::Found(ref code, _) if code.path == "src/cart/cart.ts"),
+            "{found:?}"
+        );
     }
 
     #[test]
     fn unknown_names_are_not_found_and_prose_is_uncheckable() {
         let idx = scan(fixture().path()).unwrap();
-        assert_eq!(locate_evidence(&idx, "`applyCoupon` is called twice"), Evidence::NotFound);
-        assert_eq!(locate_evidence(&idx, "Discounts are never applied"), Evidence::Uncheckable);
+        assert_eq!(
+            locate_evidence(&idx, "`applyCoupon` is called twice"),
+            Evidence::NotFound
+        );
+        assert_eq!(
+            locate_evidence(&idx, "Discounts are never applied"),
+            Evidence::Uncheckable
+        );
     }
 
     #[test]
@@ -359,15 +417,24 @@ mod tests {
         let paths: Vec<String> = (0..8).map(|i| format!("src/f{i}.ts")).collect();
         let files: Vec<(&str, &str)> = paths.iter().map(|p| (p.as_str(), "const data = load();\n")).collect();
         let idx = scan(repo(&files).path()).unwrap();
-        assert_eq!(locate_evidence(&idx, "`data` is never validated"), Evidence::Uncheckable);
+        assert_eq!(
+            locate_evidence(&idx, "`data` is never validated"),
+            Evidence::Uncheckable
+        );
     }
 
     #[test]
     fn dotted_names_are_code_not_paths() {
-        let dir = repo(&[("src/state.rs", "let guard = state.local.lock();\n"), ("src/other.rs", "fn main() {}\n")]);
+        let dir = repo(&[
+            ("src/state.rs", "let guard = state.local.lock();\n"),
+            ("src/other.rs", "fn main() {}\n"),
+        ]);
         let idx = scan(dir.path()).unwrap();
         let found = locate_evidence(&idx, "`state.local` is held across an await");
-        assert!(matches!(found, Evidence::Found(ref code, 1) if code.path == "src/state.rs"), "{found:?}");
+        assert!(
+            matches!(found, Evidence::Found(ref code, 1) if code.path == "src/state.rs"),
+            "{found:?}"
+        );
     }
 
     #[test]
@@ -392,7 +459,10 @@ mod tests {
     const SUPPORTS: &str = r#"{"model":"jev-1.13.0","answers":{"relation":{"type":"choice","choice":"supports","probabilities":{"supports":0.95,"contradicts":0.03,"says_nothing":0.02},"confidence":0.93}},"usage":{"input_tokens":300,"output_tokens":20}}"#;
 
     fn judge(base_url: String) -> Jev {
-        Jev { base_url, ..Jev::new("test-key".into(), DEFAULT_MODEL.into(), reqwest::Client::new()) }
+        Jev {
+            base_url,
+            ..Jev::new("test-key".into(), DEFAULT_MODEL.into(), reqwest::Client::new())
+        }
     }
 
     async fn events(jev: &Jev, faults: &str) -> Vec<CheckEvent> {
@@ -434,7 +504,10 @@ mod tests {
         let got = events(&judge(url), "- `createInvoice` never applies discounts").await;
         assert_eq!(got.len(), 2, "{got:?}");
         assert_eq!(got[0], CheckEvent::Checking { count: 1, total: 1 });
-        assert!(matches!(&got[1], CheckEvent::Notice(m) if m.contains("TypeSafe key rejected")), "{got:?}");
+        assert!(
+            matches!(&got[1], CheckEvent::Notice(m) if m.contains("TypeSafe key rejected")),
+            "{got:?}"
+        );
     }
 
     #[tokio::test]
@@ -454,16 +527,29 @@ mod tests {
             ("d.ts", "export const other = 4;\n"),
         ]);
         let idx = scan(dir.path()).unwrap();
-        assert_eq!(locate_evidence(&idx, "`data` is never validated"), Evidence::Uncheckable);
+        assert_eq!(
+            locate_evidence(&idx, "`data` is never validated"),
+            Evidence::Uncheckable
+        );
     }
 
     #[test]
     fn a_name_in_many_files_of_a_big_repo_is_too_generic() {
         let paths: Vec<String> = (0..40).map(|i| format!("src/m{i}.ts")).collect();
         let bodies: Vec<String> = (0..40)
-            .map(|i| if i < 12 { "const config = load();\n".to_owned() } else { format!("export const v{i} = {i};\n") })
+            .map(|i| {
+                if i < 12 {
+                    "const config = load();\n".to_owned()
+                } else {
+                    format!("export const v{i} = {i};\n")
+                }
+            })
             .collect();
-        let files: Vec<(&str, &str)> = paths.iter().zip(&bodies).map(|(p, b)| (p.as_str(), b.as_str())).collect();
+        let files: Vec<(&str, &str)> = paths
+            .iter()
+            .zip(&bodies)
+            .map(|(p, b)| (p.as_str(), b.as_str()))
+            .collect();
         let idx = scan(repo(&files).path()).unwrap();
         assert_eq!(locate_evidence(&idx, "`config` is read twice"), Evidence::Uncheckable);
     }
@@ -477,11 +563,17 @@ mod tests {
 
     #[test]
     fn code_that_looks_like_a_file_name_is_searched_as_code() {
-        let dir = repo(&[("src/api.ts", "app.get('/'); // res.json({ ok: true })\n"), ("src/b.ts", "export const b = 1;\n")]);
+        let dir = repo(&[
+            ("src/api.ts", "app.get('/'); // res.json({ ok: true })\n"),
+            ("src/b.ts", "export const b = 1;\n"),
+        ]);
         let idx = scan(dir.path()).unwrap();
         for claim in ["`res.json` is called without a status", "`app.get('/')` has no auth"] {
             let found = locate_evidence(&idx, claim);
-            assert!(matches!(found, Evidence::Found(ref code, 1) if code.path == "src/api.ts"), "{claim}: {found:?}");
+            assert!(
+                matches!(found, Evidence::Found(ref code, 1) if code.path == "src/api.ts"),
+                "{claim}: {found:?}"
+            );
         }
     }
 
@@ -490,8 +582,13 @@ mod tests {
         let dir = repo(&[("src/minicart.ts", "export const mini = 1;\n")]);
         let idx = scan(dir.path()).unwrap();
         assert_eq!(locate_evidence(&idx, "`cart.ts` has no removeItem"), Evidence::NotFound);
-        let real = repo(&[("src/cart.ts", "export const cart = 1;\n"), ("src/minicart.ts", "export const mini = 1;\n")]);
+        let real = repo(&[
+            ("src/cart.ts", "export const cart = 1;\n"),
+            ("src/minicart.ts", "export const mini = 1;\n"),
+        ]);
         let idx = scan(real.path()).unwrap();
-        assert!(matches!(locate_evidence(&idx, "`cart.ts` has no removeItem"), Evidence::Found(ref c, _) if c.path == "src/cart.ts"));
+        assert!(
+            matches!(locate_evidence(&idx, "`cart.ts` has no removeItem"), Evidence::Found(ref c, _) if c.path == "src/cart.ts")
+        );
     }
 }

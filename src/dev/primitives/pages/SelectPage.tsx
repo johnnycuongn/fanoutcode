@@ -60,7 +60,7 @@ export default function SelectPage(): ReactElement {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="claude">Claude Code</SelectItem>
-            <SelectItem value="managed">Team Code managed</SelectItem>
+            <SelectItem value="managed">Fanout Code managed</SelectItem>
           </SelectContent>
         </Select>
       </Field>

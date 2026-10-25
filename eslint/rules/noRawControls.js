@@ -1,4 +1,4 @@
-// teamcode/no-raw-controls: raw form and control elements appear only under src/components/ui/ (spec §15.3).
+// fanoutcode/no-raw-controls: raw form and control elements appear only under src/components/ui/ (spec §15.3).
 // Plan 02 may extend PRIMITIVES (the tag → primitive mapping), not the mechanism.
 
 export const PRIMITIVES = {

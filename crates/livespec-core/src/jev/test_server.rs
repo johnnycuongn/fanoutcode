@@ -19,12 +19,19 @@ pub struct Canned {
 
 impl Canned {
     pub fn new(status: u16, body: &str) -> Self {
-        Self { status, body: body.to_owned(), delay: Duration::ZERO }
+        Self {
+            status,
+            body: body.to_owned(),
+            delay: Duration::ZERO,
+        }
     }
 
     /// A 200 with one Noul answer under question id `id`.
     pub fn noul(id: &str, value: f64) -> Self {
-        Self::new(200, &format!(r#"{{"model":"jev-1.13.0","answers":{{"{id}":{{"type":"noul","noul":{value}}}}}}}"#))
+        Self::new(
+            200,
+            &format!(r#"{{"model":"jev-1.13.0","answers":{{"{id}":{{"type":"noul","noul":{value}}}}}}}"#),
+        )
     }
 
     /// Answer only after `ms` milliseconds, for timeout tests.
@@ -40,7 +47,9 @@ pub async fn serve(responses: Vec<Canned>) -> (String, Arc<AtomicUsize>) {
 }
 
 /// `handler` gets each request body; `None` closes the connection unanswered.
-pub async fn serve_with(handler: impl Fn(&str) -> Option<Canned> + Send + Sync + 'static) -> (String, Arc<AtomicUsize>) {
+pub async fn serve_with(
+    handler: impl Fn(&str) -> Option<Canned> + Send + Sync + 'static,
+) -> (String, Arc<AtomicUsize>) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base_url = format!("http://{}", listener.local_addr().unwrap());
     let hits = Arc::new(AtomicUsize::new(0));
@@ -48,7 +57,9 @@ pub async fn serve_with(handler: impl Fn(&str) -> Option<Canned> + Send + Sync +
     let handler = Arc::new(handler);
     tokio::spawn(async move {
         loop {
-            let Ok((mut sock, _)) = listener.accept().await else { return };
+            let Ok((mut sock, _)) = listener.accept().await else {
+                return;
+            };
             counter.fetch_add(1, Ordering::SeqCst);
             let handler = handler.clone();
             tokio::spawn(async move {
@@ -74,7 +85,9 @@ async fn read_request(sock: &mut TcpStream) -> String {
     let mut buf = Vec::new();
     let mut chunk = [0u8; 4096];
     loop {
-        let Ok(n) = sock.read(&mut chunk).await else { return String::new() };
+        let Ok(n) = sock.read(&mut chunk).await else {
+            return String::new();
+        };
         if n == 0 {
             return String::new();
         }
