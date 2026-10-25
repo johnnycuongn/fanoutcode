@@ -38,3 +38,7 @@ export function TaskPage({ taskId, ref }: TaskPageProps): ReactElement {
   }));
   return createElement(Panel, { variant: "plain", className: "h-full text-mute" }, `Task ${taskId}`);
 }
+
+// Plan 08's pieces, exported as they land; Task 19 replaces the stub above.
+export type { TaskSettings, TaskPageIpc, TaskPageState } from "./types";
+export type { TaskSource } from "./taskSource";

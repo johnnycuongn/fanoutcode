@@ -29,3 +29,10 @@ export function live<K extends keyof Commands>(...names: K[]): Live<K> {
   }
   return out as Live<K>;
 }
+
+/** What a rejected command (or anything thrown) says, for showing verbatim. */
+export function errorMessage(e: unknown): string {
+  if (typeof e === "string") return e;
+  if (e instanceof Error) return e.message;
+  return String(e);
+}

@@ -3,10 +3,10 @@
 // "Approve spec" flushes the save first and refuses to advance when spec.md is not on disk (Review Focus 4).
 import { Channel } from "@tauri-apps/api/core";
 import type { LiveSpecEvent, LiveSpecLevel, Scope, Task, TaskId } from "@/lib/bindings";
-import { live } from "@/lib/ipcResult";
+import { errorMessage, live } from "@/lib/ipcResult";
 import { createStore } from "@/lib/stores/createStore";
 import { createSaver } from "@/livespec/saver";
-import { errorMessage, SpecSession } from "./specSession";
+import { SpecSession } from "./specSession";
 import type { SpecIpc, SpecState, SpecTaskState } from "./types";
 
 export const SAVE_DELAY_MS = 500;

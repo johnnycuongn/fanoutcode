@@ -2,6 +2,7 @@
 // one feature's tests importing another's internals, so they live here; task-page/testing/fixtures.ts re-exports
 // them under the plan's path).
 import type { Task } from "@/lib/bindings";
+import type { TaskSettings, TaskSource } from "@/features/task-page";
 
 const AT = "2026-10-24T05:12:00Z";
 
@@ -37,3 +38,41 @@ export function makeTask(overrides: Partial<Task> = {}): Task {
     ...overrides,
   };
 }
+
+/** An in-memory TaskSource (stands in for Plan 06's tasksStore). */
+export function makeTaskSource(tasks: Task[] = []): TaskSource {
+  const byId = new Map(tasks.map((t) => [t.id, t]));
+  const listeners = new Set<() => void>();
+  return {
+    get: (id) => byId.get(id),
+    put(task) {
+      byId.set(task.id, task);
+      for (const l of [...listeners]) l();
+    },
+    subscribe(fn) {
+      listeners.add(fn);
+      return () => {
+        listeners.delete(fn);
+      };
+    },
+  };
+}
+
+/** Every flag off, no test command, the dock at the bottom and DockGrows. */
+export function makeSettings(overrides: Partial<TaskSettings> = {}): TaskSettings {
+  return {
+    mayCommit: false,
+    costOverview: false,
+    testCommand: null,
+    advanceOnGreen: false,
+    dockPosition: "Bottom",
+    teamViewPlacement: "DockGrows",
+    ...overrides,
+  };
+}
+
+/** An `events` stand-in: every `listen` resolves to a no-op unsubscribe. */
+export const fakeEvents: Record<string, { listen: (cb: unknown) => Promise<() => void> }> = new Proxy(
+  {},
+  { get: () => ({ listen: async () => () => {} }) },
+);

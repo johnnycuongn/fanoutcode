@@ -5,6 +5,7 @@
 // request id. LiveSpec's history, sections, context keys and activation went away with the tab model.
 import { useCallback, useSyncExternalStore } from "react";
 import type { LiveSpecEvent, LiveSpecLevel, TaskId } from "@/lib/bindings";
+import { errorMessage } from "@/lib/ipcResult";
 import { applyEvent, initialAnalysis, startAnalysis, type AnalysisState } from "@/livespec/analysisState";
 
 export const MIN_CHARS = 24;
@@ -25,12 +26,6 @@ export interface SpecView {
   tooShort: boolean;
   stale: boolean;
   level: LiveSpecLevel;
-}
-
-export function errorMessage(e: unknown): string {
-  if (typeof e === "string") return e;
-  if (e instanceof Error) return e.message;
-  return String(e);
 }
 
 export class SpecSession {
