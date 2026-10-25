@@ -3,6 +3,7 @@
 
 pub mod batch;
 pub mod driver;
+pub mod exit;
 #[cfg(any(test, feature = "test-support"))]
 pub mod fake;
 pub mod flow;
@@ -15,6 +16,7 @@ pub mod theme;
 
 pub use batch::Batcher;
 pub use driver::{ExitFn, GracefulExit, OutputFn, OwnedDriver, Pty, PtySpawner, SessionDriver, SpawnSpec, STOP_GRACE};
+pub use exit::state_after_exit;
 pub use flow::FlowControl;
 pub use inject::{frame_prompt, IdleTracker, InjectQueue, QueueOutcome, CODEX_IDLE_AFTER, INJECT_ENTER_DELAY};
 pub use launch::{

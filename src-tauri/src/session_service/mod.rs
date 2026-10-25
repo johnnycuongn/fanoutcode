@@ -11,7 +11,8 @@ use teamcode_core::domain::{AgentKind, Project, ProjectId, Session, SessionId, T
 use teamcode_core::hooks::{event_log_path, hook_specs, status_line_command, user_status_line};
 use teamcode_core::roster::{self, RosterLevel, RosterScope};
 use teamcode_core::sessions::{
-    claude_launch, codex_launch, settings_path, shell_launch, ClaudeLaunch, GeneratedSettings, LaunchSpec,
+    claude_launch, codex_launch, settings_path, shell_launch, state_after_exit, ClaudeLaunch, GeneratedSettings,
+    LaunchSpec,
 };
 use teamcode_core::workspace::launch as workspace_launch;
 use teamcode_core::{db, memory, worktree, Error, Result};
@@ -118,9 +119,14 @@ pub fn start(app: &AppHandle, session: Session, launch: LaunchSpec) -> Result<Se
 }
 
 /// The PTY's exit: the registry drops the queue and the pane's sink, the row records the code, every window hears.
+/// A task's primary session that ended on its own moves the card off "working" (`sessions::state_after_exit`).
 fn exited(app: &AppHandle, id: &SessionId, code: i32) {
     let state = app.state::<AppState>();
-    state.registry().on_exit(id, code);
+    let (session, stopping) = {
+        let mut registry = state.registry();
+        let stopping = registry.is_stopping(id);
+        (registry.on_exit(id, code), stopping)
+    };
     state.codex_idle.lock().expect("codex idle lock").remove(id);
     log_err(
         "recording a session exit",
@@ -132,6 +138,23 @@ fn exited(app: &AppHandle, id: &SessionId, code: i32) {
     };
     log_err("announcing a session exit", events::emit(app, exit));
     queue_changed(app, id, 0);
+    if let Some(session) = session {
+        log_err(
+            "updating the task after its session ended",
+            card_after_exit(app, &state, &session, stopping, code),
+        );
+    }
+}
+
+fn card_after_exit(app: &AppHandle, state: &AppState, session: &Session, stopping: bool, code: i32) -> Result<()> {
+    let Some(task_id) = &session.task_id else {
+        return Ok(());
+    };
+    let task = db::tasks::require(&state.db.lock().expect("db lock"), task_id)?;
+    match state_after_exit(session, &task, stopping, code) {
+        Some(next) => crate::hook_feed::set_state(app, state, task_id, next),
+        None => Ok(()),
+    }
 }
 
 /// `session-queue-changed`.

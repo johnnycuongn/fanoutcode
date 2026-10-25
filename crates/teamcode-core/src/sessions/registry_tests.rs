@@ -244,3 +244,13 @@ fn live_for_task_skips_exited_and_stopping_sessions() {
     r.on_exit(&new_id, 0);
     assert_eq!(r.live_for_task(&task), None);
 }
+
+#[test]
+fn a_session_whose_pty_was_taken_for_a_stop_is_stopping_until_it_exits() {
+    let (mut r, id, _) = registry_with_fake(AgentKind::ClaudeCode);
+    assert!(!r.is_stopping(&id), "running on its own");
+    let _pty = r.take_pty(&id).unwrap();
+    assert!(r.is_stopping(&id));
+    r.on_exit(&id, 0);
+    assert!(!r.is_stopping(&id), "exited");
+}

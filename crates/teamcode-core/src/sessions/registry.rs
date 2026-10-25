@@ -290,6 +290,13 @@ impl SessionRegistry {
             .map(|l| l.session.id.clone())
     }
 
+    /// Whether a stop sequence holds the session's PTY: the exit that follows is one the app asked for.
+    pub fn is_stopping(&self, id: &SessionId) -> bool {
+        self.live
+            .get(id)
+            .is_some_and(|l| l.session.exited.is_none() && l.pty.is_none())
+    }
+
     /// Takes the PTY out for a stop sequence; the reader is unpaused first so the child can see the exit keys.
     pub fn take_pty(&mut self, id: &SessionId) -> Option<Box<dyn Pty>> {
         let live = self.live.get_mut(id)?;
