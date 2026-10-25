@@ -843,7 +843,7 @@ export type RepoCommits = { repo_root: string; commits: DraftCommit[] }
 /**
  * Every key resolved for one scope; fields are the key names as written (A16).
  */
-export type ResolvedSettings = { theme: ThemePreference; accent: Accent; detail_level: DetailLevel; dock_position: DockPosition; team_view_arrangement: TeamArrangement; team_view_placement: TeamPlacement; team_canvas_layout: CanvasLayout; team_drill_in_lens: DrillInLens; workspace_project_layer: ProjectLayer; workspace_board: WorkspaceBoard; worktree: WorktreeChoice; worktree_convention: WorktreeConvention | null; worktrees_dir: string | null; may_commit: boolean; test_command: string | null; test_enabled: boolean; advance_on_green: boolean; livespec_level: LiveSpecLevel; agent_kind: AgentKind; model_provider: ModelProvider; cost_overview: boolean; terminal_font_family: string; terminal_font_size: number; terminal_ligatures: boolean; scrollback_lines: number; first_run_complete: boolean }
+export type ResolvedSettings = { theme: ThemePreference; accent: Accent; detail_level: DetailLevel; dock_position: DockPosition; team_view_arrangement: TeamArrangement; team_view_placement: TeamPlacement; team_canvas_layout: CanvasLayout; team_drill_in_lens: DrillInLens; workspace_project_layer: ProjectLayer; workspace_board: WorkspaceBoard; worktree: WorktreeChoice; worktree_convention: WorktreeConvention | null; worktrees_dir: string | null; may_commit: boolean; test_command: string | null; test_enabled: boolean; advance_on_green: boolean; livespec_level: LiveSpecLevel; agent_kind: AgentKind; model_provider: ModelProvider; cost_overview: boolean; terminal_theme: TerminalTheme; terminal_font_family: string; terminal_font_size: number; terminal_ligatures: boolean; scrollback_lines: number; first_run_complete: boolean }
 /**
  * The layers a setting is resolved through. The contract's `app` layer is implicit and always present.
  */
@@ -938,6 +938,18 @@ export type TeamRow = { name: string; state: AgentState }
  * generated type says `number[]`, and `terminalStore.toBytes` accepts both.
  */
 export type TerminalBytes = number[]
+/**
+ * The bundled palettes; unit-only, so each serialises as its name.
+ */
+export type TerminalPalette = "Graphite" | "SoftWhite" | "OneDark" | "SolarizedLight" | "SolarizedDark"
+/**
+ * The `terminal_theme` setting. Internally tagged (A1) with a struct variant for the named palette (A17).
+ */
+export type TerminalTheme = 
+/**
+ * Soft White in the light app theme, Graphite in the dark one.
+ */
+{ type: "FollowApp" } | { type: "AlwaysDark" } | { type: "AlwaysLight" } | { type: "Named"; palette: TerminalPalette }
 /**
  * One command and the folder it runs in.
  */

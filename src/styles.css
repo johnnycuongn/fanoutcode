@@ -143,3 +143,117 @@
     transition-duration: 150ms !important;
   }
 }
+
+/* Terminal palettes (§11.2). TerminalPane sets `data-term-theme` on its root and reads these into xterm, so the
+   colours stay in this file. Graphite and Soft White are built from the app themes above; One Dark and Solarized
+   use their published palettes. Slots 0–15 are the ANSI colours, black through bright white. */
+[data-term-theme="graphite"] {
+  --term-bg: #111318;
+  --term-fg: #e7e9ee;
+  --term-cursor: #5b8cff;
+  --term-selection: #2a3242;
+  --term-ansi-0: #1a1e26;
+  --term-ansi-1: #f87171;
+  --term-ansi-2: #3ddc84;
+  --term-ansi-3: #f5a524;
+  --term-ansi-4: #5b8cff;
+  --term-ansi-5: #c084fc;
+  --term-ansi-6: #22d3ee;
+  --term-ansi-7: #c9ced8;
+  --term-ansi-8: #4b5263;
+  --term-ansi-9: #fca5a5;
+  --term-ansi-10: #86efac;
+  --term-ansi-11: #fcd34d;
+  --term-ansi-12: #93b4ff;
+  --term-ansi-13: #d8b4fe;
+  --term-ansi-14: #67e8f9;
+  --term-ansi-15: #ffffff;
+}
+[data-term-theme="soft-white"] {
+  --term-bg: #f6f6f7;
+  --term-fg: #18181b;
+  --term-cursor: #3b6cff;
+  --term-selection: #d6e0ff;
+  --term-ansi-0: #18181b;
+  --term-ansi-1: #c62828;
+  --term-ansi-2: #1f7a3f;
+  --term-ansi-3: #a35b00;
+  --term-ansi-4: #2b55d9;
+  --term-ansi-5: #8a3fd1;
+  --term-ansi-6: #0e7c86;
+  --term-ansi-7: #d4d4d8;
+  --term-ansi-8: #71717a;
+  --term-ansi-9: #dc2626;
+  --term-ansi-10: #1f9d55;
+  --term-ansi-11: #d97706;
+  --term-ansi-12: #3b6cff;
+  --term-ansi-13: #a855f7;
+  --term-ansi-14: #0891b2;
+  --term-ansi-15: #ffffff;
+}
+[data-term-theme="one-dark"] {
+  --term-bg: #282c34;
+  --term-fg: #abb2bf;
+  --term-cursor: #528bff;
+  --term-selection: #3e4451;
+  --term-ansi-0: #282c34;
+  --term-ansi-1: #e06c75;
+  --term-ansi-2: #98c379;
+  --term-ansi-3: #e5c07b;
+  --term-ansi-4: #61afef;
+  --term-ansi-5: #c678dd;
+  --term-ansi-6: #56b6c2;
+  --term-ansi-7: #abb2bf;
+  --term-ansi-8: #5c6370;
+  --term-ansi-9: #e06c75;
+  --term-ansi-10: #98c379;
+  --term-ansi-11: #e5c07b;
+  --term-ansi-12: #61afef;
+  --term-ansi-13: #c678dd;
+  --term-ansi-14: #56b6c2;
+  --term-ansi-15: #ffffff;
+}
+[data-term-theme="solarized-light"] {
+  --term-bg: #fdf6e3;
+  --term-fg: #657b83;
+  --term-cursor: #586e75;
+  --term-selection: #eee8d5;
+  --term-ansi-0: #073642;
+  --term-ansi-1: #dc322f;
+  --term-ansi-2: #859900;
+  --term-ansi-3: #b58900;
+  --term-ansi-4: #268bd2;
+  --term-ansi-5: #d33682;
+  --term-ansi-6: #2aa198;
+  --term-ansi-7: #eee8d5;
+  --term-ansi-8: #002b36;
+  --term-ansi-9: #cb4b16;
+  --term-ansi-10: #586e75;
+  --term-ansi-11: #657b83;
+  --term-ansi-12: #839496;
+  --term-ansi-13: #6c71c4;
+  --term-ansi-14: #93a1a1;
+  --term-ansi-15: #fdf6e3;
+}
+[data-term-theme="solarized-dark"] {
+  --term-bg: #002b36;
+  --term-fg: #839496;
+  --term-cursor: #93a1a1;
+  --term-selection: #073642;
+  --term-ansi-0: #073642;
+  --term-ansi-1: #dc322f;
+  --term-ansi-2: #859900;
+  --term-ansi-3: #b58900;
+  --term-ansi-4: #268bd2;
+  --term-ansi-5: #d33682;
+  --term-ansi-6: #2aa198;
+  --term-ansi-7: #eee8d5;
+  --term-ansi-8: #002b36;
+  --term-ansi-9: #cb4b16;
+  --term-ansi-10: #586e75;
+  --term-ansi-11: #657b83;
+  --term-ansi-12: #839496;
+  --term-ansi-13: #6c71c4;
+  --term-ansi-14: #93a1a1;
+  --term-ansi-15: #fdf6e3;
+}

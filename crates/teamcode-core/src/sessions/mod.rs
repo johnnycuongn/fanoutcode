@@ -11,6 +11,7 @@ pub mod launch;
 pub mod registry;
 pub mod scrollback;
 pub mod stop;
+pub mod theme;
 
 pub use batch::Batcher;
 pub use driver::{ExitFn, GracefulExit, OutputFn, OwnedDriver, Pty, PtySpawner, SessionDriver, SpawnSpec, STOP_GRACE};
@@ -23,3 +24,4 @@ pub use launch::{
 pub use registry::{LiveSession, OutputSink, SessionRegistry, MIN_COLS, MIN_ROWS};
 pub use scrollback::{Scrollback, ScrollbackBuffer};
 pub use stop::{Clock, SystemClock, STOP_POLL};
+pub use theme::{TerminalPalette, TerminalTheme};

@@ -79,6 +79,7 @@ settings_table! {
     AgentKind, agent_kind, [Project], (domain::AgentKind), domain::AgentKind::ClaudeCode;
     ModelProvider, model_provider, [App], (values::ModelProvider), values::ModelProvider::ClaudeCli;
     CostOverview, cost_overview, [App], (bool), false;
+    TerminalTheme, terminal_theme, [App], (crate::sessions::theme::TerminalTheme), crate::sessions::theme::TerminalTheme::FollowApp;
     TerminalFontFamily, terminal_font_family, [App], (String), "JetBrains Mono".to_owned();
     TerminalFontSize, terminal_font_size, [App], (u32), 13;
     TerminalLigatures, terminal_ligatures, [App], (bool), false;

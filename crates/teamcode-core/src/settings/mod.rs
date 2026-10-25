@@ -206,8 +206,8 @@ mod tests {
     #[test]
     fn registry_is_the_a12_keys_this_plan_owns_and_resolve_all_uses_defaults() {
         let names: Vec<&str> = KEYS.iter().map(|k| k.key).collect();
-        // A12 order without the three rows Plans 04 and 10 insert (terminal_theme after cost_overview; jira, jira_transitions after
-        // scrollback_lines): 26 keys here, A12's 29 once those plans add their keys to this list in their own failing-test steps
+        // A12 order without the two rows Plan 10 inserts (jira, jira_transitions after scrollback_lines): 27 keys here, A12's 29
+        // once Plan 10 adds its keys to this list in its own failing-test step (Plan 04 added terminal_theme)
         assert_eq!(
             names,
             [
@@ -232,6 +232,7 @@ mod tests {
                 "agent_kind",
                 "model_provider",
                 "cost_overview",
+                "terminal_theme",
                 "terminal_font_family",
                 "terminal_font_size",
                 "terminal_ligatures",
