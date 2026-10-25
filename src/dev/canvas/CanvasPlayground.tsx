@@ -37,6 +37,7 @@ const TASK: Task = {
   stage_entered_at: NOW,
   state_entered_at: NOW,
   links_bound_at: null,
+  base_branch: null,
 };
 const EVENTS = sampleBuild();
 

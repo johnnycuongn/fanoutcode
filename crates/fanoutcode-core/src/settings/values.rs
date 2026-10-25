@@ -59,6 +59,13 @@ pub enum DrillInLens {
     EventStream,
 }
 
+/// How "Bring <base> in" integrates the base branch into a worktree task's branch (Plan 11).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
+pub enum Integration {
+    Merge,
+    Rebase,
+}
+
 /// LiveSpec's providers (`claude -p`, API, local); model tiers stay in LiveSpec's own config (A19).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
 pub enum ModelProvider {

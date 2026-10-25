@@ -88,6 +88,7 @@ pub fn create_task(conn: &mut Connection, app_data: &Path, new: NewTask) -> Resu
         stage_entered_at: now,
         state_entered_at: now,
         links_bound_at: None,
+        base_branch: None,
     };
     if let Err(e) = db::tasks::insert(conn, &task) {
         // the folder was just made and holds only intent.md; do not leave an orphan

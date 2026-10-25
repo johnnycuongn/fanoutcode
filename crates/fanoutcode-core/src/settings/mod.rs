@@ -15,8 +15,8 @@ use crate::{Error, Result};
 
 pub use keys::{resolve_all, KeyInfo, ResolvedSettings, KEYS};
 pub use values::{
-    Accent, CanvasLayout, DockPosition, DrillInLens, ModelProvider, ProjectLayer, TeamArrangement, TeamPlacement,
-    WorkspaceBoard,
+    Accent, CanvasLayout, DockPosition, DrillInLens, Integration, ModelProvider, ProjectLayer, TeamArrangement,
+    TeamPlacement, WorkspaceBoard,
 };
 
 /// The layers a setting is resolved through. The contract's `app` layer is implicit and always present.
@@ -200,13 +200,18 @@ mod tests {
             validate("terminal_font_size", ScopeKind::App, &serde_json::json!("big")),
             Err(Error::Invalid(_))
         ));
+        assert!(matches!(
+            validate("worktree_integration", ScopeKind::App, &serde_json::json!("Merge")),
+            Err(Error::Invalid(_))
+        ));
+        assert!(validate("worktree_integration", ScopeKind::Project, &serde_json::json!("Rebase")).is_ok());
         // terminal_theme, jira and jira_transitions are validated by their owning plans' tests (Plan 04 Task 13, Plan 10 Task 13), which add the rows
     }
 
     #[test]
     fn registry_is_the_a12_keys_this_plan_owns_and_resolve_all_uses_defaults() {
         let names: Vec<&str> = KEYS.iter().map(|k| k.key).collect();
-        // A12's 29 keys in order (Plan 04 added terminal_theme, Plan 10 jira and jira_transitions)
+        // A12's 29 keys in order (Plan 04 added terminal_theme, Plan 10 jira and jira_transitions), then Plan 11's three
         assert_eq!(
             names,
             [
@@ -238,7 +243,10 @@ mod tests {
                 "scrollback_lines",
                 "jira",
                 "jira_transitions",
-                "first_run_complete"
+                "first_run_complete",
+                "ask_before_other_tasks_files",
+                "guard_git_for_other_tasks",
+                "worktree_integration"
             ]
         );
         let r = resolve_all(&ScopeValues::default(), &Scope::app());
@@ -258,6 +266,8 @@ mod tests {
         );
         assert_eq!(r.model_provider, ModelProvider::ClaudeCli);
         assert!(!r.first_run_complete);
+        assert!(r.ask_before_other_tasks_files && r.guard_git_for_other_tasks);
+        assert_eq!(r.worktree_integration, Integration::Merge);
         assert!(!r.cost_overview && !r.may_commit && r.test_command.is_none());
         let json = serde_json::to_value(&r).unwrap();
         assert_eq!(json["team_view_arrangement"], "HubGraph"); // A16: field names as written, variants as Rust names

@@ -27,6 +27,12 @@ export function chipText(reason: HandbackReason, stage: Stage): string {
       return "Tests failed";
     case "Error":
       return "Error";
+    case "FileInUse":
+      return reason.pending === 1 ? "File in use" : `${reason.pending} files in use`;
+    case "HoldingFor":
+      return `Holding for ${reason.other}`;
+    case "MergeNeedsYou":
+      return "Merge needs you";
   }
 }
 

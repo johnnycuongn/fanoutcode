@@ -48,6 +48,7 @@ function task(over: Pick<Task, "id" | "title" | "stage" | "state"> & Partial<Tas
     stage_entered_at: NOW,
     state_entered_at: NOW,
     links_bound_at: null,
+    base_branch: null,
     ...over,
   } satisfies Task;
 }
@@ -98,6 +99,9 @@ export const SETTINGS = {
   jira: null,
   jira_transitions: { enabled: false, on_stage: {} },
   first_run_complete: true,
+  ask_before_other_tasks_files: true,
+  guard_git_for_other_tasks: true,
+  worktree_integration: "Merge",
 } satisfies ResolvedSettings;
 
 export const WINDOW = {

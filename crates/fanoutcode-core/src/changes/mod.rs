@@ -25,6 +25,8 @@ pub enum ChangeSource {
     Hook,
     BashWindow,
     Manual,
+    /// Best-effort attribution of a hookless (Codex or shell) session's edits in a shared root (Plan 11).
+    Observed,
 }
 
 /// One attribution: `path` (relative to `repo_root`) was touched by `agent_id` (`"main"` for the main session).
@@ -339,6 +341,15 @@ mod tests {
         assert_eq!(f.source, ChangeSource::Manual);
         let set = build(&tid(), &[snapshot("/repo", &[modified("README.md")])], a.files());
         assert_eq!(names(&set.repos[0].files), vec!["README.md"]);
+    }
+
+    #[test]
+    fn observed_is_a_change_source_that_round_trips() {
+        assert_eq!(serde_json::to_string(&ChangeSource::Observed).unwrap(), "\"Observed\"");
+        assert_eq!(
+            serde_json::from_str::<ChangeSource>("\"Observed\"").unwrap(),
+            ChangeSource::Observed
+        );
     }
 
     #[test]

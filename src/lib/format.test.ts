@@ -26,11 +26,19 @@ describe("hand-back chip text", () => {
     expect(handbackLabel(makeTask({ state: needsYou({ type: "PermissionNeeded" }) }))).toBe("Permission needed");
     expect(handbackLabel(makeTask({ state: needsYou({ type: "TestFailed", exit_code: 2 }) }))).toBe("Tests failed");
     expect(handbackLabel(makeTask({ state: needsYou({ type: "Error", message: "boom" }) }))).toBe("Error");
+    expect(handbackLabel(makeTask({ state: needsYou({ type: "FileInUse", pending: 1 }) }))).toBe("File in use");
+    expect(handbackLabel(makeTask({ state: needsYou({ type: "FileInUse", pending: 3 }) }))).toBe("3 files in use");
+    expect(handbackLabel(makeTask({ state: needsYou({ type: "HoldingFor", other: "Login" }) }))).toBe(
+      "Holding for Login",
+    );
+    expect(handbackLabel(makeTask({ state: needsYou({ type: "MergeNeedsYou", repo: "/r", paths: [] }) }))).toBe(
+      "Merge needs you",
+    );
     expect(handbackLabel(makeTask({ state: WORKING }))).toBe("");
   });
   it("matches the Rust chip_text fixture row for row", () => {
     const rows = fixture as Array<{ reason: HandbackReason; stage: Stage; text: string }>;
-    expect(rows).toHaveLength(35);
+    expect(rows).toHaveLength(63);
     for (const { reason, stage, text } of rows) expect(chipText(reason, stage)).toBe(text);
   });
 });

@@ -50,6 +50,7 @@ export function makeTask(over: Partial<Task> = {}): Task {
     stage_entered_at: AT,
     state_entered_at: AT,
     links_bound_at: null,
+    base_branch: null,
     ...over,
   };
 }

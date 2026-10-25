@@ -1135,7 +1135,11 @@ export type CanvasPosition = { node_id: string; x: number; y: number }
 /**
  * Why a file is in the task's set. `Worktree` also marks the "Other changes", which are only seen in the tree.
  */
-export type ChangeSource = "Worktree" | "Hook" | "BashWindow" | "Manual"
+export type ChangeSource = "Worktree" | "Hook" | "BashWindow" | "Manual" | 
+/**
+ * Best-effort attribution of a hookless (Codex or shell) session's edits in a shared root (Plan 11).
+ */
+"Observed"
 export type ChangedFile = { path: string; status: FileStatus; added: number; removed: number; binary: boolean; 
 /**
  * Distinct agents that touched it, first seen first.
@@ -1188,7 +1192,19 @@ export type HandbackReason =
 /**
  * Stop without a sentinel.
  */
-{ type: "Replied"; first_line: string } | { type: "PermissionNeeded" } | { type: "TestFailed"; exit_code: number } | { type: "Error"; message: string }
+{ type: "Replied"; first_line: string } | { type: "PermissionNeeded" } | { type: "TestFailed"; exit_code: number } | { type: "Error"; message: string } | 
+/**
+ * The claim-check hook stopped `pending` writes to files another task has uncommitted changes in (Plan 11).
+ */
+{ type: "FileInUse"; pending: number } | 
+/**
+ * Every pending decision of the task is a Hold on `other`'s claim (the other task's title).
+ */
+{ type: "HoldingFor"; other: string } | 
+/**
+ * Bringing the base branch in left conflicts the session could not resolve.
+ */
+{ type: "MergeNeedsYou"; repo: string; paths: string[] }
 /**
  * What a hook reported. Internally tagged (A1): `{ "type": "Stop", "last_assistant_message": "…", … }`. The tag is
  * the IPC shape only; the parser picks the variant from the log line's first field, never from the payload.
@@ -1227,6 +1243,10 @@ warning: string | null; path: string; exists: boolean; is_dir: boolean;
  * No project with this root is open in Fanout Code yet.
  */
 new_to_app: boolean; protected: boolean }
+/**
+ * How "Bring <base> in" integrates the base branch into a worktree task's branch (Plan 11).
+ */
+export type Integration = "Merge" | "Rebase"
 export type Issue = { key: string; summary: string; status: string; assignee: string | null; issue_type: string; 
 /**
  * Plain text from the ADF description.
@@ -1341,7 +1361,7 @@ export type RepoCommits = { repo_root: string; commits: DraftCommit[] }
 /**
  * Every key resolved for one scope; fields are the key names as written (A16).
  */
-export type ResolvedSettings = { theme: ThemePreference; accent: Accent; detail_level: DetailLevel; dock_position: DockPosition; team_view_arrangement: TeamArrangement; team_view_placement: TeamPlacement; team_canvas_layout: CanvasLayout; team_drill_in_lens: DrillInLens; workspace_project_layer: ProjectLayer; workspace_board: WorkspaceBoard; worktree: WorktreeChoice; worktree_convention: WorktreeConvention | null; worktrees_dir: string | null; may_commit: boolean; test_command: string | null; test_enabled: boolean; advance_on_green: boolean; livespec_level: LiveSpecLevel; agent_kind: AgentKind; model_provider: ModelProvider; cost_overview: boolean; terminal_theme: TerminalTheme; terminal_font_family: string; terminal_font_size: number; terminal_ligatures: boolean; scrollback_lines: number; jira: JiraSite | null; jira_transitions: JiraTransitions; first_run_complete: boolean }
+export type ResolvedSettings = { theme: ThemePreference; accent: Accent; detail_level: DetailLevel; dock_position: DockPosition; team_view_arrangement: TeamArrangement; team_view_placement: TeamPlacement; team_canvas_layout: CanvasLayout; team_drill_in_lens: DrillInLens; workspace_project_layer: ProjectLayer; workspace_board: WorkspaceBoard; worktree: WorktreeChoice; worktree_convention: WorktreeConvention | null; worktrees_dir: string | null; may_commit: boolean; test_command: string | null; test_enabled: boolean; advance_on_green: boolean; livespec_level: LiveSpecLevel; agent_kind: AgentKind; model_provider: ModelProvider; cost_overview: boolean; terminal_theme: TerminalTheme; terminal_font_family: string; terminal_font_size: number; terminal_ligatures: boolean; scrollback_lines: number; jira: JiraSite | null; jira_transitions: JiraTransitions; first_run_complete: boolean; ask_before_other_tasks_files: boolean; guard_git_for_other_tasks: boolean; worktree_integration: Integration }
 /**
  * The layers a setting is resolved through. The contract's `app` layer is implicit and always present.
  */
@@ -1388,7 +1408,11 @@ state_entered_at: string;
 /**
  * When `linked_roots` were fixed (A11).
  */
-links_bound_at: string | null }
+links_bound_at: string | null; 
+/**
+ * The branch "Bring <base> in" integrates (Plan 11): recorded at worktree creation, or confirmed once.
+ */
+base_branch: string | null }
 /**
  * What a board card shows beyond the task (A6).
  */

@@ -87,6 +87,9 @@ settings_table! {
     Jira, jira, [Workspace, Project], (Option<crate::jira::client::JiraSite>), None;
     JiraTransitions, jira_transitions, [Project], (crate::jira::settings::JiraTransitions), crate::jira::settings::JiraTransitions::default();
     FirstRunComplete, first_run_complete, [App], (bool), false;
+    AskBeforeOtherTasksFiles, ask_before_other_tasks_files, [Project], (bool), true;
+    GuardGitForOtherTasks, guard_git_for_other_tasks, [Project], (bool), true;
+    WorktreeIntegration, worktree_integration, [Project], (values::Integration), values::Integration::Merge;
 }
 
 /// The registry row for `key`.

@@ -28,6 +28,7 @@ pub const MIGRATIONS: &[(u32, &str, &str)] = &[
     (5, "observation", include_str!("../../migrations/0005_observation.sql")),
     (9, "canvas", include_str!("../../migrations/0009_canvas.sql")),
     (10, "workspaces", include_str!("../../migrations/0010_workspaces.sql")),
+    (11, "overlap", include_str!("../../migrations/0011_overlap.sql")),
 ];
 
 /// One connection shared by the stores that lock it per call (`workspace::WorkspaceStore`, `ContextDocs`,
@@ -271,7 +272,7 @@ mod tests {
     use super::*;
     use crate::domain::{Container, ProjectId, ThemePreference, WorkspaceId, WorktreeConvention};
 
-    const TABLES: [&str; 11] = [
+    const TABLES: [&str; 13] = [
         "projects",
         "workspaces",
         "workspace_projects",
@@ -283,6 +284,8 @@ mod tests {
         "cost_buckets",
         "jira_links",
         "canvas_positions",
+        "task_overlaps",
+        "task_footprint",
     ];
 
     #[test]
@@ -305,8 +308,27 @@ mod tests {
             "stage_entered_at",
             "state_entered_at",
             "links_bound_at",
+            "base_branch",
         ] {
             assert!(cols.iter().any(|c| c == want), "{want}");
+        }
+        let overlap_cols: Vec<String> = c
+            .prepare("PRAGMA table_info(task_overlaps)")
+            .unwrap()
+            .query_map([], |r| r.get::<_, String>(1))
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect();
+        for want in [
+            "other_task",
+            "relation",
+            "pending_json",
+            "held",
+            "noted_out",
+            "noted_in",
+            "decided_at",
+        ] {
+            assert!(overlap_cols.iter().any(|c| c == want), "{want}");
         }
     }
 

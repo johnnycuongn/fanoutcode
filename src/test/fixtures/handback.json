@@ -264,5 +264,236 @@
     },
     "stage": "Done",
     "text": "Error"
+  },
+  {
+    "reason": {
+      "pending": 1,
+      "type": "FileInUse"
+    },
+    "stage": "Spec",
+    "text": "File in use"
+  },
+  {
+    "reason": {
+      "pending": 1,
+      "type": "FileInUse"
+    },
+    "stage": "Plan",
+    "text": "File in use"
+  },
+  {
+    "reason": {
+      "pending": 1,
+      "type": "FileInUse"
+    },
+    "stage": "Build",
+    "text": "File in use"
+  },
+  {
+    "reason": {
+      "pending": 1,
+      "type": "FileInUse"
+    },
+    "stage": "Review",
+    "text": "File in use"
+  },
+  {
+    "reason": {
+      "pending": 1,
+      "type": "FileInUse"
+    },
+    "stage": "Test",
+    "text": "File in use"
+  },
+  {
+    "reason": {
+      "pending": 1,
+      "type": "FileInUse"
+    },
+    "stage": "Commit",
+    "text": "File in use"
+  },
+  {
+    "reason": {
+      "pending": 1,
+      "type": "FileInUse"
+    },
+    "stage": "Done",
+    "text": "File in use"
+  },
+  {
+    "reason": {
+      "pending": 3,
+      "type": "FileInUse"
+    },
+    "stage": "Spec",
+    "text": "3 files in use"
+  },
+  {
+    "reason": {
+      "pending": 3,
+      "type": "FileInUse"
+    },
+    "stage": "Plan",
+    "text": "3 files in use"
+  },
+  {
+    "reason": {
+      "pending": 3,
+      "type": "FileInUse"
+    },
+    "stage": "Build",
+    "text": "3 files in use"
+  },
+  {
+    "reason": {
+      "pending": 3,
+      "type": "FileInUse"
+    },
+    "stage": "Review",
+    "text": "3 files in use"
+  },
+  {
+    "reason": {
+      "pending": 3,
+      "type": "FileInUse"
+    },
+    "stage": "Test",
+    "text": "3 files in use"
+  },
+  {
+    "reason": {
+      "pending": 3,
+      "type": "FileInUse"
+    },
+    "stage": "Commit",
+    "text": "3 files in use"
+  },
+  {
+    "reason": {
+      "pending": 3,
+      "type": "FileInUse"
+    },
+    "stage": "Done",
+    "text": "3 files in use"
+  },
+  {
+    "reason": {
+      "other": "Login",
+      "type": "HoldingFor"
+    },
+    "stage": "Spec",
+    "text": "Holding for Login"
+  },
+  {
+    "reason": {
+      "other": "Login",
+      "type": "HoldingFor"
+    },
+    "stage": "Plan",
+    "text": "Holding for Login"
+  },
+  {
+    "reason": {
+      "other": "Login",
+      "type": "HoldingFor"
+    },
+    "stage": "Build",
+    "text": "Holding for Login"
+  },
+  {
+    "reason": {
+      "other": "Login",
+      "type": "HoldingFor"
+    },
+    "stage": "Review",
+    "text": "Holding for Login"
+  },
+  {
+    "reason": {
+      "other": "Login",
+      "type": "HoldingFor"
+    },
+    "stage": "Test",
+    "text": "Holding for Login"
+  },
+  {
+    "reason": {
+      "other": "Login",
+      "type": "HoldingFor"
+    },
+    "stage": "Commit",
+    "text": "Holding for Login"
+  },
+  {
+    "reason": {
+      "other": "Login",
+      "type": "HoldingFor"
+    },
+    "stage": "Done",
+    "text": "Holding for Login"
+  },
+  {
+    "reason": {
+      "paths": [],
+      "repo": "/r",
+      "type": "MergeNeedsYou"
+    },
+    "stage": "Spec",
+    "text": "Merge needs you"
+  },
+  {
+    "reason": {
+      "paths": [],
+      "repo": "/r",
+      "type": "MergeNeedsYou"
+    },
+    "stage": "Plan",
+    "text": "Merge needs you"
+  },
+  {
+    "reason": {
+      "paths": [],
+      "repo": "/r",
+      "type": "MergeNeedsYou"
+    },
+    "stage": "Build",
+    "text": "Merge needs you"
+  },
+  {
+    "reason": {
+      "paths": [],
+      "repo": "/r",
+      "type": "MergeNeedsYou"
+    },
+    "stage": "Review",
+    "text": "Merge needs you"
+  },
+  {
+    "reason": {
+      "paths": [],
+      "repo": "/r",
+      "type": "MergeNeedsYou"
+    },
+    "stage": "Test",
+    "text": "Merge needs you"
+  },
+  {
+    "reason": {
+      "paths": [],
+      "repo": "/r",
+      "type": "MergeNeedsYou"
+    },
+    "stage": "Commit",
+    "text": "Merge needs you"
+  },
+  {
+    "reason": {
+      "paths": [],
+      "repo": "/r",
+      "type": "MergeNeedsYou"
+    },
+    "stage": "Done",
+    "text": "Merge needs you"
   }
 ]

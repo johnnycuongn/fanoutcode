@@ -55,6 +55,7 @@ export function makeTask(overrides: Partial<Task> = {}): Task {
     stage_entered_at: T0,
     state_entered_at: T0,
     links_bound_at: null,
+    base_branch: null,
     ...overrides,
   };
 }

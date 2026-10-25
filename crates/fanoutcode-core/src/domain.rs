@@ -46,6 +46,19 @@ pub enum HandbackReason {
     Error {
         message: String,
     },
+    /// The claim-check hook stopped `pending` writes to files another task has uncommitted changes in (Plan 11).
+    FileInUse {
+        pending: u32,
+    },
+    /// Every pending decision of the task is a Hold on `other`'s claim (the other task's title).
+    HoldingFor {
+        other: String,
+    },
+    /// Bringing the base branch in left conflicts the session could not resolve.
+    MergeNeedsYou {
+        repo: PathBuf,
+        paths: Vec<String>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
@@ -190,6 +203,8 @@ pub struct Task {
     pub state_entered_at: DateTime<Utc>,
     /// When `linked_roots` were fixed (A11).
     pub links_bound_at: Option<DateTime<Utc>>,
+    /// The branch "Bring <base> in" integrates (Plan 11): recorded at worktree creation, or confirmed once.
+    pub base_branch: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
@@ -340,9 +355,27 @@ mod tests {
             HandbackReason::PermissionNeeded,
             HandbackReason::TestFailed { exit_code: 1 },
             HandbackReason::Error { message: "x".into() },
+            HandbackReason::FileInUse { pending: 2 },
+            HandbackReason::HoldingFor { other: "Login".into() },
+            HandbackReason::MergeNeedsYou {
+                repo: "/r".into(),
+                paths: vec!["a.ts".into()],
+            },
         ] {
             rt(AgentState::NeedsYou { reason: r });
         }
+        assert_eq!(
+            serde_json::to_string(&HandbackReason::FileInUse { pending: 2 }).unwrap(),
+            r#"{"type":"FileInUse","pending":2}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&HandbackReason::MergeNeedsYou {
+                repo: "/r".into(),
+                paths: vec!["a.ts".into()]
+            })
+            .unwrap(),
+            r#"{"type":"MergeNeedsYou","repo":"/r","paths":["a.ts"]}"#
+        );
         rt(AgentState::Working);
         rt(AgentState::Idle);
         rt(Container::Project { id: p.clone() });
@@ -410,6 +443,7 @@ mod tests {
             stage_entered_at: now,
             state_entered_at: now,
             links_bound_at: Some(now),
+            base_branch: Some("main".into()),
         };
         rt(task);
     }
@@ -431,6 +465,7 @@ mod tests {
             "stage_entered_at: string",
             "state_entered_at: string",
             "links_bound_at: string | null",
+            "base_branch: string | null",
             "memory_dir: string",
         ] {
             assert!(ts.contains(f), "{f}");

@@ -24,8 +24,9 @@ fn task_from_json(json: String) -> Result<Task> {
 pub fn insert(conn: &Connection, t: &Task) -> Result<()> {
     conn.execute(
         "INSERT INTO tasks (id, project_id, workspace_id, title, stage, state, priority, flagged, hidden, archived,
-             memory_dir, json, created_at, updated_at, stage_entered_at, state_entered_at, links_bound_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
+             memory_dir, json, created_at, updated_at, stage_entered_at, state_entered_at, links_bound_at,
+             base_branch)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
         params![
             t.id.as_str(),
             t.project_id.as_str(),
@@ -44,6 +45,7 @@ pub fn insert(conn: &Connection, t: &Task) -> Result<()> {
             ts(&t.stage_entered_at),
             ts(&t.state_entered_at),
             t.links_bound_at.as_ref().map(ts),
+            t.base_branch,
         ],
     )?;
     Ok(())
@@ -83,7 +85,8 @@ pub fn update(conn: &Connection, t: &Task) -> Result<()> {
     let n = conn.execute(
         "UPDATE tasks SET project_id = ?2, workspace_id = ?3, title = ?4, stage = ?5, state = ?6, priority = ?7,
              flagged = ?8, hidden = ?9, archived = ?10, memory_dir = ?11, json = ?12, created_at = ?13,
-             updated_at = ?14, stage_entered_at = ?15, state_entered_at = ?16, links_bound_at = ?17
+             updated_at = ?14, stage_entered_at = ?15, state_entered_at = ?16, links_bound_at = ?17,
+             base_branch = ?18
          WHERE id = ?1",
         params![
             t.id.as_str(),
@@ -103,6 +106,7 @@ pub fn update(conn: &Connection, t: &Task) -> Result<()> {
             ts(&t.stage_entered_at),
             ts(&t.state_entered_at),
             t.links_bound_at.as_ref().map(ts),
+            t.base_branch,
         ],
     )?;
     if n == 0 {
@@ -163,8 +167,15 @@ mod tests {
         t.linked_roots = vec!["/api".into()];
         t.color = Some(TaskColor("violet".into()));
         t.jira_key = Some("TC-1".into());
+        t.base_branch = Some("main".into());
         insert(&c, &t).unwrap();
         assert_eq!(get(&c, &t.id).unwrap(), Some(t.clone()));
+        let column: Option<String> = c
+            .query_row("SELECT base_branch FROM tasks WHERE id = ?1", [t.id.as_str()], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(column.as_deref(), Some("main"));
         let raw: String = c
             .query_row("SELECT state FROM tasks WHERE id = ?1", [t.id.as_str()], |r| r.get(0))
             .unwrap();

@@ -77,10 +77,14 @@ pub fn chip_text(reason: &HandbackReason, stage: Stage) -> String {
         HandbackReason::PermissionNeeded => "Permission needed".to_owned(),
         HandbackReason::TestFailed { .. } => "Tests failed".to_owned(),
         HandbackReason::Error { .. } => "Error".to_owned(),
+        HandbackReason::FileInUse { pending: 1 } => "File in use".to_owned(),
+        HandbackReason::FileInUse { pending } => format!("{pending} files in use"),
+        HandbackReason::HoldingFor { other } => format!("Holding for {other}"),
+        HandbackReason::MergeNeedsYou { .. } => "Merge needs you".to_owned(),
     }
 }
 
-/// Writes `HANDBACK_FIXTURE`: every reason × stage, `{reason, stage, text}`, pretty-printed (A20: 35 rows).
+/// Writes `HANDBACK_FIXTURE`: every reason × stage, `{reason, stage, text}`, pretty-printed (A20: 35 rows, 63 with Plan 11's reasons).
 #[cfg(test)]
 pub(crate) fn write_handback_fixture(path: &Path) -> crate::Result<()> {
     let reasons = [
@@ -91,6 +95,14 @@ pub(crate) fn write_handback_fixture(path: &Path) -> crate::Result<()> {
         HandbackReason::PermissionNeeded,
         HandbackReason::TestFailed { exit_code: 1 },
         HandbackReason::Error { message: "boom".into() },
+        HandbackReason::FileInUse { pending: 1 },
+        HandbackReason::FileInUse { pending: 3 },
+        HandbackReason::HoldingFor { other: "Login".into() },
+        // empty paths: serde's pretty printer splits a one-item array where Prettier would not
+        HandbackReason::MergeNeedsYou {
+            repo: "/r".into(),
+            paths: vec![],
+        },
     ];
     let mut rows = Vec::new();
     for reason in &reasons {
@@ -229,6 +241,32 @@ mod tests {
     }
 
     #[test]
+    fn chip_text_for_overlap_reasons() {
+        assert_eq!(
+            chip_text(&HandbackReason::FileInUse { pending: 1 }, Stage::Build),
+            "File in use"
+        );
+        assert_eq!(
+            chip_text(&HandbackReason::FileInUse { pending: 3 }, Stage::Build),
+            "3 files in use"
+        );
+        assert_eq!(
+            chip_text(&HandbackReason::HoldingFor { other: "Login".into() }, Stage::Build),
+            "Holding for Login"
+        );
+        assert_eq!(
+            chip_text(
+                &HandbackReason::MergeNeedsYou {
+                    repo: "/r".into(),
+                    paths: vec![]
+                },
+                Stage::Done
+            ),
+            "Merge needs you"
+        );
+    }
+
+    #[test]
     fn handback_fixture_is_written_for_the_typescript_mirror() {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../..")
@@ -236,7 +274,7 @@ mod tests {
         write_handback_fixture(&path).unwrap();
         let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
         let rows = v.as_array().unwrap();
-        assert_eq!(rows.len(), 35);
+        assert_eq!(rows.len(), 63);
         assert_eq!(
             rows[1],
             serde_json::json!({ "reason": { "type": "StageDone" }, "stage": "Plan", "text": "Plan written, go?" })

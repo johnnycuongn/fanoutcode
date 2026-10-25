@@ -51,6 +51,7 @@ pub fn task_fixture(id: &str, project_id: &str) -> Task {
         stage_entered_at: now,
         state_entered_at: now,
         links_bound_at: None,
+        base_branch: None,
     }
 }
 
