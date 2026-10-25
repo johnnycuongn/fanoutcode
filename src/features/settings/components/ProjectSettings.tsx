@@ -1,5 +1,6 @@
 // The Project tab of Settings (and the sidebar's Settings section): project name and colour, memory location,
-// worktrees, automation, the detail-level override and, with the cost overview on, the project's costs.
+// worktrees, working together, automation, the detail-level override and, with the cost overview on, the project's
+// costs.
 import { useState, type ReactElement, type ReactNode } from "react";
 import { Field, Input, Segmented, cx, toast } from "@/components/ui";
 import { commands, type ProjectId } from "@/lib/bindings";
@@ -10,6 +11,7 @@ import { AutomationFields } from "./AutomationFields";
 import { CostsPanel } from "./CostsPanel";
 import { SegmentedSetting } from "./fields";
 import { MemoryLocationField } from "./MemoryLocationField";
+import { WorkingTogetherFields } from "./WorkingTogetherFields";
 import { WorktreeFields } from "./WorktreeFields";
 
 function Section({ title, children }: { title: string; children: ReactNode }): ReactElement {
@@ -85,6 +87,9 @@ export function ProjectSettings({
       </Section>
       <Section title="Worktrees">
         <WorktreeFields projectId={projectId} root={root} />
+      </Section>
+      <Section title="Working together">
+        <WorkingTogetherFields projectId={projectId} />
       </Section>
       <Section title="Automation">
         <AutomationFields projectId={projectId} />
