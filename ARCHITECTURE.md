@@ -21,6 +21,7 @@ in `docs/superpowers/specs/2026-10-24-team-code-design.md`. Each implementation 
 - [Sessions and terminals](#sessions-and-terminals)
 - [The task page and dock](#the-task-page-and-dock)
 - [The Team canvas](#the-team-canvas)
+- [Workspaces and integrations](#workspaces-and-integrations)
 - [Where to change things](#where-to-change-things)
 
 ## At a glance
@@ -260,6 +261,29 @@ dock and Swap body render it through `renderTeam`; Plan 06's `PaneContentHost` r
   in `e2e` mode, where `src/main.tsx` installs `e2e/fixtures/mockTauri.ts` before the first render. A command the
   app calls at load without a handler there fails the suite by name.
 
+## Workspaces and integrations
+
+- **Record and file.** `teamcode_core::workspace::store::WorkspaceStore` owns the record in SQLite; the
+  `<name>.teamcode-workspace.json` file is a mirror, written through while it lives in app data and marked dirty
+  (saved on ⌘S or window close) elsewhere. A watcher reports edits made on disk (`workspace-file-changed`).
+- **Opening a file from elsewhere** goes through `workspace::import`: `preview_open` reads it once (nothing is
+  written), lists roots, policy, agents, instructions, settings and references with problems; `confirm_open(token,
+approved_doc_ids)` imports exactly that buffer. Only the record's own unchanged file reopens without review
+  (`open_file`). Roots that are `/`, the home folder or its ancestors, or Team Code's data are refused; file and folder
+  references are approved one by one; Jira links are never imported.
+- **Linking.** At a task's first session start `workspace::launch::bind_if_first_start` fixes its linked roots and
+  records `(project id, canonical root)` pairs (`task_links`). Protection is decided by project id
+  (`policy::protected_roots`, fail closed) and becomes `Edit(//<root>/**)` deny rules plus the Bash guard
+  (`teamcode guard <roots-file>`, `workspace::guard`), both written into the generated Claude settings at every launch.
+- **Prompts** take the workspace's policy, protection, briefs, references (only trusted, readable ones) and stage
+  instructions through `workspace::launch::fill_prompt_ctx`.
+- **Context docs** are fetched on demand into `<app_data>/context/<project|workspace>-<id>/`; every network hop goes
+  through `workspace::url_guard` (no local or link-local addresses, private ranges only for trusted docs, each hop
+  pinned).
+- **Jira and Confluence** (`teamcode_core::jira`): the site is the `jira` setting (written only by `jira_link*`); the
+  token is in the keychain under an account derived from the linking scope and is sent only to the origin it was
+  verified against.
+
 ## Where to change things
 
 | To change              | Edit                                                                            |
@@ -284,3 +308,6 @@ dock and Swap body render it through `renderTeam`; Plan 06's `PaneContentHost` r
 | The terminal pane      | `src/features/views/useXterm.ts`, `components/TerminalPane.tsx`                 |
 | What the canvas shows  | `src/features/canvas/` model modules (`attribution.ts`, `files.ts`, `steps.ts`) |
 | Smoke-suite IPC mocks  | `e2e/fixtures/mockTauri.ts` and `e2e/fixtures/seed.ts`                          |
+| Workspace import rules | `crates/teamcode-core/src/workspace/import.rs`, `import_checks.rs`              |
+| What the guard blocks  | `crates/teamcode-core/src/workspace/guard/rules.rs`                             |
+| Where docs may be read | `crates/teamcode-core/src/workspace/url_guard.rs`, `context_fetch.rs`           |
