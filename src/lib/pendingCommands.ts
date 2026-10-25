@@ -2,7 +2,7 @@
 // looks its command up on the generated `commands` object, so it works unchanged once the binding lands (and in
 // tests, where the bindings mock supplies every name); until then it answers with an empty result. When the owning
 // plan merges, delete the wrapper and the STUB type, and import the generated ones instead.
-import { commands, type ProjectId, type Result, type Scope, type TaskId } from "@/lib/bindings";
+import { commands, type Result, type Scope, type TaskId } from "@/lib/bindings";
 
 // STUB(plan 05): Plan 05's `cost::CostLine`, `LiveCost` and `CostSummary` (A6, A19).
 export type CostLine = {
@@ -31,13 +31,9 @@ export type CostSummary = {
 export type ChangedFile = { path: string; added: number; removed: number };
 export type RepoChanges = { repo_root: string; files: ChangedFile[] };
 
-// STUB(plan 10): Plan 10's `jira::Issue`, the fields this plan reads.
-export type Issue = { key: string; summary: string; status: string; url: string };
-
 type Pending = {
   costSummary?(scope: Scope): Promise<Result<CostSummary, string>>;
   gitChanges?(taskId: TaskId): Promise<Result<RepoChanges[], string>>;
-  jiraSearch?(projectId: ProjectId, query: string): Promise<Result<Issue[], string>>;
 };
 
 const pending = () => commands as unknown as Pending;
@@ -51,9 +47,4 @@ export function costSummary(scope: Scope): Promise<Result<CostSummary, string>> 
 /** STUB(plan 05): `git_changes(task_id) -> Vec<RepoChanges>`. */
 export function gitChanges(taskId: TaskId): Promise<Result<RepoChanges[], string>> {
   return pending().gitChanges?.(taskId) ?? Promise.resolve({ status: "ok", data: [] });
-}
-
-/** STUB(plan 10): `jira_search(project_id, query) -> Vec<Issue>`. */
-export function jiraSearch(projectId: ProjectId, query: string): Promise<Result<Issue[], string>> {
-  return pending().jiraSearch?.(projectId, query) ?? Promise.resolve({ status: "ok", data: [] });
 }

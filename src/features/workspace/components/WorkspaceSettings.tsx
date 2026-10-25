@@ -3,7 +3,9 @@
 import { useEffect, type ReactElement, type ReactNode } from "react";
 import type { WorkspaceId } from "@/lib/bindings";
 import { workspaceStore } from "../store";
+import { useSetting, workspaceScope } from "@/features/settings";
 import { ContextDocsEditor } from "./ContextDocsEditor";
+import { JiraLinkForm } from "./JiraLinkForm";
 import { LinkingPolicy } from "./LinkingPolicy";
 import { PromptFragments } from "./PromptFragments";
 import { Section } from "./Section";
@@ -16,6 +18,7 @@ export type WorkspaceSettingsProps = { workspaceId: WorkspaceId; jira?: ReactNod
 
 export function WorkspaceSettings({ workspaceId, jira, costs }: WorkspaceSettingsProps): ReactElement {
   const loaded = workspaceStore.useSelector((s) => s.workspace?.id === workspaceId);
+  const site = useSetting(workspaceScope(workspaceId), "jira");
   useEffect(() => {
     if (!loaded) void workspaceStore.load(workspaceId);
   }, [loaded, workspaceId]);
@@ -30,7 +33,9 @@ export function WorkspaceSettings({ workspaceId, jira, costs }: WorkspaceSetting
       <Section title="Workspace references">
         <ContextDocsEditor container={{ type: "Workspace", id: workspaceId }} />
       </Section>
-      {jira && <Section title="Jira default site">{jira}</Section>}
+      <Section title="Jira default site">
+        {jira ?? <JiraLinkForm scope={{ workspace: workspaceId }} linked={site ?? null} />}
+      </Section>
       {costs && <Section title="Costs">{costs}</Section>}
     </div>
   );

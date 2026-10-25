@@ -11,3 +11,7 @@ export { ContextDocsEditor } from "./components/ContextDocsEditor";
 export { WorkspaceImportDialog } from "./components/WorkspaceImportDialog";
 export { useDocRows, addDroppedPath } from "./sidebarDocs";
 export type { DocRow } from "./sidebarDocs";
+export { jiraStore, issueKey } from "./jiraStore";
+export type { JiraScope, JiraState } from "./jiraStore";
+export { JiraLinkForm } from "./components/JiraLinkForm";
+export { IssuePicker } from "./components/IssuePicker";

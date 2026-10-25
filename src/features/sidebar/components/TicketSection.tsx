@@ -1,8 +1,7 @@
 // The Ticket section: tasks linked to a Jira issue, and a search over the project's Jira (debounced 300 ms).
 import { useEffect, useState, type ReactElement } from "react";
 import { Badge, Button, Input } from "@/components/ui";
-import type { ProjectId } from "@/lib/bindings";
-import { jiraSearch, type Issue } from "@/lib/pendingCommands";
+import { commands, type Issue, type ProjectId } from "@/lib/bindings";
 import { selectTaskList, tasksStore } from "@/lib/stores/tasksStore";
 import { openTaskInCurrentView } from "@/features/shell";
 
@@ -15,7 +14,7 @@ function useJiraSearch(projectId: ProjectId | undefined, query: string): Issue[]
     if (!projectId || !q) return;
     let live = true;
     const t = setTimeout(() => {
-      void jiraSearch(projectId, q).then((r) => live && r?.status === "ok" && setResults(r.data));
+      void commands.jiraSearch(projectId, q).then((r) => live && r?.status === "ok" && setResults(r.data));
     }, JIRA_SEARCH_DEBOUNCE_MS);
     return () => {
       live = false;
