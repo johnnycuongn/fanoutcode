@@ -100,4 +100,11 @@ export const reviewTheme: Extension = EditorView.baseTheme({
     backgroundColor: "color-mix(in oklab, var(--color-warn) 8%, transparent)",
   },
   ".cm-review-slot": { padding: "4px 8px 6px" },
+  // CodeMirror's own gutter is light grey; follow the app theme instead
+  ".cm-gutters": {
+    backgroundColor: "var(--color-well)",
+    color: "var(--color-mute)",
+    borderRight: "1px solid var(--color-line)",
+  },
+  ".cm-activeLineGutter": { backgroundColor: "var(--color-card)" },
 });
