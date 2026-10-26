@@ -10,7 +10,7 @@
 //! Adapts `livespec_core::shell_env`, which gives up on the shell after 4 s and keeps the bare PATH for good.
 
 use std::collections::HashSet;
-use std::io::Read;
+use std::io::{ErrorKind, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{mpsc, Arc, Condvar, Mutex, OnceLock};
@@ -95,27 +95,33 @@ fn read_login_shell_path() -> Option<String> {
         .stderr(Stdio::null())
         .spawn()
         .ok()?;
-    let mut stdout = child.stdout.take()?;
+    let stdout = child.stdout.take()?;
     let (tx, rx) = mpsc::channel();
     std::thread::spawn(move || {
-        let (mut out, mut chunk) = (Vec::new(), [0u8; 4096]);
-        loop {
-            match stdout.read(&mut chunk) {
-                Ok(0) | Err(_) => break,
-                Ok(n) => out.extend_from_slice(&chunk[..n]),
-            }
-            if let Some(path) = marked(&String::from_utf8_lossy(&out)) {
-                let _ = tx.send(Some(path));
-                return;
-            }
-        }
-        let _ = tx.send(None);
+        let _ = tx.send(read_marked(stdout));
     });
     let path = rx.recv_timeout(SHELL_GIVE_UP).ok().flatten();
     // the PATH is in (or never coming): the shell has nothing left to say
     let _ = child.kill();
     let _ = child.wait();
     path
+}
+
+/// Reads `out` until the PATH between the markers is all there; `None` when the output ends without it.
+fn read_marked(mut out: impl Read) -> Option<String> {
+    let (mut seen, mut chunk) = (Vec::new(), [0u8; 4096]);
+    loop {
+        match out.read(&mut chunk) {
+            Ok(0) => return None,
+            Ok(n) => seen.extend_from_slice(&chunk[..n]),
+            // a signal to the app (one of its own children exiting) interrupts the read; the shell is still talking
+            Err(e) if e.kind() == ErrorKind::Interrupted => continue,
+            Err(_) => return None,
+        }
+        if let Some(path) = marked(&String::from_utf8_lossy(&seen)) {
+            return Some(path);
+        }
+    }
 }
 
 /// The PATH between the two markers in the shell's output, when it is all there and not empty.
@@ -278,6 +284,44 @@ mod tests {
         assert_eq!(marked(&format!("Welcome!\n{MARK}/a:/b{MARK}\nbye")).as_deref(), Some("/a:/b"));
         assert_eq!(marked(&format!("{MARK}/a:/b")), None); // still being printed
         assert_eq!(marked(&format!("{MARK}{MARK}")), None);
+    }
+
+    /// Output that arrives in pieces, some reads failing.
+    struct Pieces(std::collections::VecDeque<std::io::Result<String>>);
+
+    impl Read for Pieces {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            match self.0.pop_front() {
+                None => Ok(0),
+                Some(piece) => {
+                    let piece = piece?;
+                    buf[..piece.len()].copy_from_slice(piece.as_bytes());
+                    Ok(piece.len())
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_read_interrupted_by_a_signal_keeps_reading() {
+        // in the app, its own children exiting interrupt the read; the shell is still running its rc files
+        let out = Pieces(
+            [
+                Ok("rc noise\n".to_owned()),
+                Err(ErrorKind::Interrupted.into()),
+                Ok(format!("{MARK}/a:/b")),
+                Err(ErrorKind::Interrupted.into()),
+                Ok(MARK.to_owned()),
+            ]
+            .into(),
+        );
+        assert_eq!(read_marked(out).as_deref(), Some("/a:/b"));
+    }
+
+    #[test]
+    fn output_that_ends_or_fails_without_the_path_reads_as_none() {
+        assert_eq!(read_marked(Pieces([Ok(format!("{MARK}/a:/b"))].into())), None);
+        assert_eq!(read_marked(Pieces([Err(ErrorKind::BrokenPipe.into())].into())), None);
     }
 
     /// The case this module exists for. Build the tests, then run the binary with Finder's environment:
