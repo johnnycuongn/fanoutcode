@@ -27,15 +27,18 @@ function Form({ onClose }: { onClose(): void }): ReactElement {
   const [intent, setIntent] = useState("");
   const [jira, setJira] = useState("");
   const [project, setProject] = useState(defaultProject() ?? "");
-  const [error, setError] = useState<string | null>(null);
+  // each message sits under the field it is about
+  const [error, setError] = useState<{ field: "intent" | "jira" | "project"; text: string } | null>(null);
+  const errorFor = (field: "intent" | "jira" | "project") => (error?.field === field ? error.text : null);
   const [busy, setBusy] = useState(false);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     const key = jira.trim().toUpperCase();
-    if (!intent.trim()) return setError("Describe what you want built");
-    if (key && !JIRA_KEY_RE.test(key)) return setError("Use the form PROJ-123 for the Jira issue");
-    if (!project) return setError("Pick a project");
+    if (!intent.trim()) return setError({ field: "intent", text: "Describe what you want built" });
+    if (key && !JIRA_KEY_RE.test(key))
+      return setError({ field: "jira", text: "Use the form PROJ-123 for the Jira issue" });
+    if (!project) return setError({ field: "project", text: "Pick a project" });
     setBusy(true);
     const ok = await createTask(project, intent, key || null);
     setBusy(false);
@@ -49,7 +52,7 @@ function Form({ onClose }: { onClose(): void }): ReactElement {
         <DialogDescription>Describe it in your own words; the agent starts from the spec.</DialogDescription>
       </DialogHeader>
       <div className="flex flex-col gap-3">
-        <Field label="What should be built?" error={error}>
+        <Field label="What should be built?" error={errorFor("intent")}>
           <Textarea
             autoFocus
             rows={4}
@@ -64,7 +67,7 @@ function Form({ onClose }: { onClose(): void }): ReactElement {
           />
         </Field>
         {order.length > 1 && (
-          <Field label="Project">
+          <Field label="Project" error={errorFor("project")}>
             <Select value={project} onValueChange={setProject}>
               <SelectTrigger aria-label="Project">
                 <SelectValue />
@@ -79,8 +82,16 @@ function Form({ onClose }: { onClose(): void }): ReactElement {
             </Select>
           </Field>
         )}
-        <Field label="Jira issue (optional)">
-          <Input mono value={jira} onChange={(e) => setJira(e.target.value)} placeholder="PROJ-123" />
+        <Field label="Jira issue (optional)" error={errorFor("jira")}>
+          <Input
+            mono
+            value={jira}
+            onChange={(e) => {
+              setJira(e.target.value);
+              if (error?.field === "jira") setError(null);
+            }}
+            placeholder="PROJ-123"
+          />
         </Field>
       </div>
       <DialogFooter>

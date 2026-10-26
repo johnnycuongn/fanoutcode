@@ -23,6 +23,8 @@ export interface ChangesTaskState {
   staleOnDisk: boolean;
   saving: boolean;
   loading: boolean;
+  /** The change set has been read at least once (until then the tab says it is loading, not "No changes yet"). */
+  loaded: boolean;
   error: string | null;
 }
 export interface ChangesState {
@@ -77,6 +79,7 @@ const fresh = (): ChangesTaskState => ({
   staleOnDisk: false,
   saving: false,
   loading: false,
+  loaded: false,
   error: null,
 });
 
@@ -88,9 +91,9 @@ export function createChangesStore(ipc: ChangesIpc, persist: ModePersist = local
 
   async function refresh(taskId: TaskId): Promise<void> {
     try {
-      patch(taskId, { repos: await ipc.gitChanges(taskId) });
+      patch(taskId, { repos: await ipc.gitChanges(taskId), loaded: true });
     } catch (e) {
-      patch(taskId, { error: errorMessage(e) });
+      patch(taskId, { error: errorMessage(e), loaded: true });
     }
   }
 

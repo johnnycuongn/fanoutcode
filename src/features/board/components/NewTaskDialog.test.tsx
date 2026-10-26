@@ -52,6 +52,9 @@ describe("new task", () => {
     await userEvent.type(screen.getByLabelText("Jira issue (optional)"), "nope");
     await userEvent.click(screen.getByRole("button", { name: /Create task/ }));
     expect(screen.getByText("Use the form PROJ-123 for the Jira issue")).toBeInTheDocument();
+    // the message marks the Jira field, not the description
+    expect(screen.getByLabelText("Jira issue (optional)")).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByLabelText("What should be built?")).not.toHaveAttribute("aria-invalid");
     expect(m.ipc.tasksCreate).not.toHaveBeenCalled();
   });
   it("in a workspace the task goes to the picked project with the workspace id", async () => {

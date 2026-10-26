@@ -72,7 +72,11 @@ export function TerminalPane({
 
   return (
     <div ref={rootRef} data-term-theme={palette} className="relative flex h-full w-full flex-col">
-      <div ref={containerRef} className="min-h-0 flex-1 overflow-hidden px-2 pt-1" aria-hidden={!!elsewhere} />
+      {/* xterm's fit reads its parent's computed width, which under border-box includes padding: the padding sits on
+          this wrapper so the terminal never sizes itself wider than the pane */}
+      <div className="min-h-0 flex-1 overflow-hidden px-2 pt-1">
+        <div ref={containerRef} className="h-full w-full" aria-hidden={!!elsewhere} />
+      </div>
       {line && <div className="shrink-0 px-2 py-1 font-mono text-xs text-mute">{line}</div>}
       {elsewhere && (
         <div className="absolute inset-0 bg-page">

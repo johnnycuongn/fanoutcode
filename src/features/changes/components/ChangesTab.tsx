@@ -96,7 +96,12 @@ export function ChangesTab({
               onReply={(note, text) => store.reply(task.id, note, text)}
             />
           ) : (
-            <EmptyState size="sm" title={repos.some((r) => r.files.length) ? "Pick a file" : "No changes yet"} />
+            <EmptyState
+              size="sm"
+              title={
+                !st?.loaded ? "Loading changes…" : repos.some((r) => r.files.length) ? "Pick a file" : "No changes yet"
+              }
+            />
           )}
         </div>
       </div>
