@@ -5,7 +5,6 @@ import { useState, type ReactElement } from "react";
 import { Badge, Button, Chip, IconButton, Input } from "@/components/ui";
 import type { CostSummary, Project, StageAction, Task } from "@/lib/bindings";
 import { asSwatch, handbackLabel } from "@/lib/format";
-import { useDetectedTest } from "@/lib/detectedTest";
 import { useUncommitted } from "@/lib/uncommitted";
 import { handbackKind } from "../agentState";
 import type { PrimaryButton } from "../primaryAction";
@@ -79,8 +78,7 @@ function UncommittedChip({ task }: { task: Task }) {
 }
 
 export function TaskHeader(p: TaskHeaderProps): ReactElement {
-  const detected = useDetectedTest(p.task.project_id);
-  const testsRun = p.settings.testEnabled && Boolean(p.settings.testCommand?.trim() || detected);
+  const testsRun = p.settings.testEnabled && Boolean(p.settings.testCommand?.trim());
   const { task } = p;
   return (
     <header className="shrink-0 border-b border-line bg-bar px-3 py-1.5">

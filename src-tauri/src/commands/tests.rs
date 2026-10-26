@@ -5,7 +5,6 @@ use std::sync::Arc;
 
 use fanoutcode_core::domain::{ProjectId, TaskId};
 use fanoutcode_core::settings::{keys, resolve, Scope};
-use fanoutcode_core::test_detect;
 use fanoutcode_core::testrun::{self, Attached, LiveOutput, TestCommand};
 use fanoutcode_core::{db, pipeline, Error, Result};
 use tauri::ipc::Channel;
@@ -21,7 +20,7 @@ fn commands(state: &AppState, task_id: &TaskId) -> Result<Vec<TestCommand>> {
     let conn = state.db.lock().expect("db lock");
     let scope = pipeline::ctx::task_scope(&task);
     let values = db::settings::load(&conn, &scope)?;
-    let Some(home_cmd) = test_detect::effective(resolve::<keys::TestCommand>(&values, &scope), &home) else {
+    let Some(home_cmd) = resolve::<keys::TestCommand>(&values, &scope).filter(|c| !c.trim().is_empty()) else {
         return Err(Error::Precondition(
             "Set a test command in project settings before using the Test stage".into(),
         ));

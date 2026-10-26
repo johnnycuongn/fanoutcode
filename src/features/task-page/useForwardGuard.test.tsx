@@ -2,13 +2,20 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import { useEffect, type ReactElement } from "react";
 import { expect, test, vi } from "vitest";
 import type { Stage, StageAction } from "@/lib/bindings";
-import { useForwardGuard } from "./useForwardGuard";
+import { useForwardGuard, type GuardTests } from "./useForwardGuard";
 
-const h = vi.hoisted(() => ({ pending: 0, review: null as string | null }));
+const h = vi.hoisted(() => ({
+  pending: 0,
+  review: null as string | null,
+  detected: null as { command: string; source: string } | null,
+  settingsSet: vi.fn(async () => ({ status: "ok", data: null })),
+}));
 vi.mock("@/lib/bindings", () => ({
   commands: {
     gitUncommitted: vi.fn(async () => ({ status: "ok", data: h.pending })),
     memoryRead: vi.fn(async () => ({ status: "ok", data: h.review })),
+    projectsDetectTest: vi.fn(async () => ({ status: "ok", data: h.detected })),
+    settingsSet: h.settingsSet,
   },
   events: {
     gitChanges: { listen: vi.fn(async () => () => {}) },
@@ -24,8 +31,16 @@ const keep = (x: Guard) => {
   g = x;
 };
 
-function Host({ stage, onGuard }: { stage: Stage; onGuard(g: Guard): void }): ReactElement {
-  const guard = useForwardGuard({ id: "task-1", stage });
+function Host({
+  stage,
+  onGuard,
+  tests = { command: "npm test", enabled: true },
+}: {
+  stage: Stage;
+  onGuard(g: Guard): void;
+  tests?: GuardTests;
+}): ReactElement {
+  const guard = useForwardGuard({ id: "task-1", stage, project_id: "proj-1" }, tests);
   useEffect(() => onGuard(guard));
   return <>{guard.dialog}</>;
 }
@@ -85,4 +100,36 @@ test("a review with no blockers approves without asking", async () => {
   render(<Host stage="Review" onGuard={keep} />);
   await expect(g!.guard(approve)).resolves.toBe(true);
   expect(g!.blockers).toBe(0);
+});
+
+test("with no test command, Approve changes offers the detected one and Use saves it", async () => {
+  h.review = null;
+  h.detected = { command: "npm test", source: "package.json" };
+  h.settingsSet.mockClear();
+  render(<Host stage="Review" onGuard={keep} tests={{ command: null, enabled: true }} />);
+  const { answer } = await ask(approve);
+  expect(await screen.findByText("Run the tests with npm test?")).toBeTruthy();
+  expect(screen.getByText(/runs this repository's own script/)).toBeTruthy();
+  act(() => screen.getByRole("button", { name: "Use npm test" }).click());
+  await expect(answer).resolves.toBe(true);
+  expect(h.settingsSet).toHaveBeenCalledWith(
+    { workspace: null, project: "proj-1", task: null },
+    "test_command",
+    "npm test",
+  );
+});
+
+test("Skip tests approves without saving, and a saved command or tests off never asks", async () => {
+  h.review = null;
+  h.detected = { command: "npm test", source: "package.json" };
+  h.settingsSet.mockClear();
+  const { unmount } = render(<Host stage="Review" onGuard={keep} tests={{ command: null, enabled: true }} />);
+  const { answer } = await ask(approve);
+  act(() => screen.getByRole("button", { name: "Skip tests" }).click());
+  await expect(answer).resolves.toBe(true);
+  expect(h.settingsSet).not.toHaveBeenCalled();
+  unmount();
+  render(<Host stage="Review" onGuard={keep} tests={{ command: null, enabled: false }} />);
+  await expect(g!.guard(approve)).resolves.toBe(true);
+  expect(screen.queryByRole("dialog")).toBeNull();
 });

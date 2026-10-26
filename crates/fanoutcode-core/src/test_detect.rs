@@ -1,5 +1,6 @@
-//! A project's test command when none is set (§6.5): the Test stage runs it, and Settings shows where it came from,
-//! so a project with tests never skips Test just because nobody typed `npm test`.
+//! A test command suggested by the project's own files when none is set (§6.5). It is only ever a suggestion: running
+//! it runs the repository's own scripts, so the developer accepts it (Settings, or the question at Approve changes),
+//! which saves it as `test_command`; nothing runs a detected command on its own.
 
 use std::path::Path;
 
@@ -75,13 +76,6 @@ pub fn detect(root: &Path) -> Option<DetectedTest> {
         .or_else(|| make(root))
 }
 
-/// The command the Test stage runs: the one set in settings, else the detected one.
-pub fn effective(stored: Option<String>, root: &Path) -> Option<String> {
-    stored
-        .filter(|c| !c.trim().is_empty())
-        .or_else(|| detect(root).map(|d| d.command))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -135,16 +129,5 @@ mod tests {
             "make test"
         );
         assert_eq!(detect(tempfile::tempdir().unwrap().path()), None);
-    }
-
-    #[test]
-    fn a_stored_command_wins_over_detection() {
-        let d = dir_with(&[("Cargo.toml", "")]);
-        assert_eq!(
-            effective(Some("just test".into()), d.path()).as_deref(),
-            Some("just test")
-        );
-        assert_eq!(effective(Some("  ".into()), d.path()).as_deref(), Some("cargo test"));
-        assert_eq!(effective(None, tempfile::tempdir().unwrap().path()), None);
     }
 }

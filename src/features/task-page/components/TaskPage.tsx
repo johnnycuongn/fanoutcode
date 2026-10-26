@@ -99,7 +99,7 @@ export function TaskPage({
     if (needsSession) void taskPageStore.startSession(taskId);
   }, [taskId, needsSession]);
 
-  const forward = useForwardGuard(task ?? null);
+  const forward = useForwardGuard(task ?? null, { command: settings.testCommand, enabled: settings.testEnabled });
   const open = dockOpen ?? (task ? dockStore.defaultOpen(task.stage) : false);
   const primary = task
     ? primaryActionFor(task, { mayCommit: settings.mayCommit, queued, blockers: forward.blockers })
