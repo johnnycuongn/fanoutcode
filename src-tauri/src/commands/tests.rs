@@ -45,11 +45,7 @@ pub(crate) fn start_or_attach(app: &AppHandle, task_id: &TaskId) -> Result<Arc<L
     let out = LiveOutput::new();
     let (app2, id, out2) = (app.clone(), task_id.clone(), out.clone());
     let handle = tauri::async_runtime::spawn(async move {
-        let path_env = tokio::task::spawn_blocking(livespec_core::shell_env::login_shell_path)
-            .await
-            .ok()
-            .flatten()
-            .or_else(|| std::env::var("PATH").ok());
+        let path_env = tokio::task::spawn_blocking(fanoutcode_core::shell_path::path).await.ok();
         let result = testrun::run(&cmds, path_env.as_deref(), &mut |b| out2.push(&b)).await;
         let code = match result {
             Ok(r) => {

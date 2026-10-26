@@ -4,13 +4,14 @@
 //! to copy). Keys come from the keychain and never cross IPC.
 
 use fanoutcode_core::settings::{keys, resolve as resolve_setting, ModelProvider, Scope};
+use fanoutcode_core::shell_path;
 use fanoutcode_core::{db, Error, Result};
 use livespec_core::jev::key::pick_key;
 use livespec_core::jev::Jev;
 use livespec_core::llm::{AnthropicApi, ClaudeCli, OpenAiCompat, Provider, Secret};
 use livespec_core::local::{catalog, LocalPaths, LocalServer};
 use livespec_core::settings::{ClaudeAuth, ProviderSettings, Settings, Tier};
-use livespec_core::shell_env::{find_executable, login_shell_path};
+use livespec_core::shell_env::find_executable;
 use tauri::{AppHandle, Manager};
 
 use crate::secrets;
@@ -68,7 +69,7 @@ pub async fn resolve(app: &AppHandle, tier: Tier) -> Result<Provider> {
             deep_effort,
             auth,
         } => {
-            let path_env = tokio::task::spawn_blocking(login_shell_path).await.ok().flatten();
+            let path_env = tokio::task::spawn_blocking(shell_path::path).await.ok();
             let binary = match binary_path.filter(|b| !b.trim().is_empty()) {
                 Some(b) => b.into(),
                 None => find_executable("claude", path_env.as_deref()).ok_or_else(|| {

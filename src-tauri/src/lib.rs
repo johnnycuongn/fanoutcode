@@ -79,8 +79,8 @@ pub fn run() {
             }));
             hooks_tailer::HooksTailer::start(app.handle());
             session_service::start_codex_ticker(app.handle());
-            // the first launch would otherwise wait for the login shell's PATH
-            std::thread::spawn(livespec_core::shell_env::login_shell_path);
+            // ask the login shell for its PATH now; the first session would otherwise wait for it
+            fanoutcode_core::shell_path::start();
             git_watcher::GitWatcher::start(app.handle());
             overlap_sync::start(app.handle());
             workspace_sync::start(app.handle());

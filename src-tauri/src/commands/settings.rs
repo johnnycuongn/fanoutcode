@@ -10,12 +10,12 @@ use tauri::State;
 use super::parse_scope;
 use crate::state::AppState;
 
-/// The agent CLIs first run looks for (Claude Code, Codex): found on the login shell's PATH, with their versions.
+/// The agent CLIs first run looks for (Claude Code, Codex): found on the PATH sessions get, with their versions.
 #[tauri::command]
 #[specta::specta]
 pub async fn agents_check() -> Result<Vec<AgentCli>> {
-    let path = livespec_core::shell_env::login_shell_path()
-        .or_else(|| std::env::var("PATH").ok())
+    let path = tokio::task::spawn_blocking(fanoutcode_core::shell_path::path)
+        .await
         .unwrap_or_default();
     Ok(agent_check::check(&path).await)
 }

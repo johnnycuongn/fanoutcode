@@ -21,6 +21,7 @@ pub mod recent;
 pub mod roster;
 pub mod sessions;
 pub mod settings;
+pub mod shell_path;
 pub mod test_detect;
 #[cfg(test)]
 pub(crate) mod test_support;

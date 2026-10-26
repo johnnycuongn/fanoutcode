@@ -10,8 +10,8 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 use fanoutcode_core::sessions::{Batcher, ExitFn, OutputFn, OutputSink, Pty, PtySpawner, SpawnSpec};
+use fanoutcode_core::shell_path;
 use fanoutcode_core::Error;
-use livespec_core::shell_env::login_shell_path;
 use portable_pty::{native_pty_system, ChildKiller, CommandBuilder, MasterPty, PtySize};
 
 /// How long the exit report waits for the output after the child exits (a background job may hold the PTY open).
@@ -39,19 +39,14 @@ impl OutputSink for ChannelSink {
     }
 }
 
-/// The PATH a GUI app's children should get: the login shell's, else the app's own.
-fn child_path() -> Option<String> {
-    login_shell_path().or_else(|| std::env::var("PATH").ok())
-}
-
 /// `program` as an executable path: an absolute one must exist and be executable, a bare name is looked up on the
-/// login shell's PATH.
+/// children's PATH (`shell_path`).
 fn resolve(program: &str, cwd: &Path) -> Result<PathBuf, Error> {
     let missing = || Error::Precondition(format!("{program} not found on PATH"));
     if Path::new(program).is_absolute() {
         return which::which(program).map_err(|_| missing());
     }
-    which::which_in(program, child_path(), cwd).map_err(|_| missing())
+    which::which_in(program, Some(shell_path::path()), cwd).map_err(|_| missing())
 }
 
 fn pty_err(e: impl std::fmt::Display) -> Error {
@@ -119,9 +114,7 @@ impl PtySpawner for PortablePtySpawner {
         let mut cmd = CommandBuilder::new(&program);
         cmd.args(&spec.args);
         cmd.cwd(&spec.cwd);
-        if let Some(path) = child_path() {
-            cmd.env("PATH", path);
-        }
+        cmd.env("PATH", shell_path::path());
         for (k, v) in &spec.env {
             cmd.env(k, v);
         }

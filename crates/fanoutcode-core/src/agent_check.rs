@@ -1,5 +1,5 @@
-//! Which agent CLIs this Mac can run (first run): each found on the login shell's `PATH`, the same one sessions
-//! use, with the version it reports. Signing in is not checked here; a session shows Claude Code's own sign-in screen
+//! Which agent CLIs this Mac can run (first run): each found on `shell_path::path()`, the PATH sessions use, with the
+//! version it reports. Signing in is not checked here; a session shows Claude Code's own sign-in screen
 //! on its card (`sessions::agent_prompt`).
 
 use std::path::{Path, PathBuf};

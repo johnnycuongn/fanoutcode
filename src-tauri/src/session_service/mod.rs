@@ -103,8 +103,9 @@ pub fn start(app: &AppHandle, session: Session, launch: LaunchSpec) -> Result<Se
     });
     let (exit_app, exit_id) = (app.clone(), id.clone());
     let on_exit = Box::new(move |code: i32| exited(&exit_app, &exit_id, code));
-    // the spawner resolves the program on the login shell's PATH; read it (once, cached) before taking the lock
-    let _ = livespec_core::shell_env::login_shell_path();
+    // the spawner resolves the program on the children's PATH; read it before taking the lock (it may wait for the
+    // login shell)
+    let _ = fanoutcode_core::shell_path::path();
     let mut registry = state.registry();
     registry.set_scrollback_lines(lines);
     match state

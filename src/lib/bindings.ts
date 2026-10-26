@@ -23,7 +23,7 @@ async settingsFirstRunComplete(convention: WorktreeConvention, theme: ThemePrefe
 }
 },
 /**
- * The agent CLIs first run looks for (Claude Code, Codex): found on the login shell's PATH, with their versions.
+ * The agent CLIs first run looks for (Claude Code, Codex): found on the PATH sessions get, with their versions.
  */
 async agentsCheck() : Promise<Result<AgentCli[], string>> {
     try {
