@@ -1,5 +1,5 @@
 // Builds and keeps the CodeMirror editor for one file: a unified view (the working side with the base folded in as
-// deletions) or a side-by-side MergeView (base read-only on the left). The editor is rebuilt when the file or the
+// deletions) or a side-by-side MergeView (base read-only on the left). The editor is rebuilt when the diff or the
 // mode changes; notes and a reloaded buffer are pushed into the live editor.
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { MergeView, unifiedMergeView } from "@codemirror/merge";
@@ -77,9 +77,11 @@ export function useMergeEditor(o: MergeEditorOpts) {
       destroy();
       view.current = null;
     };
-    // rebuilt only for a new file, mode or language; buffer and notes are pushed below
+    // rebuilt only for a new diff (its file or base), mode or language; buffer and notes are pushed below. Keyed on the
+    // diff itself, not the selected path: a new selection renders once with the previous file's diff before its own
+    // arrives, and a rebuild then would keep that file's base on the left
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [o.path, o.mode, o.language, deleted]);
+  }, [o.diff.repo_root, o.diff.path, o.diff.before, o.mode, o.language, deleted]);
 
   useEffect(() => {
     const v = view.current;
