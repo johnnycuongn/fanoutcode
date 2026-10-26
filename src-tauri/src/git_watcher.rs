@@ -210,6 +210,8 @@ pub async fn watch(app: &AppHandle, task_id: &TaskId) -> Result<()> {
         }
     }
     state.git_watcher.unwatch(task_id);
+    // the cached set describes the old repos; the next read or tree change rebuilds it
+    state.change_sets.lock().expect("change sets lock").remove(task_id);
     for p in repos.iter().chain(&git_dirs) {
         if p.exists() {
             state.git_watcher.add_path(p);
@@ -250,9 +252,36 @@ pub async fn snapshots(task: &Task, repos: &[PathBuf]) -> Result<Vec<RepoSnapsho
     Ok(snaps)
 }
 
-/// Rebuilds the task's change set: open Bash windows get the fresh status, the attributions are saved, the set is
-/// cached and `git-changes` emitted. Returns the set and the one it replaced.
+/// Rebuilds the task's change set and emits `git-changes` only when it differs from the cached one. Listeners read
+/// the set back on that event, so emitting an unchanged set would start a loop. Returns the set and the one it
+/// replaced.
 pub async fn refresh(app: &AppHandle, task_id: &TaskId) -> Result<(Task, ChangeSet, Option<ChangeSet>)> {
+    let (task, set, previous) = rebuild(app, task_id).await?;
+    if previous.as_ref() != Some(&set) {
+        events::emit(
+            app,
+            GitChanges {
+                task_id: task_id.clone(),
+            },
+        )?;
+    }
+    Ok((task, set, previous))
+}
+
+/// The cached change set; built once, without an event, when the task has none yet. `git_changes` reads this and
+/// never rebuilds: the watcher keeps the cache fresh.
+pub async fn cached(app: &AppHandle, task_id: &TaskId) -> Result<ChangeSet> {
+    let state = app.state::<AppState>();
+    let hit = state.change_sets.lock().expect("change sets lock").get(task_id).cloned();
+    match hit {
+        Some(set) => Ok(set),
+        None => Ok(rebuild(app, task_id).await?.1),
+    }
+}
+
+/// Rebuilds the task's change set: open Bash windows get the fresh status, the attributions are saved and the set is
+/// cached. Emits nothing.
+async fn rebuild(app: &AppHandle, task_id: &TaskId) -> Result<(Task, ChangeSet, Option<ChangeSet>)> {
     let state = app.state::<AppState>();
     let (task, home) = observe::task_and_home(&state, task_id)?;
     let repos = observe::repos(&task, &home);
@@ -272,12 +301,6 @@ pub async fn refresh(app: &AppHandle, task_id: &TaskId) -> Result<(Task, ChangeS
         .lock()
         .expect("change sets lock")
         .insert(task_id.clone(), set.clone());
-    events::emit(
-        app,
-        GitChanges {
-            task_id: task_id.clone(),
-        },
-    )?;
     Ok((task, set, previous))
 }
 

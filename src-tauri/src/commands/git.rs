@@ -15,7 +15,7 @@ use fanoutcode_core::Result;
 use fanoutcode_core::{db, Error};
 use tauri::{AppHandle, State};
 
-use crate::events::{self, GitChanges};
+use crate::events;
 use crate::git_watcher;
 use crate::observe;
 use crate::state::AppState;
@@ -34,12 +34,13 @@ fn target(
     Ok((task, repo, abs))
 }
 
-/// The task's change set, rebuilt now.
+/// The task's change set as the watcher last built it. A pure read: it never emits `git-changes`, which every
+/// change view answers by calling this again.
 #[tauri::command]
 #[specta::specta]
 pub async fn git_changes(app: AppHandle, task_id: TaskId) -> Result<Vec<RepoChanges>> {
     let id = TaskId::parse(task_id.as_str())?;
-    Ok(git_watcher::refresh(&app, &id).await?.1.repos)
+    Ok(git_watcher::cached(&app, &id).await?.repos)
 }
 
 /// Both sides of one file: `before` at the repo's base (empty when absent there), `after` the working tree.
@@ -98,10 +99,11 @@ pub fn git_file_write(
     write_atomic(&abs, contents.as_bytes())
 }
 
-/// Pulls a file from "Other changes" into the task's set.
+/// Pulls a file from "Other changes" into the task's set, then rebuilds the set (the tree did not change, so the
+/// watcher would not).
 #[tauri::command]
 #[specta::specta]
-pub fn git_include_other(
+pub async fn git_include_other(
     app: AppHandle,
     state: State<'_, AppState>,
     task_id: TaskId,
@@ -116,7 +118,7 @@ pub fn git_include_other(
         a.files().to_vec()
     })?;
     observe::save_attributions(&state, &task.id, &files)?;
-    events::emit(&app, GitChanges { task_id: task.id })
+    git_watcher::refresh(&app, &task.id).await.map(|_| ())
 }
 
 /// The drafts in the task's `commits.md`, by repo (Plan 08's Commit tab).
@@ -131,8 +133,8 @@ pub fn git_drafts(state: State<'_, AppState>, task_id: TaskId) -> Result<Vec<Rep
     Ok(commit_messages::parse_commits_md(&md))
 }
 
-/// Commits draft `index` of `repo` (only with "Fanout Code may commit"), logs it on the timeline, emits
-/// `git-changes`; the new sha.
+/// Commits draft `index` of `repo` (only with "Fanout Code may commit"), logs it on the timeline, rebuilds the
+/// change set; the new sha.
 pub(crate) async fn commit_one(app: &AppHandle, id: &TaskId, repo: &std::path::Path, index: usize) -> Result<String> {
     let state = tauri::Manager::state::<AppState>(app);
     let (task, home) = observe::task_and_home(&state, id)?;
@@ -169,7 +171,7 @@ pub(crate) async fn commit_one(app: &AppHandle, id: &TaskId, repo: &std::path::P
         pipeline::apply(&mut conn, &folder, &task, vec![Effect::WriteIndex(entry)], now)?
     };
     events::emit_task_changed(app, &state.db.lock().expect("db lock"), &applied.task)?;
-    events::emit(app, GitChanges { task_id: id.clone() })?;
+    git_watcher::refresh(app, id).await?;
     Ok(sha)
 }
 

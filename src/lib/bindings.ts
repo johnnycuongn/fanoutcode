@@ -398,7 +398,8 @@ async windowsOpenWorkspace(path: string) : Promise<Result<WindowInfo, string>> {
 }
 },
 /**
- * The task's change set, rebuilt now.
+ * The task's change set as the watcher last built it. A pure read: it never emits `git-changes`, which every
+ * change view answers by calling this again.
  */
 async gitChanges(taskId: TaskId) : Promise<Result<RepoChanges[], string>> {
     try {
@@ -442,7 +443,8 @@ async gitFileWrite(taskId: TaskId, repo: string, path: string, contents: string)
 }
 },
 /**
- * Pulls a file from "Other changes" into the task's set.
+ * Pulls a file from "Other changes" into the task's set, then rebuilds the set (the tree did not change, so the
+ * watcher would not).
  */
 async gitIncludeOther(taskId: TaskId, repo: string, path: string) : Promise<Result<null, string>> {
     try {
