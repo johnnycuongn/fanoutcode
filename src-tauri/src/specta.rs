@@ -29,6 +29,7 @@ pub fn builder() -> Builder<tauri::Wry> {
         .commands(collect_commands![
             settings::settings_first_run_pending,
             settings::settings_first_run_complete,
+            settings::agents_check,
             settings::settings_get,
             settings::settings_set,
             projects::projects_open,

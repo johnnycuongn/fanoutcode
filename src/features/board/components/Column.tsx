@@ -39,7 +39,9 @@ export const Column = memo(function Column({
       data-stage={stage}
       data-glow={glow}
       className={cx(
-        "relative flex min-w-0 flex-1 basis-0 flex-col rounded-well bg-well/60 p-1.5",
+        "relative flex min-w-0 basis-0 flex-col rounded-well bg-well/60 p-1.5",
+        // an empty column keeps its place and drop target but gives its room to the columns with cards
+        tasks.length === 0 ? "grow-[0.6]" : "grow",
         "transition-shadow duration-300 data-[glow=true]:ring-2 data-[glow=true]:ring-accent/40",
       )}
     >

@@ -1,18 +1,18 @@
-// First run, step 1: which worktree lifecycle new tasks use. Two selectable cards.
+// First run, step 2: where each task's agent works. Two selectable cards, the recommended one first.
 import type { ReactElement } from "react";
 import { Button, cx } from "@/components/ui";
 import type { WorktreeConvention } from "@/lib/bindings";
 
 const OPTIONS: Array<{ value: WorktreeConvention; title: string; body: string }> = [
   {
-    value: "ClaudeCode",
-    title: "Claude Code's own worktrees",
-    body: "Launched with claude --worktree under .claude/worktrees/. A clean worktree is removed when its session exits; a dirty one gets Claude's keep-or-remove prompt in the terminal; stale worktrees are swept by Claude Code; claude rm removes a session's worktree when safe.",
+    value: "FanoutCodeManaged",
+    title: "Its own worktree (recommended)",
+    body: "Each task works in its own copy of the repo under .worktrees/, on its own branch. Tasks running at the same time never touch each other's files, and nothing is deleted without asking.",
   },
   {
-    value: "FanoutCodeManaged",
-    title: "Fanout Code-managed",
-    body: "git worktree add <root>/.worktrees/<task-slug> -b fo/<task-slug>. Removing a worktree on archive is offered, never automatic.",
+    value: "ClaudeCode",
+    title: "Claude Code's worktrees",
+    body: "Claude Code makes a worktree for each session under .claude/worktrees/ and offers to remove it when the session ends.",
   },
 ];
 

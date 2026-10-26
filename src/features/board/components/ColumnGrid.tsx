@@ -4,7 +4,8 @@ import { useBoard } from "../store";
 import type { BoardColumn } from "../types";
 import { Column } from "./Column";
 
-/** Seven columns side by side. Narrower than 1,200 px the row scrolls sideways rather than squeezing. */
+/** Seven columns side by side, fitting the default 1,280 px window beside the sidebar; narrower than 900 px the row
+ * scrolls sideways rather than squeezing. Empty columns take less room than ones with cards. */
 export function ColumnGrid({
   lane,
   columns,
@@ -23,7 +24,7 @@ export function ColumnGrid({
 }): ReactElement {
   const projectsById = useBoard((s) => s.projects);
   const grid = (
-    <div data-testid="column-grid" className="flex min-w-[1200px] gap-2">
+    <div data-testid="column-grid" className="flex min-w-[900px] gap-2">
       {columns.map((column) => (
         <Column
           key={column.stage}

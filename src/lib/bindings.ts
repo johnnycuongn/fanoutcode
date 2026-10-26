@@ -23,6 +23,17 @@ async settingsFirstRunComplete(convention: WorktreeConvention, theme: ThemePrefe
 }
 },
 /**
+ * The agent CLIs first run looks for (Claude Code, Codex): found on the login shell's PATH, with their versions.
+ */
+async agentsCheck() : Promise<Result<AgentCli[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("agents_check") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * Every key resolved at `scope`, most specific layer winning.
  */
 async settingsGet(scope: Scope) : Promise<Result<ResolvedSettings, string>> {
@@ -1249,6 +1260,10 @@ export type Accent = "Blue" | "Violet" | "Teal" | "Orange"
  * The task after a stage action, and the toasts for the webview to show.
  */
 export type ActionOutcome = { task: Task; toasts: string[] }
+/**
+ * One agent CLI: where it is, and its version line, when found.
+ */
+export type AgentCli = { kind: AgentKind; program: string; path: string | null; version: string | null }
 export type AgentKind = "ClaudeCode" | "Codex" | "Shell"
 /**
  * A question Claude Code asks in its own terminal before its first hook.

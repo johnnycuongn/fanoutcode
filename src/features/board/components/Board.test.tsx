@@ -48,10 +48,10 @@ describe("Board", () => {
     expect(m.ipc.tasksList).toHaveBeenCalledWith(projectContainer("p-1"));
     expect(m.ipc.on).toHaveBeenCalledWith("task-changed", expect.any(Function));
   });
-  it("keeps the column row wider than 1,200 px so narrower windows scroll horizontally", async () => {
+  it("fits seven columns in the default window and scrolls only below 900 px", async () => {
     m.ipc.tasksList.mockResolvedValue([makeTask({ id: "a" })]);
     mountUi(<Board {...props} />);
-    expect(await screen.findByTestId("column-grid")).toHaveClass("min-w-[1200px]");
+    expect(await screen.findByTestId("column-grid")).toHaveClass("min-w-[900px]");
     expect(screen.getByTestId("column-scroller")).toHaveClass("overflow-x-auto");
   });
   it("toggling Needs you in the header filters the cards and the counts", async () => {

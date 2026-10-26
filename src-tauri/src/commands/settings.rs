@@ -1,5 +1,6 @@
 //! Settings commands: first-run state (§4.4) and scoped settings (§6.8, §13).
 
+use fanoutcode_core::agent_check::{self, AgentCli};
 use fanoutcode_core::db;
 use fanoutcode_core::domain::{ThemePreference, WorktreeConvention};
 use fanoutcode_core::settings::{self, ResolvedSettings, Scope};
@@ -8,6 +9,16 @@ use tauri::State;
 
 use super::parse_scope;
 use crate::state::AppState;
+
+/// The agent CLIs first run looks for (Claude Code, Codex): found on the login shell's PATH, with their versions.
+#[tauri::command]
+#[specta::specta]
+pub async fn agents_check() -> Result<Vec<AgentCli>> {
+    let path = livespec_core::shell_env::login_shell_path()
+        .or_else(|| std::env::var("PATH").ok())
+        .unwrap_or_default();
+    Ok(agent_check::check(&path).await)
+}
 
 /// True until onboarding has been completed; a database that cannot be read counts as pending.
 #[tauri::command]

@@ -118,7 +118,9 @@ function TaskCardImpl(props: TaskCardProps): ReactElement {
             />
           )}
           {task.flagged && <Bookmark role="img" aria-label="Flagged" className="size-3.5 shrink-0 text-accent" />}
-          <span className="min-w-0 flex-1 truncate font-medium">{titleSlot ?? task.title}</span>
+          <span className="line-clamp-2 min-w-0 flex-1 font-medium break-words" title={task.title}>
+            {titleSlot ?? task.title}
+          </span>
           {task.jira_key && (
             <Badge size="sm" mono>
               {task.jira_key}
