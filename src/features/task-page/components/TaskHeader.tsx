@@ -105,7 +105,13 @@ export function TaskHeader(p: TaskHeaderProps): ReactElement {
         <HandbackChip task={task} />
         <span className="flex-1" />
         {p.settings.costOverview && <CostMeter cost={p.cost} contextPct={p.contextPct} />}
-        <PrimaryAction primary={p.primary} stage={task.stage} onPrimary={p.onPrimary} onAction={p.onAction} />
+        <PrimaryAction
+          primary={p.primary}
+          stage={task.stage}
+          mayCommit={p.settings.mayCommit}
+          onPrimary={p.onPrimary}
+          onAction={p.onAction}
+        />
         <OverflowMenu
           task={task}
           mayCommit={p.settings.mayCommit}

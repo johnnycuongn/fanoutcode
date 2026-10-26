@@ -99,6 +99,9 @@ pub struct AppState {
     /// Plan 11: the state the chip feed derived for a task while an overlap decision pinned it, applied when the
     /// last decision is made.
     pub pinned: Mutex<HashMap<TaskId, AgentState>>,
+    /// A note the app typed into a task's session (another task's notice) and the state the task had then; the
+    /// session's answer goes through `feed::through_notice` until that turn is over.
+    pub notice_turns: Mutex<HashMap<TaskId, AgentState>>,
     /// Plan 11's sync caches (recent edit calls, unattributed files, last statuses).
     pub overlap: OverlapCache,
     /// Tasks bringing their base branch in (Plan 11, §6.3), with the files the integrate prompt listed.
@@ -152,6 +155,7 @@ impl AppState {
             session_open: Mutex::new(()),
             codex_idle: Mutex::default(),
             pinned: Mutex::default(),
+            notice_turns: Mutex::default(),
             overlap: OverlapCache::default(),
             integrating: Mutex::default(),
             integration_aborts: Mutex::default(),

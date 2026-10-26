@@ -181,7 +181,9 @@ pub async fn handle(app: &AppHandle, mut ev: TaskEvent, line: &str, live: bool) 
     // Plan 11: a Stop of a task bringing its base in is read by `overlap_integrate`, not the stage feed
     let integrating = crate::overlap_integrate::on_main_stop(app, &state, &task, &ev).await?;
     if main_or_prompt && !integrating {
-        if let Some(next) = feed::next_state(task.stage, &ev.event, artifact_changed) {
+        if let Some(next) =
+            feed::next_state(task.stage, &ev.event, artifact_changed).and_then(|n| noticed(&state, &id, n))
+        {
             // through the overlap pin: kept aside while a decision is open (Plan 11, §5.4)
             overlap_sync::apply_derived(app, &state, &id, next)?;
         }
@@ -229,6 +231,19 @@ pub async fn handle(app: &AppHandle, mut ev: TaskEvent, line: &str, live: bool) 
         );
     }
     Ok(())
+}
+
+/// `next` while the session answers a note the app typed in: the earlier state stays (`feed::through_notice`).
+fn noticed(state: &AppState, id: &TaskId, next: AgentState) -> Option<AgentState> {
+    let mut turns = state.notice_turns.lock().expect("notice turns lock");
+    let Some(before) = turns.get(id) else {
+        return Some(next);
+    };
+    let (applied, over) = feed::through_notice(before, next);
+    if over {
+        turns.remove(id);
+    }
+    applied
 }
 
 /// An edit landed in `repo`: its claims file at once (the hook of another task reads it next, §5.7), then the overlaps

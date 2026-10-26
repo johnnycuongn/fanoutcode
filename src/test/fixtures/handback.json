@@ -54,7 +54,7 @@
       "type": "Replied"
     },
     "stage": "Spec",
-    "text": "Which DB?"
+    "text": "Your turn"
   },
   {
     "reason": {
@@ -62,7 +62,7 @@
       "type": "Replied"
     },
     "stage": "Plan",
-    "text": "Which DB?"
+    "text": "Your turn"
   },
   {
     "reason": {
@@ -70,7 +70,7 @@
       "type": "Replied"
     },
     "stage": "Build",
-    "text": "Which DB?"
+    "text": "Your turn"
   },
   {
     "reason": {
@@ -78,7 +78,7 @@
       "type": "Replied"
     },
     "stage": "Review",
-    "text": "Which DB?"
+    "text": "Your turn"
   },
   {
     "reason": {
@@ -86,7 +86,7 @@
       "type": "Replied"
     },
     "stage": "Test",
-    "text": "Which DB?"
+    "text": "Your turn"
   },
   {
     "reason": {
@@ -94,7 +94,7 @@
       "type": "Replied"
     },
     "stage": "Commit",
-    "text": "Which DB?"
+    "text": "Your turn"
   },
   {
     "reason": {
@@ -102,7 +102,7 @@
       "type": "Replied"
     },
     "stage": "Done",
-    "text": "Which DB?"
+    "text": "Your turn"
   },
   {
     "reason": {

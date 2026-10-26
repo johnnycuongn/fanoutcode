@@ -250,6 +250,13 @@ pub fn deliver_notes_if_idle(app: &AppHandle, state: &AppState, task_id: &TaskId
         return Ok(());
     }
     let task = db::tasks::require(&state.db.lock().expect("db lock"), task_id)?;
+    // the session's answer to these notes must not replace the hand-back the developer is looking at
+    state
+        .notice_turns
+        .lock()
+        .expect("notice turns lock")
+        .entry(task_id.clone())
+        .or_insert_with(|| task.state.clone());
     session_service::apply_effects(app, &task, None, &[Effect::InjectPrompt(inbox.join("\n\n"))]);
     Ok(())
 }

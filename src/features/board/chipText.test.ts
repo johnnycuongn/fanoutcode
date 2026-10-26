@@ -20,19 +20,13 @@ describe("chipFor", () => {
   ] as const)('StageDone in %s reads "%s"', (stage, text, tone) => {
     expect(chipFor(makeTask({ stage, state: needsYou({ type: "StageDone" }) }))).toEqual({ tone, text });
   });
-  it("Replied shows the first line as the chip text", () => {
-    expect(chipFor(makeTask({ state: needsYou({ type: "Replied", first_line: "Which database?" }) }))).toEqual({
+  it('Replied reads "Your turn", whatever the agent wrote', () => {
+    // the agent's words stay in the terminal; a reply to an app notice once took over the chip
+    const long = "Noted. My build is finished, so the undo task's start doesn't affect anything I'm doing.";
+    expect(chipFor(makeTask({ state: needsYou({ type: "Replied", first_line: long }) }))).toEqual({
       tone: "needs_you",
-      text: "Which database?",
+      text: "Your turn",
     });
-  });
-  it("Replied keeps one line trimmed to 80 characters", () => {
-    // Review Focus 5
-    const long = "a".repeat(100) + "\nsecond line";
-    const chip = chipFor(makeTask({ state: needsYou({ type: "Replied", first_line: long }) }));
-    expect(chip.text).toHaveLength(80);
-    expect(chip.text.endsWith("…")).toBe(true);
-    expect(chip.text).not.toContain("\n");
   });
   it('PermissionNeeded reads "Permission needed"', () => {
     expect(chipFor(makeTask({ state: needsYou({ type: "PermissionNeeded" }) })).text).toBe("Permission needed");

@@ -21,7 +21,7 @@ describe("hand-back chip text", () => {
   it("labels the other reasons from the task, and is empty outside needs-you", () => {
     expect(handbackLabel(makeTask({ stage: "Plan", state: needsYou() }))).toBe("Plan written, go?");
     expect(handbackLabel(makeTask({ state: needsYou({ type: "Replied", first_line: "Which DB?" }) }))).toBe(
-      "Which DB?",
+      "Your turn",
     );
     expect(handbackLabel(makeTask({ state: needsYou({ type: "PermissionNeeded" }) }))).toBe("Permission needed");
     expect(handbackLabel(makeTask({ state: needsYou({ type: "TestFailed", exit_code: 2 }) }))).toBe("Tests failed");

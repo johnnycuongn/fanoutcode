@@ -110,6 +110,9 @@ impl HooksTailer {
     }
 }
 
+/// The longest one event's handling may take before the pump moves on to the next line.
+const HANDLE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
 /// Reads the task's log from its cursor and handles each new complete line; `live` is false during launch replay
 /// (no git probes for calls long finished).
 async fn pump(app: &AppHandle, id: &TaskId, live: bool) -> Result<()> {
@@ -127,9 +130,16 @@ async fn pump(app: &AppHandle, id: &TaskId, live: bool) -> Result<()> {
     for line in lines {
         cursor.seq += 1;
         match parse_line(id, cursor.seq, &line) {
-            Ok(ev) => {
-                log_err("handling a hook event", hook_feed::handle(app, ev, &line, live).await);
-            }
+            Ok(ev) => match tokio::time::timeout(HANDLE_TIMEOUT, hook_feed::handle(app, ev, &line, live)).await {
+                Ok(r) => {
+                    log_err("handling a hook event", r);
+                }
+                // one stuck event must not hold every later one (and the task's chip) behind this pump's lock
+                Err(_) => eprintln!(
+                    "Fanout Code: gave up on event line {} of {id} after {HANDLE_TIMEOUT:?}",
+                    cursor.seq
+                ),
+            },
             Err(e) => eprintln!("Fanout Code: skipped event line {} of {id}: {e}", cursor.seq),
         }
     }

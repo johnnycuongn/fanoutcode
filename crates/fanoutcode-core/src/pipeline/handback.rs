@@ -73,7 +73,9 @@ pub fn chip_text(reason: &HandbackReason, stage: Stage) -> String {
             Stage::Done => "Done",
         }
         .to_owned(),
-        HandbackReason::Replied { first_line } => first_line.clone(),
+        // the agent stopped without the sentinel: it is waiting on the developer; its words stay in the terminal and
+        // the card's last-line tooltip, never on the chip, where a reply to an app notice read as a status
+        HandbackReason::Replied { .. } => "Your turn".to_owned(),
         HandbackReason::PermissionNeeded => "Permission needed".to_owned(),
         HandbackReason::TestFailed { .. } => "Tests failed".to_owned(),
         HandbackReason::Error { .. } => "Error".to_owned(),
@@ -224,7 +226,7 @@ mod tests {
                 },
                 Stage::Plan
             ),
-            "Which DB?"
+            "Your turn"
         );
         assert_eq!(
             chip_text(&HandbackReason::PermissionNeeded, Stage::Build),
@@ -281,7 +283,7 @@ mod tests {
         );
         assert_eq!(
             rows[7],
-            serde_json::json!({ "reason": { "type": "Replied", "first_line": "Which DB?" }, "stage": "Spec", "text": "Which DB?" })
+            serde_json::json!({ "reason": { "type": "Replied", "first_line": "Which DB?" }, "stage": "Spec", "text": "Your turn" })
         );
         assert_eq!(
             rows[25]["reason"],

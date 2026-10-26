@@ -20,7 +20,7 @@ export function chipText(reason: HandbackReason, stage: Stage): string {
     case "StageDone":
       return STAGE_DONE[stage];
     case "Replied":
-      return reason.first_line;
+      return "Your turn";
     case "PermissionNeeded":
       return "Permission needed";
     case "TestFailed":

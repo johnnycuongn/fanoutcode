@@ -100,7 +100,7 @@ test("the state chip shows handbackLabel's text and is absent when no hand-back 
   expect(screen.getByTestId("handback-chip").textContent).toBe("Plan written, go?"); // A2 canonical text
   const replied = makeTask({ state: { type: "NeedsYou", reason: { type: "Replied", first_line: "Which API?" } } });
   rerender(<TaskHeader {...props({ task: replied })} />);
-  expect(screen.getByText("Which API?")).toBeTruthy();
+  expect(screen.getByTestId("handback-chip").textContent).toBe("Your turn");
   rerender(<TaskHeader {...props()} />);
   expect(screen.queryByTestId("handback-chip")).toBeNull();
 });

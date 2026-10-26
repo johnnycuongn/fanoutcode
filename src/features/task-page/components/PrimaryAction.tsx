@@ -1,18 +1,25 @@
-// The header's primary button (⌘⏎), the queued hint while the agent works, and a split menu to start fresh instead.
+// The header's primary button (⌘⏎), the queued hint while the agent works, and a split menu with the stage's forward
+// step (when the button does something else, such as Reply) and Start fresh session.
 import { ChevronDown } from "lucide-react";
 import type { ReactElement } from "react";
 import { Button, Chip, IconButton, KeyHint, Menu, MenuContent, MenuItem, MenuTrigger } from "@/components/ui";
 import type { Stage, StageAction } from "@/lib/bindings";
-import { freshSessionAllowed, type PrimaryButton } from "../primaryAction";
+import { forwardActionFor, freshSessionAllowed, type PrimaryButton } from "../primaryAction";
 
 export interface PrimaryActionProps {
   primary: PrimaryButton;
   stage: Stage;
+  mayCommit: boolean;
   onPrimary(): void;
   onAction(a: StageAction): void;
 }
 
-export function PrimaryAction({ primary, stage, onPrimary, onAction }: PrimaryActionProps): ReactElement {
+export function PrimaryAction({ primary, stage, mayCommit, onPrimary, onAction }: PrimaryActionProps): ReactElement {
+  const forward = forwardActionFor(stage, { mayCommit });
+  // the forward step is always one click away, even while the button answers the agent or a decision
+  const next = forward && forward.label !== primary.label ? forward : null;
+  const fresh = freshSessionAllowed(stage);
+  const split = fresh || next !== null;
   return (
     <div className="flex items-center gap-1.5">
       {primary.hint && (
@@ -26,12 +33,12 @@ export function PrimaryAction({ primary, stage, onPrimary, onAction }: PrimaryAc
           size="sm"
           disabled={primary.disabled}
           onClick={onPrimary}
-          className={freshSessionAllowed(stage) ? "rounded-r-none" : undefined}
+          className={split ? "rounded-r-none" : undefined}
           trailing={<KeyHint aria-hidden keys="cmd+enter" size="sm" className="opacity-80" />}
         >
           {primary.label}
         </Button>
-        {freshSessionAllowed(stage) && (
+        {split && (
           <Menu>
             <MenuTrigger asChild>
               <IconButton
@@ -43,7 +50,8 @@ export function PrimaryAction({ primary, stage, onPrimary, onAction }: PrimaryAc
               />
             </MenuTrigger>
             <MenuContent align="end">
-              <MenuItem onSelect={() => onAction({ type: "StartFresh" })}>Start fresh session</MenuItem>
+              {next && <MenuItem onSelect={() => onAction(next.action)}>{next.label}</MenuItem>}
+              {fresh && <MenuItem onSelect={() => onAction({ type: "StartFresh" })}>Start fresh session</MenuItem>}
             </MenuContent>
           </Menu>
         )}

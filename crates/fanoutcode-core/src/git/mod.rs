@@ -17,6 +17,17 @@ pub async fn run(repo: &Path, args: &[&str]) -> Result<String> {
     run_with_input(repo, args, None).await
 }
 
+/// The longest a read-only query (`status`, `diff --numstat`) may take. Hook handling awaits these, and a git that
+/// never answers must not stall a task's event feed; commits and merges run the developer's hooks and get no limit.
+pub const QUERY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+
+/// As `run`, given up after `QUERY_TIMEOUT` (the child is killed on drop).
+pub async fn query(repo: &Path, args: &[&str]) -> Result<String> {
+    tokio::time::timeout(QUERY_TIMEOUT, run(repo, args))
+        .await
+        .map_err(|_| Error::Git(format!("git {} took longer than {}s", args.join(" "), QUERY_TIMEOUT.as_secs())))?
+}
+
 /// As `run`, writing `input` to git's stdin first (`commit -F -`).
 pub async fn run_with_input(repo: &Path, args: &[&str], input: Option<&str>) -> Result<String> {
     let mut cmd = Command::new("git");
@@ -119,7 +130,7 @@ fn parse_status(out: &str) -> Vec<StatusEntry> {
 /// The working tree and index against `HEAD`, untracked files listed one by one.
 pub async fn status(repo: &Path) -> Result<Vec<StatusEntry>> {
     Ok(parse_status(
-        &run(repo, &["status", "--porcelain=v1", "-z", "--untracked-files=all"]).await?,
+        &query(repo, &["status", "--porcelain=v1", "-z", "--untracked-files=all"]).await?,
     ))
 }
 
@@ -161,7 +172,7 @@ fn parse_numstat(out: &str) -> Vec<Numstat> {
 /// Line counts of the working tree against `base` (`HEAD` when `None`), plus every untracked file counted as added
 /// (newlines, as `wc -l` counts them; a file with a NUL byte is binary).
 pub async fn numstat(repo: &Path, base: Option<&str>) -> Result<Vec<Numstat>> {
-    let mut stats = parse_numstat(&run(repo, &["diff", "--numstat", "-z", base.unwrap_or("HEAD")]).await?);
+    let mut stats = parse_numstat(&query(repo, &["diff", "--numstat", "-z", base.unwrap_or("HEAD")]).await?);
     for e in status(repo).await? {
         if e.status != FileStatus::Untracked || stats.iter().any(|s| s.path == e.path) {
             continue;

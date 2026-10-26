@@ -272,7 +272,12 @@ pub async fn refresh(app: &AppHandle, task_id: &TaskId) -> Result<(Task, ChangeS
 /// never rebuilds: the watcher keeps the cache fresh.
 pub async fn cached(app: &AppHandle, task_id: &TaskId) -> Result<ChangeSet> {
     let state = app.state::<AppState>();
-    let hit = state.change_sets.lock().expect("change sets lock").get(task_id).cloned();
+    let hit = state
+        .change_sets
+        .lock()
+        .expect("change sets lock")
+        .get(task_id)
+        .cloned();
     match hit {
         Some(set) => Ok(set),
         None => Ok(rebuild(app, task_id).await?.1),

@@ -31,11 +31,54 @@ pub fn next_state(stage: Stage, ev: &HookEvent, artifact_changed: bool) -> Optio
     }
 }
 
+/// A derived state while the session answers a note the app typed in (another task's notice), given the state the
+/// task had when the note went in. The answer is not the developer's work, so it never replaces that state: busy
+/// events keep it, and a plain reply restores it. A finished stage, a permission prompt or a failure still shows.
+/// Returns the state to apply (`None` keeps the current one) and whether the note's turn is over.
+pub fn through_notice(before: &AgentState, next: AgentState) -> (Option<AgentState>, bool) {
+    match next {
+        AgentState::Working => (None, false),
+        AgentState::NeedsYou {
+            reason: HandbackReason::Replied { .. },
+        } => (Some(before.clone()), true),
+        other => (Some(other), true),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;
 
     use super::*;
+
+    fn build_done() -> AgentState {
+        AgentState::NeedsYou {
+            reason: HandbackReason::StageDone,
+        }
+    }
+
+    #[test]
+    fn a_reply_to_a_notice_keeps_the_earlier_hand_back() {
+        let reply = AgentState::NeedsYou {
+            reason: HandbackReason::Replied {
+                first_line: "Noted. My build is finished.".into(),
+            },
+        };
+        assert_eq!(through_notice(&build_done(), reply), (Some(build_done()), true));
+    }
+
+    #[test]
+    fn work_during_a_notice_leaves_the_chip_alone() {
+        assert_eq!(through_notice(&build_done(), AgentState::Working), (None, false));
+    }
+
+    #[test]
+    fn a_permission_prompt_during_a_notice_still_needs_you() {
+        let ask = AgentState::NeedsYou {
+            reason: HandbackReason::PermissionNeeded,
+        };
+        assert_eq!(through_notice(&build_done(), ask.clone()), (Some(ask), true));
+    }
 
     #[test]
     fn user_prompt_and_tool_use_mean_working() {
