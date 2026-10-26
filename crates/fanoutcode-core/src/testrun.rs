@@ -84,14 +84,23 @@ impl Tail {
 }
 
 /// Runs each command as `sh -c` in its folder, stderr merged into stdout, a `$ <command>  (<cwd>)` header sent
-/// before each; stops at the first non-zero exit. Dropping the future kills the child.
-pub async fn run(commands: &[TestCommand], on_output: &mut (dyn FnMut(Vec<u8>) + Send)) -> Result<TestResult> {
+/// before each; stops at the first non-zero exit. Dropping the future kills the child. `path_env` is the login
+/// shell's `PATH` (as sessions get), since an app opened from the Finder has only the system one and no `npm`.
+pub async fn run(
+    commands: &[TestCommand],
+    path_env: Option<&str>,
+    on_output: &mut (dyn FnMut(Vec<u8>) + Send),
+) -> Result<TestResult> {
     let mut tail = Tail::default();
     let (mut ran, mut exit_code) = (Vec::new(), 0);
     for c in commands {
         on_output(format!("$ {}  ({})\n", c.command, c.cwd.display()).into_bytes());
         ran.push(c.clone());
-        let mut child = Command::new("sh")
+        let mut cmd = Command::new("sh");
+        if let Some(path) = path_env {
+            cmd.env("PATH", path);
+        }
+        let mut child = cmd
             .args(["-c", &format!("exec 2>&1; {}", c.command)])
             .current_dir(&c.cwd)
             .stdin(Stdio::null())
@@ -262,9 +271,25 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn the_given_path_is_the_commands_path() {
+        let r = run(
+            &[cmd("echo \"$PATH\"")],
+            Some("/opt/login/bin:/usr/bin:/bin"),
+            &mut |_| {},
+        )
+        .await
+        .unwrap();
+        assert!(
+            r.tail.iter().any(|l| l == "/opt/login/bin:/usr/bin:/bin"),
+            "{:?}",
+            r.tail
+        );
+    }
+
+    #[tokio::test]
     async fn run_streams_output_and_returns_the_exit_code() {
         let mut out = Vec::new();
-        let r = run(&[cmd("printf 'a\\nb\\n'; echo err 1>&2; exit 3")], &mut |b| {
+        let r = run(&[cmd("printf 'a\\nb\\n'; echo err 1>&2; exit 3")], None, &mut |b| {
             out.extend(b)
         })
         .await
@@ -276,7 +301,7 @@ mod tests {
 
     #[tokio::test]
     async fn tail_keeps_the_last_200_lines() {
-        let r = run(&[cmd("seq 1 250")], &mut |_| {}).await.unwrap();
+        let r = run(&[cmd("seq 1 250")], None, &mut |_| {}).await.unwrap();
         assert_eq!(
             (r.tail.len(), r.tail[0].as_str(), r.tail[199].as_str(), r.exit_code),
             (200, "51", "250", 0)
@@ -285,7 +310,9 @@ mod tests {
 
     #[tokio::test]
     async fn a_failing_command_stops_the_sequence() {
-        let r = run(&[cmd("exit 2"), cmd("echo never")], &mut |_| {}).await.unwrap();
+        let r = run(&[cmd("exit 2"), cmd("echo never")], None, &mut |_| {})
+            .await
+            .unwrap();
         assert_eq!((r.exit_code, r.commands.len()), (2, 1));
         assert!(r.tail.is_empty());
     }
