@@ -60,7 +60,9 @@ export function createSpecStore(
     // A missing folder reads as nothing; only memory_missing tells it from a spec.md not written yet (§8).
     const missing = (await ipc.memoryMissing?.({ type: "Project", id: task.project_id })) ?? [];
     if (missing.includes(task.id)) throw `Task memory folder is missing: ${task.memory_dir}`;
-    return "";
+    // a task from before specs were seeded: start from its description (written on the first edit or Approve)
+    const intent = await ipc.memoryRead(task.id, "intent.md");
+    return typeof intent === "string" ? intent : "";
   }
 
   async function open(task: Task): Promise<void> {

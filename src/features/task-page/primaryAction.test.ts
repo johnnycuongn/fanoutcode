@@ -85,3 +85,10 @@ test("open blockers in review show on the Approve changes button", () => {
   expect(primaryActionFor(review, ctx).hint).toBeNull();
   expect(primaryActionFor(t("Build", { type: "Idle" }), { ...ctx, blockers: 1 }).hint).toBeNull();
 });
+
+test("a blank spec disables Approve spec and says why", () => {
+  const spec = t("Spec", { type: "Idle" });
+  const p = primaryActionFor(spec, { ...ctx, specEmpty: true });
+  expect([p.label, p.disabled, p.hint]).toEqual(["Approve spec", true, "Write the spec first"]);
+  expect(primaryActionFor(spec, { ...ctx, specEmpty: false }).disabled).toBe(false);
+});

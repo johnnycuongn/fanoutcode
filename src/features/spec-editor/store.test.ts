@@ -125,6 +125,15 @@ test("a folder memory_missing reports is an error, not an empty spec", async () 
     error: "Task memory folder is missing: /m/2026-10-24-a",
   });
 });
+test("a spec.md not written yet starts from the task's description", async () => {
+  const ipc = fakeIpc({
+    memoryRead: vi.fn(async (_id: string, file: string) => (file === "intent.md" ? "Fix the streak count" : null)),
+    memoryMissing: vi.fn(async () => []),
+  } as Partial<SpecIpc>);
+  const s = createSpecStore(ipc);
+  await s.open(task);
+  expect(s.store.get().byTask["task-1"]).toMatchObject({ loaded: true, text: "Fix the streak count" });
+});
 test("toggleTerminal flips the strip and the ratio defaults to 0.4", async () => {
   const s = createSpecStore(fakeIpc());
   await s.open(task);

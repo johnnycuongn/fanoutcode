@@ -20,6 +20,8 @@ export interface PrimaryCtx {
   queued: boolean;
   /** Blockers review.md lists (Review only); shown on the button before Approve changes. */
   blockers?: number;
+  /** spec.md is loaded and blank (Spec only): Approve spec waits for a spec. */
+  specEmpty?: boolean;
 }
 
 export const QUEUED_HINT = "Will send when idle";
@@ -93,12 +95,16 @@ function decide(task: Pick<Task, "stage" | "state" | "archived">, ctx: PrimaryCt
 }
 
 export function primaryActionFor(task: Pick<Task, "stage" | "state" | "archived">, ctx: PrimaryCtx): PrimaryButton {
+  const decided = decide(task, ctx);
   const b = ctx.blockers ?? 0;
+  const empty = task.stage === "Spec" && ctx.specEmpty === true && decided.intent.kind === "action";
   const hint =
     ctx.queued && isWorking(task.state)
       ? QUEUED_HINT
-      : task.stage === "Review" && b > 0
-        ? `${b} ${b === 1 ? "blocker" : "blockers"} in review`
-        : null;
-  return { ...decide(task, ctx), hint };
+      : empty
+        ? "Write the spec first"
+        : task.stage === "Review" && b > 0
+          ? `${b} ${b === 1 ? "blocker" : "blockers"} in review`
+          : null;
+  return { ...decided, disabled: decided.disabled || empty, hint };
 }

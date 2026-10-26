@@ -21,13 +21,13 @@ import type { TerminalPaneHandle } from "@/features/views";
 import { wantsSession } from "../body";
 import { acquireTaskPageEvents } from "../events";
 import { linksChanged } from "../links";
-import { primaryActionFor } from "../primaryAction";
 import { DEFAULT_TASK_SETTINGS, taskPageStore } from "../store";
 import { tasksSource } from "../taskSource";
 import { toggleWorktree } from "../worktree";
 import { TaskBody } from "./TaskBody";
 import { TaskHeader } from "./TaskHeader";
 import { useForwardGuard } from "../useForwardGuard";
+import { usePrimary } from "../usePrimary";
 
 export interface TaskPageHandle {
   primaryAction(): void;
@@ -101,9 +101,7 @@ export function TaskPage({
 
   const forward = useForwardGuard(task ?? null, { command: settings.testCommand, enabled: settings.testEnabled });
   const open = dockOpen ?? (task ? dockStore.defaultOpen(task.stage) : false);
-  const primary = task
-    ? primaryActionFor(task, { mayCommit: settings.mayCommit, queued, blockers: forward.blockers })
-    : null;
+  const primary = usePrimary(task, taskId, settings, queued, forward.blockers);
   const focusTerminal = () => terminalRef.current?.focus();
   const openDockTab = (tab: DockTab) => {
     if (!task) return;
@@ -111,7 +109,7 @@ export function TaskPage({
     setDockOpen(true);
   };
   const runPrimary = async () => {
-    if (!task) return;
+    if (!task || primary?.disabled) return;
     if (primary?.intent.kind === "focus-terminal" && task.stage === "Spec") {
       specStore.expandTerminal(taskId);
       // after the click settles, or the button takes focus back

@@ -10,7 +10,7 @@ use super::{apply, Effect};
 use crate::db;
 use crate::domain::{AgentState, Priority, ProjectId, Stage, Task, TaskId, WorkspaceId, WorktreeChoice};
 use crate::helpers::HelperKind;
-use crate::memory::{root_for, slug::title_from_intent, IndexEntry, TaskFolder, TimelineKind};
+use crate::memory::{root_for, slug::title_from_intent, IndexEntry, MemoryFile, TaskFolder, TimelineKind};
 use crate::settings::{keys, resolve, Scope};
 use crate::{Error, Result};
 
@@ -60,6 +60,8 @@ pub fn create_task(conn: &mut Connection, app_data: &Path, new: NewTask) -> Resu
     };
     let values = db::settings::load(conn, &scope)?;
     let folder = TaskFolder::create(&root_for(&project, app_data), new.date, &title, &new.intent)?;
+    // the spec starts as the description the developer just wrote, so the Spec stage never opens empty
+    folder.write(MemoryFile::Spec, &format!("{}\n", new.intent.trim()))?;
     let now = new.now;
     let task = Task {
         id: TaskId::new(),
@@ -177,6 +179,11 @@ mod tests {
         assert_eq!(
             f.read(MemoryFile::Intent).unwrap().as_deref(),
             Some("Add dark mode\n\nUse the theme tokens.")
+        );
+        assert_eq!(
+            f.read(MemoryFile::Spec).unwrap().as_deref(),
+            Some("Add dark mode\n\nUse the theme tokens.\n"),
+            "the spec is seeded from the description"
         );
         assert!(f.read(MemoryFile::Index).unwrap().unwrap().contains("· spec · created"));
         assert_eq!(db::tasks::get(&c, &t.id).unwrap().as_ref(), Some(t));
