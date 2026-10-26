@@ -109,6 +109,14 @@ test("the handle runs the primary action and focuses the terminal in the Replied
   expect(focusSpy).toHaveBeenCalled();
   expect(fakeCommands.tasksAction).not.toHaveBeenCalled();
 });
+test("in Spec, Claude Code's question opens the terminal strip and focuses it instead of approving", async () => {
+  const asks = { type: "NeedsYou", reason: { type: "AgentAsks", question: "TrustFolder" } } as const;
+  const ref = await open(makeTask({ stage: "Spec", state: asks }));
+  await act(() => ref.current!.primaryAction());
+  expect(specStore.store.get().byTask["task-1"]?.terminalExpanded).toBe(true);
+  await waitFor(() => expect(focusSpy).toHaveBeenCalled());
+  expect(fakeCommands.tasksAction).not.toHaveBeenCalled();
+});
 test("growTeam under Swap shows the team in the body and the terminal as a strip", async () => {
   fakeCommands.settingsGet.mockResolvedValue({ ...resolved, team_view_placement: "Swap" });
   const ref = await open(makeTask({ stage: "Build" }));

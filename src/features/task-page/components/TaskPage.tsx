@@ -110,7 +110,8 @@ export function TaskPage({
     if (!task) return;
     if (primary?.intent.kind === "focus-terminal" && task.stage === "Spec") {
       specStore.expandTerminal(taskId);
-      focusTerminal();
+      // after the click settles, or the button takes focus back
+      setTimeout(focusTerminal, 0);
     } else if (task.stage === "Spec" && !task.archived) {
       try {
         if (!(await specStore.approve(task))) toast.error(SAVE_FAILED);
