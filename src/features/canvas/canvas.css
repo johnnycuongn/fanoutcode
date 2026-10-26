@@ -22,3 +22,10 @@
     animation: none;
   }
 }
+
+/* The minimap follows the app theme: React Flow's own colours are white unless its colorMode is set. */
+.react-flow {
+  --xy-minimap-background-color: var(--color-card);
+  --xy-minimap-mask-background-color: color-mix(in oklab, var(--color-page) 55%, transparent);
+  --xy-minimap-node-background-color: var(--color-line);
+}
