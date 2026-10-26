@@ -12,6 +12,7 @@ const settings: TaskSettings = {
   mayCommit: false,
   costOverview: false,
   testCommand: null,
+  testEnabled: true,
   advanceOnGreen: false,
   dockPosition: "Bottom",
   teamViewPlacement: "DockGrows",
@@ -107,4 +108,11 @@ test("the state chip shows handbackLabel's text and is absent when no hand-back 
 test("the links-changed hint appears when asked", () => {
   render(<TaskHeader {...props({ linksChanged: true })} />);
   expect(screen.getByText("Links changed, start a fresh session to apply")).toBeTruthy();
+});
+
+test("with no test command the stepper says Test skipped instead of a green tick", () => {
+  const { container, rerender } = render(<StageStepper stage="Commit" skipTest />);
+  expect(container.querySelector('[data-state="skipped"]')?.textContent).toBe("Test skipped");
+  rerender(<StageStepper stage="Commit" />);
+  expect(container.querySelector('[data-state="skipped"]')).toBeNull();
 });

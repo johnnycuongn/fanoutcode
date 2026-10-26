@@ -1,8 +1,9 @@
-//! Project commands: open (find or create by root), list, update, close.
+//! Project commands: open (find or create by root), list, update, close, and the detected test command.
 
 use std::path::PathBuf;
 
 use fanoutcode_core::domain::{Container, MemoryLocation, Project, ProjectColor, ProjectId};
+use fanoutcode_core::test_detect::{self, DetectedTest};
 use fanoutcode_core::{db, Error, Result};
 use serde::Deserialize;
 use tauri::{AppHandle, Manager, State};
@@ -27,6 +28,16 @@ pub fn projects_open(state: State<'_, AppState>, path: PathBuf) -> Result<Projec
         return Err(Error::Precondition("Choose a folder".into()));
     }
     db::find_or_create_project(&state.db.lock().expect("db lock"), &root)
+}
+
+/// The test command found in the project's own files (package.json, Cargo.toml, …), used when none is set.
+#[tauri::command]
+#[specta::specta]
+pub fn projects_detect_test(state: State<'_, AppState>, id: ProjectId) -> Result<Option<DetectedTest>> {
+    let id = ProjectId::parse(id.as_str())?;
+    let project = db::projects::get(&state.db.lock().expect("db lock"), &id)?
+        .ok_or_else(|| Error::Invalid(format!("Unknown project {id}")))?;
+    Ok(test_detect::detect(&project.root))
 }
 
 #[tauri::command]

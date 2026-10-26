@@ -18,6 +18,8 @@ export interface PrimaryButton {
 export interface PrimaryCtx {
   mayCommit: boolean;
   queued: boolean;
+  /** Blockers review.md lists (Review only); shown on the button before Approve changes. */
+  blockers?: number;
 }
 
 export const QUEUED_HINT = "Will send when idle";
@@ -91,5 +93,12 @@ function decide(task: Pick<Task, "stage" | "state" | "archived">, ctx: PrimaryCt
 }
 
 export function primaryActionFor(task: Pick<Task, "stage" | "state" | "archived">, ctx: PrimaryCtx): PrimaryButton {
-  return { ...decide(task, ctx), hint: ctx.queued && isWorking(task.state) ? QUEUED_HINT : null };
+  const b = ctx.blockers ?? 0;
+  const hint =
+    ctx.queued && isWorking(task.state)
+      ? QUEUED_HINT
+      : task.stage === "Review" && b > 0
+        ? `${b} ${b === 1 ? "blocker" : "blockers"} in review`
+        : null;
+  return { ...decide(task, ctx), hint };
 }

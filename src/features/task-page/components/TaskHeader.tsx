@@ -5,6 +5,7 @@ import { useState, type ReactElement } from "react";
 import { Badge, Button, Chip, IconButton, Input } from "@/components/ui";
 import type { CostSummary, Project, StageAction, Task } from "@/lib/bindings";
 import { asSwatch, handbackLabel } from "@/lib/format";
+import { useDetectedTest } from "@/lib/detectedTest";
 import { useUncommitted } from "@/lib/uncommitted";
 import { handbackKind } from "../agentState";
 import type { PrimaryButton } from "../primaryAction";
@@ -78,6 +79,8 @@ function UncommittedChip({ task }: { task: Task }) {
 }
 
 export function TaskHeader(p: TaskHeaderProps): ReactElement {
+  const detected = useDetectedTest(p.task.project_id);
+  const testsRun = p.settings.testEnabled && Boolean(p.settings.testCommand?.trim() || detected);
   const { task } = p;
   return (
     <header className="shrink-0 border-b border-line bg-bar px-3 py-1.5">
@@ -113,7 +116,7 @@ export function TaskHeader(p: TaskHeaderProps): ReactElement {
             {task.title}
           </Button>
         )}
-        <StageStepper stage={task.stage} />
+        <StageStepper stage={task.stage} skipTest={!testsRun} />
         <HandbackChip task={task} />
         <UncommittedChip task={task} />
         <span className="flex-1" />

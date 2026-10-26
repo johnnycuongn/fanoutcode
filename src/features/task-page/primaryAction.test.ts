@@ -77,3 +77,11 @@ test("Claude Code's own question sends you to the terminal in every stage, Spec 
     expect(p.intent).toEqual({ kind: "focus-terminal" });
   }
 });
+
+test("open blockers in review show on the Approve changes button", () => {
+  const review = t("Review", { type: "Idle" });
+  expect(primaryActionFor(review, { ...ctx, blockers: 2 }).hint).toBe("2 blockers in review");
+  expect(primaryActionFor(review, { ...ctx, blockers: 1 }).hint).toBe("1 blocker in review");
+  expect(primaryActionFor(review, ctx).hint).toBeNull();
+  expect(primaryActionFor(t("Build", { type: "Idle" }), { ...ctx, blockers: 1 }).hint).toBeNull();
+});

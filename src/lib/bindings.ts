@@ -64,6 +64,17 @@ async projectsList() : Promise<Result<Project[], string>> {
     else return { status: "error", error: e  as any };
 }
 },
+/**
+ * The test command found in the project's own files (package.json, Cargo.toml, …), used when none is set.
+ */
+async projectsDetectTest(id: ProjectId) : Promise<Result<DetectedTest | null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("projects_detect_test", { id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async projectsUpdate(id: ProjectId, patch: ProjectPatch) : Promise<Result<Project, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("projects_update", { id, patch }) };
@@ -1321,6 +1332,10 @@ export type CostUpdated = { task_id: TaskId }
  */
 export type Decision = { type: "OnTopFile" } | { type: "OnTopAll" } | { type: "Replace" } | { type: "Hold" }
 export type DetailLevel = "Simple" | "Medium" | "Detailed"
+/**
+ * A command found in the project's own files, and the file that suggested it.
+ */
+export type DetectedTest = { command: string; source: string }
 export type DockPosition = "Bottom" | "Right"
 /**
  * One drafted commit and the files it covers (paths relative to its repo).

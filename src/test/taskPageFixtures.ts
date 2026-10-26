@@ -65,6 +65,7 @@ export function makeSettings(overrides: Partial<TaskSettings> = {}): TaskSetting
     mayCommit: false,
     costOverview: false,
     testCommand: null,
+    testEnabled: true,
     advanceOnGreen: false,
     dockPosition: "Bottom",
     teamViewPlacement: "DockGrows",

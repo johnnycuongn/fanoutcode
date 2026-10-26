@@ -65,7 +65,7 @@ pub fn build_prompt_ctx(
         workspace_context: Vec::new(),
         linked,
         link_policy: LinkPolicy::ReadAndModifyOnRequest,
-        test_command: resolve::<keys::TestCommand>(&values, &scope),
+        test_command: crate::test_detect::effective(resolve::<keys::TestCommand>(&values, &scope), &project.root),
         last_test: None,
         app_override: None,
         project_override: None,

@@ -33,6 +33,7 @@ pub fn builder() -> Builder<tauri::Wry> {
             settings::settings_set,
             projects::projects_open,
             projects::projects_list,
+            projects::projects_detect_test,
             projects::projects_update,
             projects::projects_close,
             memory::memory_read,

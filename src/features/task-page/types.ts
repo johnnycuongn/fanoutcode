@@ -7,6 +7,7 @@ export interface TaskSettings {
   mayCommit: boolean;
   costOverview: boolean;
   testCommand: string | null;
+  testEnabled: boolean;
   advanceOnGreen: boolean;
   dockPosition: DockPosition;
   teamViewPlacement: TeamPlacement;

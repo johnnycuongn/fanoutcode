@@ -27,7 +27,7 @@ import { tasksSource } from "../taskSource";
 import { toggleWorktree } from "../worktree";
 import { TaskBody } from "./TaskBody";
 import { TaskHeader } from "./TaskHeader";
-import { useMarkDoneGuard } from "../useMarkDoneGuard";
+import { useForwardGuard } from "../useForwardGuard";
 
 export interface TaskPageHandle {
   primaryAction(): void;
@@ -99,9 +99,11 @@ export function TaskPage({
     if (needsSession) void taskPageStore.startSession(taskId);
   }, [taskId, needsSession]);
 
-  const markDone = useMarkDoneGuard(task ?? null);
+  const forward = useForwardGuard(task ?? null);
   const open = dockOpen ?? (task ? dockStore.defaultOpen(task.stage) : false);
-  const primary = task ? primaryActionFor(task, { mayCommit: settings.mayCommit, queued }) : null;
+  const primary = task
+    ? primaryActionFor(task, { mayCommit: settings.mayCommit, queued, blockers: forward.blockers })
+    : null;
   const focusTerminal = () => terminalRef.current?.focus();
   const openDockTab = (tab: DockTab) => {
     if (!task) return;
@@ -120,7 +122,7 @@ export function TaskPage({
       } catch (e) {
         toast.error(typeof e === "string" ? e : String(e));
       }
-    } else if (primary?.intent.kind !== "action" || (await markDone.guard(primary.intent.action)))
+    } else if (primary?.intent.kind !== "action" || (await forward.guard(primary.intent.action)))
       await taskPageStore.runPrimary(taskId, focusTerminal, openDockTab);
   };
   const growTeam = () => {
@@ -167,7 +169,7 @@ export function TaskPage({
         onPrimary={() => void runPrimary()}
         onBack={onBack}
         onRename={(title) => void taskPageStore.rename(taskId, title)}
-        onAction={(a) => markDone.ifAllowed(a, () => taskPageStore.act(taskId, a))}
+        onAction={(a) => forward.ifAllowed(a, () => taskPageStore.act(taskId, a))}
         onStopAgent={() => void taskPageStore.stopAgent(taskId)}
         onLinkIssue={() => openDockTab("ticket")}
         onIntegrate={bringBaseIn.start}
@@ -193,7 +195,7 @@ export function TaskPage({
         />
       </div>
       {bringBaseIn.dialog}
-      {markDone.dialog}
+      {forward.dialog}
     </div>
   );
 }
