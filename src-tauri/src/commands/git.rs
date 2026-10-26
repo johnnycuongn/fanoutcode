@@ -121,6 +121,23 @@ pub async fn git_include_other(
     git_watcher::refresh(&app, &task.id).await.map(|_| ())
 }
 
+/// How many of the task's files are not committed yet, by the Commit stage's own Done check (§6.6): "Mark done"
+/// asks first, and a Done task says so.
+#[tauri::command]
+#[specta::specta]
+pub async fn git_uncommitted(state: State<'_, AppState>, task_id: TaskId) -> Result<u32> {
+    let id = TaskId::parse(task_id.as_str())?;
+    let (task, home) = observe::task_and_home(&state, &id)?;
+    let repos = observe::repos(&task, &home);
+    let files = observe::with_attributor(&state, &id, &repos, |a| a.files().to_vec())?;
+    let last = state.change_sets.lock().expect("change sets lock").get(&id).cloned();
+    let mut pending = 0;
+    for (repo, paths) in changes::done_paths(&repos, &files, last.as_ref(), &[]) {
+        pending += git::pending_paths(&repo, &paths).await?.len();
+    }
+    Ok(u32::try_from(pending).unwrap_or(u32::MAX))
+}
+
 /// The drafts in the task's `commits.md`, by repo (Plan 08's Commit tab).
 #[tauri::command]
 #[specta::specta]

@@ -466,6 +466,18 @@ async gitDrafts(taskId: TaskId) : Promise<Result<RepoCommits[], string>> {
 }
 },
 /**
+ * How many of the task's files are not committed yet, by the Commit stage's own Done check (§6.6): "Mark done"
+ * asks first, and a Done task says so.
+ */
+async gitUncommitted(taskId: TaskId) : Promise<Result<number, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("git_uncommitted", { taskId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
  * The Commit tab's Commit button for one draft; refused unless "Fanout Code may commit" is on.
  */
 async gitCommit(taskId: TaskId, repo: string, index: number) : Promise<Result<string, string>> {

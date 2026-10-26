@@ -114,6 +114,49 @@ pub fn launch_plan(
     }
 }
 
+/// Whether `root` can give a task its own worktree: a git repo with a commit at `HEAD` (`git worktree add` needs
+/// one). A plain folder or a repo with no commits yet keeps tasks in the checkout.
+pub fn can_host(root: &Path) -> bool {
+    std::process::Command::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(["rev-parse", "--verify", "--quiet", "HEAD"])
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_WORK_TREE")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .is_ok_and(|s| s.success())
+}
+
+/// Adds `worktrees_dir` to the repo's own `.git/info/exclude` when it sits inside `root`, so the checkout's status
+/// does not list every task's worktree as untracked. Never touches `.gitignore`; a no-op when already listed or when
+/// `root` is itself a linked worktree (its `.git` is a file).
+pub fn exclude_worktrees_dir(root: &Path, worktrees_dir: &Path) -> Result<()> {
+    let Ok(rel) = worktrees_dir.strip_prefix(root) else {
+        return Ok(());
+    };
+    let git_dir = root.join(".git");
+    if !git_dir.is_dir() || rel.as_os_str().is_empty() {
+        return Ok(());
+    }
+    let line = format!("/{}/", rel.to_string_lossy().trim_end_matches('/'));
+    let path = git_dir.join("info").join("exclude");
+    let current = std::fs::read_to_string(&path).unwrap_or_default();
+    if current.lines().any(|l| l.trim() == line) {
+        return Ok(());
+    }
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let sep = if current.is_empty() || current.ends_with('\n') {
+        ""
+    } else {
+        "\n"
+    };
+    crate::memory::store::write_atomic(&path, format!("{current}{sep}{line}\n").as_bytes())
+}
+
 /// `git worktree add <path> -b <branch>`, or `git worktree add <path> <branch>` when the branch already exists.
 pub async fn create_managed(c: &ManagedCreate) -> Result<()> {
     let path = c.path.to_string_lossy();
@@ -184,6 +227,7 @@ pub fn prepare(
             let path = managed_path(worktrees_dir, &slug);
             let branch = branch_for(&slug);
             if !path.exists() {
+                exclude_worktrees_dir(root, worktrees_dir)?;
                 if let Some(parent) = path.parent() {
                     std::fs::create_dir_all(parent)?;
                 }
@@ -209,6 +253,32 @@ mod tests {
     use crate::domain::SessionId;
     use crate::git::test_support::temp_repo;
     use crate::test_support::task_fixture;
+
+    #[test]
+    fn a_repo_with_a_commit_can_host_a_worktree_and_a_plain_folder_cannot() {
+        assert!(can_host(temp_repo().path()));
+        assert!(!can_host(tempfile::tempdir().unwrap().path()));
+        let empty = tempfile::tempdir().unwrap();
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(empty.path())
+            .args(["init", "-q"])
+            .status()
+            .unwrap();
+        assert!(!can_host(empty.path()), "no commit yet");
+    }
+
+    #[test]
+    fn the_worktrees_dir_is_excluded_once_and_only_inside_the_repo() {
+        let repo = temp_repo();
+        let root = repo.path();
+        exclude_worktrees_dir(root, &root.join(".worktrees")).unwrap();
+        exclude_worktrees_dir(root, &root.join(".worktrees")).unwrap();
+        exclude_worktrees_dir(root, Path::new("/elsewhere/wt")).unwrap();
+        let text = std::fs::read_to_string(root.join(".git/info/exclude")).unwrap();
+        assert_eq!(text.lines().filter(|l| *l == "/.worktrees/").count(), 1);
+        assert!(!text.contains("elsewhere"));
+    }
 
     fn task_named(folder: &str, wt: WorktreeChoice) -> Task {
         let mut t = task_fixture("t-1a-1", "p-1a-1");

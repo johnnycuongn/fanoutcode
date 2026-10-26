@@ -8,7 +8,7 @@ use rusqlite::Connection;
 
 use super::{apply, Effect};
 use crate::db;
-use crate::domain::{AgentState, Priority, ProjectId, Stage, Task, TaskId, WorkspaceId};
+use crate::domain::{AgentState, Priority, ProjectId, Stage, Task, TaskId, WorkspaceId, WorktreeChoice};
 use crate::helpers::HelperKind;
 use crate::memory::{root_for, slug::title_from_intent, IndexEntry, TaskFolder, TimelineKind};
 use crate::settings::{keys, resolve, Scope};
@@ -75,7 +75,11 @@ pub fn create_task(conn: &mut Connection, app_data: &Path, new: NewTask) -> Resu
         archived: false,
         jira_key: new.jira_key,
         agent_kind: resolve::<keys::AgentKind>(&values, &scope),
-        worktree: resolve::<keys::Worktree>(&values, &scope),
+        worktree: match resolve::<keys::Worktree>(&values, &scope) {
+            // parallel tasks get their own worktree by default; a folder that cannot host one keeps the checkout
+            WorktreeChoice::On if !crate::worktree::can_host(&project.root) => WorktreeChoice::Off,
+            w => w,
+        },
         worktree_path: None,
         branch: None,
         memory_dir: folder.dir().to_owned(),
@@ -125,10 +129,10 @@ mod tests {
     use rusqlite::Connection;
 
     use super::*;
-    use crate::domain::{AgentKind, MemoryLocation, WorktreeChoice};
+    use crate::domain::{AgentKind, MemoryLocation};
     use crate::memory::MemoryFile;
     use crate::settings::ScopeKind;
-    use crate::test_support::{insert_project, insert_workspace_with, project_fixture, test_conn};
+    use crate::test_support::{insert_project, insert_project_at, insert_workspace_with, project_fixture, test_conn};
 
     fn day() -> NaiveDate {
         NaiveDate::from_ymd_opt(2026, 10, 24).unwrap()
@@ -183,7 +187,8 @@ mod tests {
     fn project_defaults_set_worktree_and_agent_kind_and_a_given_title_skips_naming() {
         let mut c = test_conn();
         let data = tempfile::tempdir().unwrap();
-        let p = insert_project(&c, "p-1a-1");
+        let repo = crate::git::test_support::temp_repo();
+        let p = insert_project_at(&c, "p-1a-1", repo.path().to_str().unwrap());
         db::settings::set(&c, ScopeKind::Project, "p-1a-1", "worktree", &serde_json::json!("On")).unwrap();
         db::settings::set(
             &c,

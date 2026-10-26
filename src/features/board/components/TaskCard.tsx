@@ -4,13 +4,12 @@ import { Badge, Tooltip, cx } from "@/components/ui";
 import type { AgentKind, CostSummary, DetailLevel, Priority, Project, Task } from "@/lib/bindings";
 import { swatchClass } from "@/lib/theme";
 import { overlapsText } from "@/features/overlap";
-import { chipFor } from "../chipText";
 import { formatCost, formatTokens } from "../cost";
 import type { CardActivity, OpenTarget } from "../types";
-import { CardChip } from "./CardChip";
 import { CardStepper } from "./CardStepper";
 import { CardTeamRow } from "./CardTeamRow";
 import { ElapsedTime } from "./ElapsedTime";
+import { TaskChip } from "./TaskChip";
 
 export type TaskCardProps = {
   task: Task;
@@ -136,7 +135,7 @@ function TaskCardImpl(props: TaskCardProps): ReactElement {
           </div>
         </div>
         <div className="flex items-center gap-1.5 text-xs">
-          <CardChip model={chipFor(task)} />
+          <TaskChip task={task} />
           {overlaps > 0 && (
             <Badge size="sm" className="shrink-0">
               {overlapsText(overlaps)}

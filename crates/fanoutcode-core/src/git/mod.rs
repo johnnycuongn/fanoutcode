@@ -236,13 +236,20 @@ pub fn effective_base(task: &crate::domain::Task, repo_root: &Path, head: &str) 
 /// True when none of `task_files` is still pending in the working tree or index: each is committed or was undone,
 /// so nothing is left for the developer to commit. An empty list is true. The base plays no part.
 pub async fn commit_done(repo: &Path, task_files: &[String]) -> Result<bool> {
+    Ok(pending_paths(repo, task_files).await?.is_empty())
+}
+
+/// The `task_files` still pending in the working tree or index (a rename counts under its old name too).
+pub async fn pending_paths(repo: &Path, task_files: &[String]) -> Result<Vec<String>> {
     if task_files.is_empty() {
-        return Ok(true);
+        return Ok(Vec::new());
     }
-    Ok(!status(repo)
-        .await?
+    let status = status(repo).await?;
+    Ok(task_files
         .iter()
-        .any(|e| task_files.contains(&e.path) || e.orig_path.as_ref().is_some_and(|o| task_files.contains(o))))
+        .filter(|f| status.iter().any(|e| &&e.path == f || e.orig_path.as_ref() == Some(*f)))
+        .cloned()
+        .collect())
 }
 
 /// What a file-system event in a watched repo means for the task.
@@ -430,6 +437,10 @@ mod tests {
         run(r.path(), &["add", "a.rs"]).await.unwrap();
         run(r.path(), &["commit", "-qm", "a"]).await.unwrap();
         assert!(!commit_done(r.path(), &["a.rs".into(), "b.rs".into()]).await.unwrap());
+        assert_eq!(
+            pending_paths(r.path(), &["a.rs".into(), "b.rs".into()]).await.unwrap(),
+            ["b.rs"]
+        );
         run(r.path(), &["add", "b.rs"]).await.unwrap();
         run(r.path(), &["commit", "-qm", "b"]).await.unwrap();
         assert!(commit_done(r.path(), &["a.rs".into(), "b.rs".into()]).await.unwrap());

@@ -68,7 +68,7 @@ settings_table! {
     TeamDrillInLens, team_drill_in_lens, [App], (values::DrillInLens), values::DrillInLens::ByFile;
     WorkspaceProjectLayer, workspace_project_layer, [App, Workspace], (values::ProjectLayer), values::ProjectLayer::MultiRoot;
     WorkspaceBoard, workspace_board, [App, Workspace], (values::WorkspaceBoard), values::WorkspaceBoard::Swimlanes;
-    Worktree, worktree, [Project, Task], (domain::WorktreeChoice), domain::WorktreeChoice::Off;
+    Worktree, worktree, [Project, Task], (domain::WorktreeChoice), domain::WorktreeChoice::On;
     WorktreeConvention, worktree_convention, [App, Project], (Option<domain::WorktreeConvention>), None;
     WorktreesDir, worktrees_dir, [Project], (Option<String>), None;
     MayCommit, may_commit, [Project], (bool), false;

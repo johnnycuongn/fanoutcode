@@ -5,6 +5,7 @@ import { useState, type ReactElement } from "react";
 import { Badge, Button, Chip, IconButton, Input } from "@/components/ui";
 import type { CostSummary, Project, StageAction, Task } from "@/lib/bindings";
 import { asSwatch, handbackLabel } from "@/lib/format";
+import { useUncommitted } from "@/lib/uncommitted";
 import { handbackKind } from "../agentState";
 import type { PrimaryButton } from "../primaryAction";
 import type { TaskSettings } from "../types";
@@ -65,6 +66,17 @@ function HandbackChip({ task }: { task: Task }) {
   );
 }
 
+/** Done, but some of the task's files are still only in the working tree. */
+function UncommittedChip({ task }: { task: Task }) {
+  const n = useUncommitted(task.id, task.stage === "Done");
+  if (n === 0) return null;
+  return (
+    <Chip size="sm" tone="warn">
+      {n === 1 ? "1 file not committed" : `${n} files not committed`}
+    </Chip>
+  );
+}
+
 export function TaskHeader(p: TaskHeaderProps): ReactElement {
   const { task } = p;
   return (
@@ -103,6 +115,7 @@ export function TaskHeader(p: TaskHeaderProps): ReactElement {
         )}
         <StageStepper stage={task.stage} />
         <HandbackChip task={task} />
+        <UncommittedChip task={task} />
         <span className="flex-1" />
         {p.settings.costOverview && <CostMeter cost={p.cost} contextPct={p.contextPct} />}
         <PrimaryAction
