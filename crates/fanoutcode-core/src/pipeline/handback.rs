@@ -4,7 +4,7 @@
 #[cfg(test)]
 use std::path::Path;
 
-use crate::domain::{HandbackReason, Stage};
+use crate::domain::{AgentQuestion, HandbackReason, Stage};
 
 /// The start of every sentinel line; the full line is `FANOUTCODE: <stage> done`.
 pub const SENTINEL_PREFIX: &str = "FANOUTCODE: ";
@@ -83,10 +83,16 @@ pub fn chip_text(reason: &HandbackReason, stage: Stage) -> String {
         HandbackReason::FileInUse { pending } => format!("{pending} files in use"),
         HandbackReason::HoldingFor { other } => format!("Holding for {other}"),
         HandbackReason::MergeNeedsYou { .. } => "Merge needs you".to_owned(),
+        HandbackReason::AgentAsks { question } => match question {
+            AgentQuestion::TrustFolder => "Trust this folder?",
+            AgentQuestion::SignIn => "Sign in to Claude Code",
+            AgentQuestion::Setup => "Finish Claude Code setup",
+        }
+        .to_owned(),
     }
 }
 
-/// Writes `HANDBACK_FIXTURE`: every reason × stage, `{reason, stage, text}`, pretty-printed (A20: 35 rows, 63 with Plan 11's reasons).
+/// Writes `HANDBACK_FIXTURE`: every reason × stage, `{reason, stage, text}`, pretty-printed (A20: 35 rows, 63 with Plan 11's reasons, 84 with Claude Code's own questions).
 #[cfg(test)]
 pub(crate) fn write_handback_fixture(path: &Path) -> crate::Result<()> {
     let reasons = [
@@ -104,6 +110,15 @@ pub(crate) fn write_handback_fixture(path: &Path) -> crate::Result<()> {
         HandbackReason::MergeNeedsYou {
             repo: "/r".into(),
             paths: vec![],
+        },
+        HandbackReason::AgentAsks {
+            question: AgentQuestion::TrustFolder,
+        },
+        HandbackReason::AgentAsks {
+            question: AgentQuestion::SignIn,
+        },
+        HandbackReason::AgentAsks {
+            question: AgentQuestion::Setup,
         },
     ];
     let mut rows = Vec::new();
@@ -276,7 +291,7 @@ mod tests {
         write_handback_fixture(&path).unwrap();
         let v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
         let rows = v.as_array().unwrap();
-        assert_eq!(rows.len(), 63);
+        assert_eq!(rows.len(), 84);
         assert_eq!(
             rows[1],
             serde_json::json!({ "reason": { "type": "StageDone" }, "stage": "Plan", "text": "Plan written, go?" })

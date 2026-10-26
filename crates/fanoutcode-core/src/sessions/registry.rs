@@ -4,7 +4,8 @@
 use std::collections::HashMap;
 use std::time::Instant;
 
-use crate::domain::{AgentKind, PaneId, Session, SessionId, TaskId, WindowId};
+use crate::domain::{AgentKind, AgentQuestion, PaneId, Session, SessionId, TaskId, WindowId};
+use crate::sessions::agent_prompt::PromptWatch;
 use crate::sessions::driver::Pty;
 use crate::sessions::flow::FlowControl;
 use crate::sessions::inject::{frame_prompt, IdleTracker, InjectQueue, QueueOutcome};
@@ -31,6 +32,8 @@ pub struct LiveSession {
     sink: Option<Box<dyn OutputSink>>,
     flow: FlowControl,
     size: (u16, u16),
+    /// Claude Code only, until its first hook: reads the output for its own questions (trust, sign-in, setup).
+    prompt_watch: Option<PromptWatch>,
 }
 
 impl LiveSession {
@@ -119,6 +122,7 @@ impl SessionRegistry {
             sink: None,
             flow: FlowControl::default(),
             size,
+            prompt_watch: (session.kind == AgentKind::ClaudeCode).then(PromptWatch::default),
             session,
         };
         self.live.insert(live.session.id.clone(), live);
@@ -206,11 +210,24 @@ impl SessionRegistry {
         Ok(())
     }
 
-    pub fn on_output(&mut self, id: &SessionId, bytes: &[u8], now: Instant) {
-        let Some(live) = self.live.get_mut(id) else { return };
+    /// Output from the PTY; the question Claude Code newly shows before its first hook, if any.
+    pub fn on_output(&mut self, id: &SessionId, bytes: &[u8], now: Instant) -> Option<AgentQuestion> {
+        let live = self.live.get_mut(id)?;
         live.scrollback.push(bytes);
         live.idle.on_output(now);
         live.send(bytes.to_vec());
+        live.prompt_watch.as_mut()?.feed(bytes)
+    }
+
+    /// The task's session fired its first hook: Claude Code's own questions are behind it.
+    pub fn end_prompt_watch(&mut self, task: &TaskId) {
+        for live in self
+            .live
+            .values_mut()
+            .filter(|l| l.session.task_id.as_ref() == Some(task))
+        {
+            live.prompt_watch = None;
+        }
     }
 
     /// Marks the session exited: the queue is cleared, the pane keeps its scrollback but gets no more bytes, and

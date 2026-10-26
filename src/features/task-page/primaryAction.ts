@@ -72,6 +72,8 @@ const button = (label: string, intent: PrimaryIntent, disabled = false): Omit<Pr
 function decide(task: Pick<Task, "stage" | "state" | "archived">, ctx: PrimaryCtx): Omit<PrimaryButton, "hint"> {
   if (task.archived) return button("Restore", { kind: "action", action: action("Restore") });
   const kind = handbackKind(task.state);
+  // Claude Code's own question (trust, sign-in) is answered in its terminal, whatever the stage
+  if (kind === "AgentAsks") return button("Answer in terminal", { kind: "focus-terminal" });
   if (kind === "Replied" && task.stage !== "Spec" && task.stage !== "Done")
     return button("Reply", { kind: "focus-terminal" });
   // Plan 11: an overlap decision or a stuck merge is settled in the Overlap tab, whatever the stage (a Done card can

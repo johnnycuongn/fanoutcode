@@ -495,5 +495,173 @@
     },
     "stage": "Done",
     "text": "Merge needs you"
+  },
+  {
+    "reason": {
+      "question": "TrustFolder",
+      "type": "AgentAsks"
+    },
+    "stage": "Spec",
+    "text": "Trust this folder?"
+  },
+  {
+    "reason": {
+      "question": "TrustFolder",
+      "type": "AgentAsks"
+    },
+    "stage": "Plan",
+    "text": "Trust this folder?"
+  },
+  {
+    "reason": {
+      "question": "TrustFolder",
+      "type": "AgentAsks"
+    },
+    "stage": "Build",
+    "text": "Trust this folder?"
+  },
+  {
+    "reason": {
+      "question": "TrustFolder",
+      "type": "AgentAsks"
+    },
+    "stage": "Review",
+    "text": "Trust this folder?"
+  },
+  {
+    "reason": {
+      "question": "TrustFolder",
+      "type": "AgentAsks"
+    },
+    "stage": "Test",
+    "text": "Trust this folder?"
+  },
+  {
+    "reason": {
+      "question": "TrustFolder",
+      "type": "AgentAsks"
+    },
+    "stage": "Commit",
+    "text": "Trust this folder?"
+  },
+  {
+    "reason": {
+      "question": "TrustFolder",
+      "type": "AgentAsks"
+    },
+    "stage": "Done",
+    "text": "Trust this folder?"
+  },
+  {
+    "reason": {
+      "question": "SignIn",
+      "type": "AgentAsks"
+    },
+    "stage": "Spec",
+    "text": "Sign in to Claude Code"
+  },
+  {
+    "reason": {
+      "question": "SignIn",
+      "type": "AgentAsks"
+    },
+    "stage": "Plan",
+    "text": "Sign in to Claude Code"
+  },
+  {
+    "reason": {
+      "question": "SignIn",
+      "type": "AgentAsks"
+    },
+    "stage": "Build",
+    "text": "Sign in to Claude Code"
+  },
+  {
+    "reason": {
+      "question": "SignIn",
+      "type": "AgentAsks"
+    },
+    "stage": "Review",
+    "text": "Sign in to Claude Code"
+  },
+  {
+    "reason": {
+      "question": "SignIn",
+      "type": "AgentAsks"
+    },
+    "stage": "Test",
+    "text": "Sign in to Claude Code"
+  },
+  {
+    "reason": {
+      "question": "SignIn",
+      "type": "AgentAsks"
+    },
+    "stage": "Commit",
+    "text": "Sign in to Claude Code"
+  },
+  {
+    "reason": {
+      "question": "SignIn",
+      "type": "AgentAsks"
+    },
+    "stage": "Done",
+    "text": "Sign in to Claude Code"
+  },
+  {
+    "reason": {
+      "question": "Setup",
+      "type": "AgentAsks"
+    },
+    "stage": "Spec",
+    "text": "Finish Claude Code setup"
+  },
+  {
+    "reason": {
+      "question": "Setup",
+      "type": "AgentAsks"
+    },
+    "stage": "Plan",
+    "text": "Finish Claude Code setup"
+  },
+  {
+    "reason": {
+      "question": "Setup",
+      "type": "AgentAsks"
+    },
+    "stage": "Build",
+    "text": "Finish Claude Code setup"
+  },
+  {
+    "reason": {
+      "question": "Setup",
+      "type": "AgentAsks"
+    },
+    "stage": "Review",
+    "text": "Finish Claude Code setup"
+  },
+  {
+    "reason": {
+      "question": "Setup",
+      "type": "AgentAsks"
+    },
+    "stage": "Test",
+    "text": "Finish Claude Code setup"
+  },
+  {
+    "reason": {
+      "question": "Setup",
+      "type": "AgentAsks"
+    },
+    "stage": "Commit",
+    "text": "Finish Claude Code setup"
+  },
+  {
+    "reason": {
+      "question": "Setup",
+      "type": "AgentAsks"
+    },
+    "stage": "Done",
+    "text": "Finish Claude Code setup"
   }
 ]

@@ -25,7 +25,13 @@ pub const QUERY_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15
 pub async fn query(repo: &Path, args: &[&str]) -> Result<String> {
     tokio::time::timeout(QUERY_TIMEOUT, run(repo, args))
         .await
-        .map_err(|_| Error::Git(format!("git {} took longer than {}s", args.join(" "), QUERY_TIMEOUT.as_secs())))?
+        .map_err(|_| {
+            Error::Git(format!(
+                "git {} took longer than {}s",
+                args.join(" "),
+                QUERY_TIMEOUT.as_secs()
+            ))
+        })?
 }
 
 /// As `run`, writing `input` to git's stdin first (`commit -F -`).

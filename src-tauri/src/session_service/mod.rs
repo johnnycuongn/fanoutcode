@@ -6,7 +6,10 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use chrono::Utc;
-use fanoutcode_core::domain::{AgentKind, Project, ProjectId, Session, SessionId, Task, TaskId, WorktreeChoice};
+use fanoutcode_core::domain::{
+    AgentKind, AgentQuestion, AgentState, HandbackReason, Project, ProjectId, Session, SessionId, Task, TaskId,
+    WorktreeChoice,
+};
 use fanoutcode_core::hooks::{event_log_path, hook_specs, status_line_command, user_status_line};
 use fanoutcode_core::roster::{self, RosterLevel, RosterScope};
 use fanoutcode_core::sessions::{
@@ -88,12 +91,15 @@ pub fn start(app: &AppHandle, session: Session, launch: LaunchSpec) -> Result<Se
     let id = session.id.clone();
     db::sessions::insert(&state.db.lock().expect("db lock"), &session)?;
     let lines = scrollback_lines(&state.db.lock().expect("db lock"))?;
-    let (out_reg, out_id) = (state.sessions.clone(), id.clone());
+    let (out_reg, out_id, out_app) = (state.sessions.clone(), id.clone(), app.clone());
     let on_output = Box::new(move |bytes: &[u8]| {
-        out_reg
+        let asked = out_reg
             .lock()
             .expect("sessions lock")
             .on_output(&out_id, bytes, Instant::now());
+        if let Some(question) = asked {
+            agent_asks(&out_app, &out_id, question);
+        }
     });
     let (exit_app, exit_id) = (app.clone(), id.clone());
     let on_exit = Box::new(move |code: i32| exited(&exit_app, &exit_id, code));
@@ -116,6 +122,21 @@ pub fn start(app: &AppHandle, session: Session, launch: LaunchSpec) -> Result<Se
         }
     }
     Ok(id)
+}
+
+/// Claude Code shows its own question (trust, sign-in, setup) before any hook: the card says so, since nothing else
+/// will until it is answered in the terminal.
+fn agent_asks(app: &AppHandle, id: &SessionId, question: AgentQuestion) {
+    let state = app.state::<AppState>();
+    let task = state.registry().get(id).and_then(|s| s.task_id.clone());
+    let Some(task) = task else { return };
+    let next = AgentState::NeedsYou {
+        reason: HandbackReason::AgentAsks { question },
+    };
+    log_err(
+        "showing Claude Code's question",
+        crate::overlap_sync::apply_derived(app, &state, &task, next),
+    );
 }
 
 /// The PTY's exit: the registry drops the queue and the pane's sink, the row records the code, every window hears.

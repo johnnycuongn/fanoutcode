@@ -1227,6 +1227,22 @@ export type Accent = "Blue" | "Violet" | "Teal" | "Orange"
  */
 export type ActionOutcome = { task: Task; toasts: string[] }
 export type AgentKind = "ClaudeCode" | "Codex" | "Shell"
+/**
+ * A question Claude Code asks in its own terminal before its first hook.
+ */
+export type AgentQuestion = 
+/**
+ * "Do you trust the files in this folder?"
+ */
+"TrustFolder" | 
+/**
+ * The login screen, or a rejected key.
+ */
+"SignIn" | 
+/**
+ * First-run setup (text style, welcome).
+ */
+"Setup"
 export type AgentState = { type: "Working" } | { type: "NeedsYou"; reason: HandbackReason } | { type: "Idle" }
 /**
  * One step of a path from the root to a `Split`.
@@ -1326,7 +1342,11 @@ export type HandbackReason =
 /**
  * Bringing the base branch in left conflicts the session could not resolve.
  */
-{ type: "MergeNeedsYou"; repo: string; paths: string[] }
+{ type: "MergeNeedsYou"; repo: string; paths: string[] } | 
+/**
+ * Claude Code is asking something in its terminal before any hook can fire (`sessions::agent_prompt`).
+ */
+{ type: "AgentAsks"; question: AgentQuestion }
 /**
  * What a hook reported. Internally tagged (A1): `{ "type": "Stop", "last_assistant_message": "…", … }`. The tag is
  * the IPC shape only; the parser picks the variant from the log line's first field, never from the payload.

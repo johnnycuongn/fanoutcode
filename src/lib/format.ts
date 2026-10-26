@@ -2,7 +2,7 @@
 // Rust `handback::chip_text` (A2); format.test.ts checks it row for row against src/test/fixtures/handback.json, which
 // a Plan 03 Rust test writes.
 import type { AgentStatus, StageToken } from "@/components/ui";
-import type { AgentState, HandbackReason, Stage, Task } from "@/lib/bindings";
+import type { AgentQuestion, AgentState, HandbackReason, Stage, Task } from "@/lib/bindings";
 import { SWATCHES, type Swatch } from "@/lib/theme";
 
 const STAGE_DONE: Record<Stage, string> = {
@@ -13,6 +13,12 @@ const STAGE_DONE: Record<Stage, string> = {
   Test: "Tests passed",
   Commit: "Message drafted",
   Done: "Done",
+};
+
+const AGENT_ASKS: Record<AgentQuestion, string> = {
+  TrustFolder: "Trust this folder?",
+  SignIn: "Sign in to Claude Code",
+  Setup: "Finish Claude Code setup",
 };
 
 export function chipText(reason: HandbackReason, stage: Stage): string {
@@ -33,6 +39,8 @@ export function chipText(reason: HandbackReason, stage: Stage): string {
       return `Holding for ${reason.other}`;
     case "MergeNeedsYou":
       return "Merge needs you";
+    case "AgentAsks":
+      return AGENT_ASKS[reason.question];
   }
 }
 

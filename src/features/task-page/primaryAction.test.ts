@@ -68,3 +68,12 @@ test("handbackKind and helpers read the internally tagged shape", () => {
   expect(isWorking(working)).toBe(true);
   expect(isWorking(idle)).toBe(false);
 });
+
+test("Claude Code's own question sends you to the terminal in every stage, Spec included", () => {
+  const asks: AgentState = { type: "NeedsYou", reason: { type: "AgentAsks", question: "TrustFolder" } };
+  for (const stage of ["Spec", "Plan", "Build"] as Stage[]) {
+    const p = primaryActionFor(t(stage, asks), ctx);
+    expect(p.label).toBe("Answer in terminal");
+    expect(p.intent).toEqual({ kind: "focus-terminal" });
+  }
+});

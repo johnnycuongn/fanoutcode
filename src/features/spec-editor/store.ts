@@ -136,6 +136,10 @@ export function createSpecStore(
     toggleTerminal(taskId: TaskId): void {
       patch(taskId, { terminalExpanded: !(store.get().byTask[taskId]?.terminalExpanded ?? false) });
     },
+    /** Opens the strip (Claude Code is asking something in it). */
+    expandTerminal(taskId: TaskId): void {
+      patch(taskId, { terminalExpanded: true });
+    },
     setTerminalRatio(taskId: TaskId, ratio: number): void {
       patch(taskId, { terminalRatio: ratio });
     },

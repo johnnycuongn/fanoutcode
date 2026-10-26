@@ -59,6 +59,21 @@ pub enum HandbackReason {
         repo: PathBuf,
         paths: Vec<String>,
     },
+    /// Claude Code is asking something in its terminal before any hook can fire (`sessions::agent_prompt`).
+    AgentAsks {
+        question: AgentQuestion,
+    },
+}
+
+/// A question Claude Code asks in its own terminal before its first hook.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
+pub enum AgentQuestion {
+    /// "Do you trust the files in this folder?"
+    TrustFolder,
+    /// The login screen, or a rejected key.
+    SignIn,
+    /// First-run setup (text style, welcome).
+    Setup,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
@@ -361,9 +376,19 @@ mod tests {
                 repo: "/r".into(),
                 paths: vec!["a.ts".into()],
             },
+            HandbackReason::AgentAsks {
+                question: AgentQuestion::TrustFolder,
+            },
         ] {
             rt(AgentState::NeedsYou { reason: r });
         }
+        assert_eq!(
+            serde_json::to_string(&HandbackReason::AgentAsks {
+                question: AgentQuestion::SignIn
+            })
+            .unwrap(),
+            r#"{"type":"AgentAsks","question":"SignIn"}"#
+        );
         assert_eq!(
             serde_json::to_string(&HandbackReason::FileInUse { pending: 2 }).unwrap(),
             r#"{"type":"FileInUse","pending":2}"#

@@ -254,3 +254,23 @@ fn a_session_whose_pty_was_taken_for_a_stop_is_stopping_until_it_exits() {
     r.on_exit(&id, 0);
     assert!(!r.is_stopping(&id), "exited");
 }
+
+#[test]
+fn claude_codes_trust_question_is_reported_until_its_first_hook() {
+    let mut r = SessionRegistry::new(100);
+    let task = crate::domain::TaskId::parse("t-1").unwrap();
+    let mut s = session(AgentKind::ClaudeCode);
+    s.task_id = Some(task.clone());
+    let id = s.id.clone();
+    let (pty, _) = FakePty::pair();
+    r.insert(s, Box::new(pty), (80, 24));
+    let shell = insert_second(&mut r, AgentKind::Shell);
+    let trust = b"Is this a project you created or one you trust?\r\n Yes, I trust this folder";
+    assert_eq!(r.on_output(&shell, trust, now()), None);
+    assert_eq!(
+        r.on_output(&id, trust, now()),
+        Some(crate::domain::AgentQuestion::TrustFolder)
+    );
+    r.end_prompt_watch(&task);
+    assert_eq!(r.on_output(&id, b"Select login method:", now()), None);
+}

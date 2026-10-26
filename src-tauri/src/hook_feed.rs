@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use fanoutcode_core::changes::attributor::Probe;
 use fanoutcode_core::cost::{ledger, LiveCost};
-use fanoutcode_core::domain::{AgentState, Task, TaskId};
+use fanoutcode_core::domain::{AgentState, HandbackReason, Task, TaskId};
 use fanoutcode_core::hooks::attribution::read_agent_meta;
 use fanoutcode_core::hooks::plan_steps::{dispatch_from_tool_input, Dispatch};
 use fanoutcode_core::hooks::{artifact, feed, HookEvent, TaskEvent};
@@ -100,6 +100,18 @@ pub async fn handle(app: &AppHandle, mut ev: TaskEvent, line: &str, live: bool) 
             session_id,
             transcript_path,
         } => {
+            // Claude Code's own questions (trust, sign-in) are answered once a hook fires
+            state.registry().end_prompt_watch(&id);
+            if live
+                && matches!(
+                    task.state,
+                    AgentState::NeedsYou {
+                        reason: HandbackReason::AgentAsks { .. }
+                    }
+                )
+            {
+                set_state(app, &state, &id, AgentState::Idle)?;
+            }
             state.tailer_transcripts(&id, Some(transcript_path.clone()));
             ledger::register_transcript(&state.db.lock().expect("db lock"), transcript_path, &id, "")?;
             let sid = session_id.clone();

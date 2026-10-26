@@ -38,7 +38,7 @@ describe("hand-back chip text", () => {
   });
   it("matches the Rust chip_text fixture row for row", () => {
     const rows = fixture as Array<{ reason: HandbackReason; stage: Stage; text: string }>;
-    expect(rows).toHaveLength(63);
+    expect(rows).toHaveLength(84);
     for (const { reason, stage, text } of rows) expect(chipText(reason, stage)).toBe(text);
   });
 });

@@ -108,7 +108,10 @@ export function TaskPage({
   };
   const runPrimary = async () => {
     if (!task) return;
-    if (task.stage === "Spec" && !task.archived) {
+    if (primary?.intent.kind === "focus-terminal" && task.stage === "Spec") {
+      specStore.expandTerminal(taskId);
+      focusTerminal();
+    } else if (task.stage === "Spec" && !task.archived) {
       try {
         if (!(await specStore.approve(task))) toast.error(SAVE_FAILED);
       } catch (e) {
