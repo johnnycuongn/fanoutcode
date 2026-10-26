@@ -233,7 +233,7 @@ fn name_exclude(m: &Magic<'_>, dir: &Path, repo: &Path, claimed: &[&Claim]) -> V
 pub(super) fn has_include(specs: &[&str]) -> bool {
     specs.iter().any(|s| {
         let m = magic(s);
-        !(m.exclude && !m.unknown)
+        !m.exclude || m.unknown
     })
 }
 
